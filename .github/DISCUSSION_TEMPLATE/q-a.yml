@@ -1,0 +1,13 @@
+title: "Q&A"
+labels: ["discussion"]
+body:
+  - type: textarea
+    attributes:
+      label: 问题
+      description: 请描述你遇到的问题与背景
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 已尝试方案
+      description: 请列出你已经尝试过的步骤
