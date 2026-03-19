@@ -4,6 +4,13 @@
 
 `spz_gatekeeper` is a **pure C++17** validator for `.spz` files. It does **not** validate GLB containers, and it does **not** implement compression or rendering. Its job is to audit whether an SPZ file stays compatible with the upstream SPZ packed format while carrying optional vendor extensions.
 
+## Author & Copyright
+- Copyright owner: **Pu Junhan**
+- Start year: **2026**
+
+## Independent Work Statement
+This repository is an independently developed work by **Pu Junhan**. Third-party projects/specifications are referenced only for interoperability and compatibility validation. All trademarks and external assets remain the property of their respective owners.
+
 ## Scope
 
 ### What this tool does
