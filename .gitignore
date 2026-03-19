@@ -1,0 +1,43 @@
+# Build output
+build/
+build_wsl/
+cmake-build-*/
+cpp/compile_commands.json
+bin/
+lib/
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test output
+*.log
+test_output/
+
+# Temporary files
+*.tmp
+*.bak
+
+# Internal workspace artifacts
+.trae/
+*.disabled
+codebubby.md
+new_ci.sh
+push_ci.sh
+
+# Local-only planning docs (do not open-source)
+docs/Adobe_Safe_Orbit_Camera_Spec.md
+docs/Implementing_Custom_Extension.md
+docs/Vendor_ID_Allocation.md

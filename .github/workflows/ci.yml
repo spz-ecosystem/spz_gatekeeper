@@ -1,0 +1,110 @@
+# SPZ Gatekeeper CI - Based on spz2glb template
+
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: windows-build
+          - os: ubuntu-latest
+            artifact_name: linux-build
+          - os: macos-latest
+            artifact_name: macos-build
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zlib1g-dev cmake g++
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install zlib cmake
+
+      - name: Install vcpkg and dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          if (Test-Path "C:/vcpkg") {
+            Write-Host "vcpkg already exists, skipping clone"
+          } else {
+            git clone https://github.com/microsoft/vcpkg.git C:/vcpkg --depth 1
+          }
+          if (Test-Path "C:/vcpkg/vcpkg.exe") {
+            Write-Host "vcpkg.exe already exists, skipping bootstrap"
+          } else {
+            C:/vcpkg/bootstrap-vcpkg.bat -disableMetrics
+          }
+          C:/vcpkg/vcpkg install zlib:x64-windows
+
+      - name: Configure CMake (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cmake -S cpp -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_TESTING=ON `
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF `
+            "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Configure CMake (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cmake -S cpp -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF
+
+      - name: Configure CMake (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cmake -S cpp -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix zlib)"
+
+      - name: Build (with verbose output)
+        run: |
+          cmake --build build --config Release --parallel --verbose 2>&1 | tee build.log
+
+      - name: Check build warnings
+        if: always()
+        run: |
+          echo "=== Build Warnings ==="
+          if [ -f build.log ]; then
+            grep -i "warning" build.log || echo "No warnings found"
+          fi
+        shell: bash
+
+      - name: Run Tests
+        run: |
+          ctest --test-dir build --output-on-failure -C Release
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}-logs
+          path: build.log
+          retention-days: 7

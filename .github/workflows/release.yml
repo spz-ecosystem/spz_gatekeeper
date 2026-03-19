@@ -1,0 +1,131 @@
+# 自动构建和发布
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: spz-gatekeeper-windows-x64.exe
+          - os: ubuntu-latest
+            artifact: spz-gatekeeper-linux-x64
+          - os: macos-latest
+            artifact: spz-gatekeeper-macos-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zlib1g-dev
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install zlib
+
+      - name: Install vcpkg and dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          if (Test-Path "C:/vcpkg") {
+            Write-Host "vcpkg already exists, skipping clone"
+          } else {
+            git clone https://github.com/microsoft/vcpkg.git C:/vcpkg --depth 1
+          }
+          if (Test-Path "C:/vcpkg/vcpkg.exe") {
+            Write-Host "vcpkg.exe already exists, skipping bootstrap"
+          } else {
+            C:/vcpkg/bootstrap-vcpkg.bat -disableMetrics
+          }
+          C:/vcpkg/vcpkg install zlib:x64-windows
+
+      - name: Configure CMake (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cmake -S cpp -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_TESTING=ON `
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF `
+            "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Configure CMake (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cmake -S cpp -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF
+
+      - name: Configure CMake (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cmake -S cpp -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix zlib)"
+
+      - name: Build spz_gatekeeper
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Run tests
+        run: |
+          ctest --test-dir build --output-on-failure -C Release
+
+      - name: Rename artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          Copy-Item "build/Release/spz_gatekeeper.exe" "${{ matrix.artifact }}"
+
+      - name: Rename artifacts (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cp build/spz_gatekeeper ${{ matrix.artifact }}
+
+      - name: Rename artifacts (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cp build/spz_gatekeeper ${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
