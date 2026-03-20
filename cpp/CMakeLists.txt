@@ -41,6 +41,7 @@ set(SPZ_GATEKEEPER_VERSION_PATCH ${PROJECT_VERSION_PATCH})
 
 add_library(spz_gatekeeper_zlib INTERFACE)
 if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  target_compile_options(spz_gatekeeper_zlib INTERFACE "-sUSE_ZLIB=1")
   target_link_options(spz_gatekeeper_zlib INTERFACE "-sUSE_ZLIB=1")
 else()
   find_package(ZLIB REQUIRED)
