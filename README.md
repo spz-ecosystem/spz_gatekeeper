@@ -62,35 +62,35 @@ Inclusion in, or validation by, this gatekeeper project does not constitute endo
 
 ## Web UI
 
-SPZ Validator 提供在线 Web 界面，无需安装即可使用：
+SPZ Validator provides a web interface that runs entirely in your browser:
 
-🔗 **在线访问**: https://spz-ecosystem.github.io/spz_gatekeeper/
+🔗 **Live Demo**: https://spz-ecosystem.github.io/spz_gatekeeper/
 
-功能特点：
-- 纯浏览器端运行，WASM 本地执行
-- 拖拽上传 `.spz` 文件即时验证
-- 支持 SPZ v4 格式完整性检查
-- 文件不上传服务器，零隐私泄露风险
+Features:
+- Pure browser-side execution via WebAssembly
+- Drag-and-drop `.spz` file validation
+- SPZ v4 format integrity checking
+- No file upload to servers — zero privacy risk
 
-### 本地构建 Web 版本
+### Build Web Version Locally
 
 ```bash
-# 安装 Emscripten (首次)
+# Install Emscripten (first time)
 git clone https://github.com/emscripten-core/emsdk.git
 cd emsdk && ./emsdk install 3.1.56 && ./emsdk activate 3.1.56
 source ./emsdk_env.sh
 
-# 构建 WASM
+# Build WASM
 emcmake cmake -S cpp -B build-web -DCMAKE_BUILD_TYPE=Release
 emmake cmake --build build-web --parallel
 
-# 复制产物到 web 目录
+# Copy artifacts to web directory
 cp build-web/spz_gatekeeper.js web/
 cp build-web/spz_gatekeeper.wasm web/
 
-# 本地预览
+# Preview locally
 cd web && python3 -m http.server 8080
-# 打开 http://localhost:8080
+# Open http://localhost:8080
 ```
 
 ## Quick Start
