@@ -3,13 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>SPZ Gatekeeper | WASM Inspector</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
   <style>
+
     :root {
       /* Typography Scale (Modular) */
       --font-xs: 0.75rem;     /* 12px */
@@ -182,14 +180,13 @@
       border: 0;
     }
 
-    #fileInput {
-      position: absolute;
-      inset: 0;
-      opacity: 0;
-      cursor: pointer;
+    .upload-zone:focus-visible {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 4px;
     }
 
     .status-bar {
+
       display: flex;
 
       justify-content: space-between;
@@ -381,15 +378,15 @@
         <div>v1.0.0</div>
       </div>
 
-      <div class="upload-zone" id="dropZone" role="button" tabindex="0" aria-labelledby="uploadTitle" aria-describedby="uploadHint">
-        <label class="sr-only" for="fileInput">Choose an SPZ file to inspect</label>
-        <input type="file" id="fileInput" accept=".spz" aria-label="Choose an SPZ file to inspect">
+      <input type="file" id="fileInput" class="sr-only" accept=".spz" aria-label="Choose an SPZ file to inspect">
+      <label class="upload-zone" id="dropZone" for="fileInput" tabindex="0" aria-labelledby="uploadTitle" aria-describedby="uploadHint">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
         </svg>
         <span id="uploadTitle">Drag & Drop your .spz file here</span>
         <small id="uploadHint">or click to browse files</small>
-      </div>
+      </label>
+
     </div>
 
 
