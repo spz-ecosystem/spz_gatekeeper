@@ -9,18 +9,31 @@
 - Start year: **2026**
 
 ## Independent Work Statement
-This repository is an independently developed work by **Pu Junhan**. Third-party projects/specifications are referenced only for interoperability and compatibility validation. All trademarks and external assets remain the property of their respective owners.
+This repository is an independent, clean-room implementation by **Pu Junhan**. The SPZ file format specification (originally developed by Niantic, Inc. and published at https://github.com/nianticlabs/spz) is referenced solely for the purpose of achieving technical interoperability. All trademarks, trade names, and intellectual property rights related to "SPZ" and "Niantic" remain the exclusive property of their respective owners.
 
 ## Organizational & Political Separation
-**This project has NO affiliation with, endorsement of, or endorsement by any foreign corporation or its parent company.** The author explicitly dissociates from any political positions, statements, or actions taken by the original SPZ project's parent organization. This gatekeeper operates independently and establishes its own standards for SPZ derivative compliance. 
 
-**Legitimacy of SPZ derivatives is determined by this project's open-source protocol, not by any external entity.** Users and contributors are judged solely by their adherence to the technical specifications defined herein.
+### No Affiliation
+**This project is NOT affiliated with, endorsed by, or connected to Niantic, Inc. or any of its subsidiaries, parent companies, or related entities.**
 
-## Governance
-As the creator and maintainer, **Pu Junhan** reserves the right to:
-- Define what constitutes a compliant SPZ derivative
-- Refuse endorsement of any project that violates community standards
-- Update the validation criteria to protect the integrity of the SPZ ecosystem
+The author explicitly and irrevocably disassociates from any political positions, statements, actions, or controversies involving Niantic, Inc. or its affiliates. This separation extends to all political, ideological, and organizational matters.
+
+### Technical Independence
+This gatekeeper project operates under independent governance and establishes its own validation criteria for SPZ file compatibility. The technical specifications implemented herein are derived solely from publicly available documentation and independent analysis.
+
+## Governance & Derivative Compliance
+
+### Authority
+As the sole creator and maintainer, **Pu Junhan** asserts the following rights under this project's open-source license:
+1. **Definition Authority**: The right to define what constitutes a compliant SPZ derivative or extension
+2. **Endorsement Discretion**: The right to grant or withhold endorsement for any project claiming SPZ compatibility
+3. **Standard Evolution**: The right to update validation criteria to maintain technical integrity and community standards
+
+### Derivative Legitimacy
+**The legitimacy of SPZ derivative projects shall be determined solely by compliance with this project's published specifications and protocols.** Neither Niantic, Inc. nor any other external entity possesses authority to validate or invalidate derivatives under this governance framework.
+
+### Non-Endorsement
+Inclusion in, or validation by, this gatekeeper project does not constitute endorsement of any underlying political, organizational, or commercial entity.
 
 ## Scope
 
