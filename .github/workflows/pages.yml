@@ -42,23 +42,9 @@ jobs:
         run: |
           mkdir -p site
           cp build-pages/spz_gatekeeper.js site/spz_gatekeeper.js
-          cat > site/index.html <<'HTML'
-          <!doctype html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width,initial-scale=1" />
-            <title>SPZ Gatekeeper WASM</title>
-          </head>
-          <body>
-            <h1>SPZ Gatekeeper WASM</h1>
-            <p>Module file: <code>spz_gatekeeper.js</code></p>
-            <p>Load from console:</p>
-            <pre><code>const mod = await createSpzGatekeeperModule();</code></pre>
-            <script type="module" src="./spz_gatekeeper.js"></script>
-          </body>
-          </html>
-          HTML
+          cp build-pages/spz_gatekeeper.wasm site/spz_gatekeeper.wasm || true
+          cp web/index.html site/index.html
+
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SPZ Gatekeeper | WASM Inspector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --bg-darker: #020617;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --glass-bg: rgba(255, 255, 255, 0.03);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --error-color: #ef4444;
+      --success-color: #10b981;
+      --warning-color: #f59e0b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: radial-gradient(circle at top, var(--bg-dark), var(--bg-darker));
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      font-weight: 600;
+      background: linear-gradient(to right, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .glass-panel {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    }
+
+    .upload-zone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+      border: 2px dashed var(--glass-border);
+      border-radius: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.05);
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.2) inset;
+    }
+
+    .upload-zone svg {
+      width: 48px;
+      height: 48px;
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
+
+    .upload-zone span {
+      font-weight: 500;
+      font-size: 1.1rem;
+    }
+
+    .upload-zone small {
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+    }
+
+    #fileInput {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--warning-color);
+    }
+
+    .status-dot.ready { background-color: var(--success-color); }
+    .status-dot.error { background-color: var(--error-color); }
+
+    .result-section {
+      display: none;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .result-section.visible {
+      display: flex;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .controls {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    button {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      color: var(--text-main);
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      font-family: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--accent);
+    }
+
+    button.active {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    pre {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 1rem;
+      border-radius: 0.5rem;
+      overflow-x: auto;
+      color: #e2e8f0;
+      border: 1px solid rgba(0,0,0,0.5);
+      line-height: 1.5;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-left: 0.5rem;
+    }
+
+    .badge.success { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .badge.error { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+    /* File details header */
+    .file-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--glass-border);
+    }
+
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>SPZ Gatekeeper</h1>
+    <p>WebAssembly powered SPZ compression validation</p>
+  </header>
+
+  <main class="container">
+    <div class="glass-panel">
+      <div class="status-bar" style="margin-bottom: 1rem;">
+        <div class="status-indicator">
+          <div class="status-dot" id="wasmStatusDot"></div>
+          <span id="wasmStatusText">Loading WASM module...</span>
+        </div>
+        <div>v1.0.0</div>
+      </div>
+
+      <div class="upload-zone" id="dropZone">
+        <input type="file" id="fileInput" accept=".spz">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+        </svg>
+        <span>Drag & Drop your .spz file here</span>
+        <small>or click to browse files</small>
+      </div>
+    </div>
+
+    <div class="glass-panel result-section" id="resultSection">
+      <div class="file-meta">
+        <div>
+          <strong id="filenameDisplay">filename.spz</strong>
+          <span id="filesizeDisplay" style="color: var(--text-muted); font-size: 0.9rem; margin-left: 0.5rem;"></span>
+        </div>
+        <div>
+          Status: <span id="validationBadge" class="badge"></span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="btnTextReport" class="active">Text Report</button>
+        <button id="btnJsonDetails">JSON Details</button>
+        <button id="btnTrailer">Trailer Extensions</button>
+      </div>
+
+      <div id="outputContainer">
+        <pre id="outputPre">Select a file to begin inspection.</pre>
+      </div>
+    </div>
+  </main>
+
+  <!-- Load the WASM module -->
+  <script src="./spz_gatekeeper.js"></script>
+  
+  <script>
+    let spzModule = null;
+    let currentFileData = null;
+    let currentFileName = "";
+
+    const elDot = document.getElementById('wasmStatusDot');
+    const elStatus = document.getElementById('wasmStatusText');
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const resultSection = document.getElementById('resultSection');
+    const filenameDisplay = document.getElementById('filenameDisplay');
+    const filesizeDisplay = document.getElementById('filesizeDisplay');
+    const outputPre = document.getElementById('outputPre');
+    const validationBadge = document.getElementById('validationBadge');
+
+    const btns = {
+      text: document.getElementById('btnTextReport'),
+      json: document.getElementById('btnJsonDetails'),
+      trailer: document.getElementById('btnTrailer')
+    };
+
+    // Initialize WASM
+    async function initWasm() {
+      try {
+        spzModule = await createSpzGatekeeperModule();
+        elDot.className = 'status-dot ready';
+        elStatus.textContent = 'WASM Ready';
+        console.log("SPZ Gatekeeper WASM initialized.");
+      } catch (err) {
+        elDot.className = 'status-dot error';
+        elStatus.textContent = 'Failed to load WASM';
+        console.error("WASM load error:", err);
+      }
+    }
+
+    initWasm();
+
+    // Drag and drop handling
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      let dt = e.dataTransfer;
+      let files = dt.files;
+      if (files.length) handleFile(files[0]);
+    });
+
+    fileInput.addEventListener('change', function(e) {
+      if (this.files.length) handleFile(this.files[0]);
+    });
+
+    function formatBytes(bytes, decimals = 2) {
+      if (!+bytes) return '0 Bytes';
+      const k = 1024;
+      const dm = decimals < 0 ? 0 : decimals;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+    }
+
+    function handleFile(file) {
+      if (!spzModule) {
+        alert("WASM module is not loaded yet.");
+        return;
+      }
+      
+      currentFileName = file.name;
+      filenameDisplay.textContent = currentFileName;
+      filesizeDisplay.textContent = formatBytes(file.size);
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const arrayBuffer = e.target.result;
+        currentFileData = new Uint8Array(arrayBuffer);
+        
+        resultSection.classList.add('visible');
+        renderTextReport();
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function updateActiveBtn(activeKey) {
+      Object.keys(btns).forEach(k => btns[k].classList.remove('active'));
+      btns[activeKey].classList.add('active');
+    }
+
+    // Handlers
+    btns.text.addEventListener('click', () => renderTextReport());
+    btns.json.addEventListener('click', () => renderJsonDetails());
+    btns.trailer.addEventListener('click', () => renderTrailer());
+
+    function renderTextReport() {
+      updateActiveBtn('text');
+      if (!currentFileData) return;
+      try {
+        const text = spzModule.inspectSpzText(currentFileData, true);
+        outputPre.textContent = text;
+        
+        // Quick check if errors exist in text (heuristic)
+        if (text.includes("error [")) {
+          validationBadge.textContent = "Error";
+          validationBadge.className = "badge error";
+        } else {
+          validationBadge.textContent = "Valid SPZ";
+          validationBadge.className = "badge success";
+        }
+      } catch (err) {
+        outputPre.textContent = "Exception: " + err.message;
+        validationBadge.textContent = "Crash";
+        validationBadge.className = "badge error";
+      }
+    }
+
+    function renderJsonDetails() {
+      updateActiveBtn('json');
+      if (!currentFileData) return;
+      try {
+        const result = spzModule.inspectSpz(currentFileData, true);
+        outputPre.textContent = JSON.stringify(result, null, 2);
+      } catch (err) {
+        outputPre.textContent = "Exception: " + err.message;
+      }
+    }
+
+    function renderTrailer() {
+      updateActiveBtn('trailer');
+      if (!currentFileData) return;
+      try {
+        const result = spzModule.dumpTrailer(currentFileData, true);
+        outputPre.textContent = JSON.stringify(result, null, 2);
+      } catch (err) {
+        outputPre.textContent = "Exception: " + err.message;
+      }
+    }
+  </script>
+</body>
+</html>
