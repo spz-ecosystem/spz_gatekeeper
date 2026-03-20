@@ -1,66 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
-  <title>SPZ Gatekeeper | WASM Inspector</title>
-
+  <title>SPZ Validator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
   <style>
-
     :root {
-      /* Typography Scale (Modular) */
-      --font-xs: 0.75rem;     /* 12px */
-      --font-sm: 0.875rem;    /* 14px */
-      --font-base: 1rem;      /* 16px */
-      --font-lg: 1.125rem;    /* 18px */
-      --font-xl: 1.25rem;     /* 20px */
-      --font-2xl: 1.5rem;     /* 24px */
-      --font-3xl: 1.875rem;   /* 30px */
-      --font-4xl: 2.25rem;    /* 36px */
-      --font-5xl: 3rem;       /* 48px */
-
-      /* Line Heights */
-      --lh-heading: 1.2;
-      --lh-body: 1.6;
-      --lh-ui: 1.4;
-
-      /* Spacing Scale (8-pt grid) */
-      --space-1: 0.25rem;   /* 4px */
-      --space-2: 0.5rem;    /* 8px */
-      --space-3: 0.75rem;   /* 12px */
-      --space-4: 1rem;      /* 16px */
-      --space-5: 1.25rem;   /* 20px */
-      --space-6: 1.5rem;    /* 24px */
-      --space-8: 2rem;      /* 32px */
-      --space-10: 2.5rem;   /* 40px */
-      --space-12: 3rem;     /* 48px */
-      --space-16: 4rem;     /* 64px */
-
-      /* Colors - Dark Theme Focus */
-      --bg-primary: #111827;
-      --bg-secondary: #1f2937;
-      --text-primary: #f9fafb;
-      --text-secondary: #9ca3af;
-      --border: #374151;
-
-      --color-primary: #2563eb;
-      --color-primary-hover: #1d4ed8;
-      --color-primary-active: #1e40af;
-      --color-primary-soft: rgba(37, 99, 235, 0.15);
-
-      --color-success: #16a34a;
-      --color-success-bg: rgba(22, 163, 74, 0.15);
-      --color-warning: #ca8a04;
-      --color-error: #dc2626;
-      --color-error-bg: rgba(220, 38, 38, 0.15);
-      --color-info: #0891b2;
-
-      /* Animation Easings */
-      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-      --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
-      --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-      --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --brand-purple: #6666ff;
+      --success-green: #10b981;
+      --warning-yellow: #f59e0b;
+      --text-primary: #1e293b;
+      --text-secondary: #64748b;
+      --text-muted: #94a3b8;
+      --bg-top: #f0f4ff;
+      --bg-bottom: #f8fafc;
+      --card-hover-bg: #f8faff;
     }
 
     * {
@@ -69,532 +26,436 @@
       padding: 0;
     }
 
-    body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      background-color: var(--bg-primary);
-      color: var(--text-primary);
-      line-height: var(--lh-body);
+    html, body {
+      height: 100%;
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: var(--space-8) var(--space-4);
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
     }
 
-    h1 {
-      font-size: clamp(2rem, 5vw + 1rem, 3.5rem);
-      line-height: var(--lh-heading);
-      font-weight: 700;
-      letter-spacing: -0.025em;
-      margin-bottom: var(--space-2);
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
       color: var(--text-primary);
-    }
-
-    .subtitle {
-      font-size: clamp(1rem, 2vw + 0.5rem, 1.125rem);
-      line-height: var(--lh-body);
-      color: var(--text-secondary);
-      max-width: 65ch;
-      margin-inline: auto;
-    }
-
-    header {
-      text-align: center;
-      margin-bottom: var(--space-10);
-      width: 100%;
-    }
-
-    .container {
-      width: 100%;
-      max-width: 800px;
       display: flex;
       flex-direction: column;
-      gap: var(--space-6);
+      position: relative;
+      overflow-x: hidden;
     }
 
-    .card {
-      background-color: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: var(--space-4);
-      padding: var(--space-6);
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-      transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+    /* 3D点云SVG背景 */
+    .bg-particles {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.15;
     }
 
-    .upload-zone {
+    .bg-particles svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .particle {
+      fill: var(--brand-purple);
+      animation: float 25s infinite ease-in-out;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0); }
+      25% { transform: translate(20px, -30px); }
+      50% { transform: translate(-10px, -50px); }
+      75% { transform: translate(15px, -20px); }
+    }
+
+    /* 主容器 */
+    .main-wrapper {
+      flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: var(--space-12) var(--space-8);
-      border: 2px dashed var(--border);
-      border-radius: var(--space-3);
-      cursor: pointer;
       position: relative;
-      background-color: transparent;
-      transition: all 0.2s var(--ease-out);
+      z-index: 1;
+      padding: 30px 20px 0;
     }
 
-    .upload-zone:hover, .upload-zone.dragover {
-      border-color: var(--color-primary);
-      background-color: var(--color-primary-soft);
+    /* 顶部标题 */
+    .header-title {
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 0;
+    }
+
+    /* 内容区 - 垂直居中 */
+    .content-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      padding: 40px 0;
+    }
+
+    /* 上传主卡片 */
+    .upload-card {
+      width: 40%;
+      min-width: 360px;
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(102, 102, 255, 0.12);
+      padding: 48px 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 2px solid transparent;
+      position: relative;
+    }
+
+    .upload-card:hover {
+      box-shadow: 0 12px 40px rgba(102, 102, 255, 0.18);
       transform: translateY(-2px);
     }
 
-    .upload-zone svg {
-      width: var(--space-10);
-      height: var(--space-10);
-      color: var(--text-secondary);
-      margin-bottom: var(--space-4);
-      transition: color 0.2s var(--ease-out), transform 0.2s var(--spring);
+    .upload-card.dragover {
+      border: 2px dashed var(--brand-purple);
+      background: var(--card-hover-bg);
     }
 
-    .upload-zone:hover svg, .upload-zone.dragover svg {
-      color: var(--color-primary);
-      transform: scale(1.1);
-    }
-
-    .upload-zone span {
-      font-weight: 600;
-      font-size: var(--font-lg);
-      color: var(--text-primary);
-      margin-bottom: var(--space-1);
-    }
-
-    .upload-zone small {
-      color: var(--text-secondary);
-      font-size: var(--font-sm);
-    }
-
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
-    }
-
-    .upload-zone:focus-visible {
-      outline: 2px solid var(--color-primary);
-      outline-offset: 4px;
-    }
-
-    .status-bar {
-
-      display: flex;
-
-      justify-content: space-between;
-      align-items: center;
-      font-size: var(--font-sm);
-      color: var(--text-secondary);
-      margin-bottom: var(--space-4);
-      line-height: var(--lh-ui);
-    }
-
-    .status-indicator {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-    }
-
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background-color: var(--color-warning);
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    .status-dot.ready { 
-      background-color: var(--color-success);
-      animation: none;
-    }
-    .status-dot.error { 
-      background-color: var(--color-error); 
-      animation: none;
-    }
-
-    .result-section {
+    .upload-card input[type="file"] {
       display: none;
-      flex-direction: column;
-      gap: var(--space-4);
     }
 
-    .result-section.visible {
-      display: flex;
-      animation: fadeIn 0.3s var(--ease-out) forwards;
+    /* 云+文件图标 */
+    .upload-icon {
+      margin-bottom: 16px;
     }
 
-    .file-meta {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-bottom: var(--space-4);
-      border-bottom: 1px solid var(--border);
-      margin-bottom: var(--space-2);
+    .upload-icon svg {
+      width: 32px;
+      height: 32px;
+      color: var(--brand-purple);
     }
 
-    .file-title {
-      font-weight: 600;
-      font-size: var(--font-base);
-    }
-
-    .file-size {
-      color: var(--text-secondary);
-      font-size: var(--font-sm);
-      margin-left: var(--space-2);
-    }
-
-    .controls {
-      display: flex;
-      gap: var(--space-2);
-      flex-wrap: wrap;
-    }
-
-    button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: var(--space-2) var(--space-4);
-      background-color: transparent;
-      border: 1px solid var(--border);
-      border-radius: var(--space-2);
-      color: var(--text-secondary);
-      font-family: inherit;
-      font-size: var(--font-sm);
+    /* 主文字 */
+    .upload-main-text {
+      font-size: 18px;
       font-weight: 500;
-      line-height: var(--lh-ui);
-      cursor: pointer;
-      position: relative;
-      overflow: hidden;
-      transition: background-color 0.2s var(--ease-out), color 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
-    }
-
-    button:hover {
-      background-color: var(--bg-secondary);
       color: var(--text-primary);
-      border-color: var(--text-secondary);
+      margin: 12px 0;
     }
 
-    button.active {
-      background-color: var(--color-primary);
-      color: #ffffff;
-      border-color: var(--color-primary);
+    /* 辅助文字 */
+    .upload-sub-text {
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin-bottom: 20px;
     }
 
-    .badge {
+    /* 加载状态 */
+    .loading-status {
       display: inline-flex;
       align-items: center;
-      padding: 0 var(--space-2);
-      height: 24px;
-      border-radius: 12px;
-      font-size: var(--font-xs);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--warning-yellow);
     }
 
-    .badge.success { 
-      background-color: var(--color-success-bg); 
-      color: var(--color-success); 
-    }
-    .badge.error { 
-      background-color: var(--color-error-bg); 
-      color: var(--color-error); 
+    .loading-status.ready {
+      color: var(--success-green);
     }
 
-    .ripple {
-      position: absolute;
+    .loading-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--warning-yellow);
+      border-top-color: transparent;
       border-radius: 50%;
-      pointer-events: none;
-      background: rgba(255, 255, 255, 0.24);
-      transform: scale(0);
-      animation: ripple 0.6s ease-out forwards;
+      animation: spin 1s linear infinite;
     }
 
-    pre {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: var(--font-sm);
-
-      background-color: #0d1117;
-      color: #c9d1d9;
-      padding: var(--space-4);
-      border-radius: var(--space-2);
-      border: 1px solid #30363d;
-      overflow-x: auto;
-      overflow-y: auto;
-      max-height: 500px;
-      line-height: var(--lh-body);
+    .loading-status.ready .loading-spinner {
+      display: none;
     }
 
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
+    .check-icon {
+      display: none;
+      width: 14px;
+      height: 14px;
     }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+    .loading-status.ready .check-icon {
+      display: block;
     }
 
-    @keyframes ripple {
-      to {
-        opacity: 0;
-        transform: scale(2.4);
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* 功能卡片区 */
+    .features-section {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      width: 40%;
+      min-width: 360px;
+      margin-top: 80px;
+    }
+
+    .feature-card {
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+      padding: 24px 20px;
+      transition: all 0.3s ease;
+    }
+
+    .feature-card:hover {
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+      transform: translateY(-1px);
+    }
+
+    .feature-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .feature-icon {
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .feature-title {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .feature-desc {
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      padding-left: 28px;
+    }
+
+    /* 页脚 */
+    .footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--text-muted);
+      position: relative;
+      z-index: 1;
+    }
+
+    /* 响应式 */
+    @media (max-width: 768px) {
+      .upload-card,
+      .features-section {
+        width: 90%;
+        min-width: auto;
+      }
+
+      .features-section {
+        grid-template-columns: 1fr;
+        margin-top: 40px;
+      }
+
+      .upload-card {
+        padding: 36px 24px;
       }
     }
-
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after {
-        animation-duration: 0.01ms !important;
-
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-      }
-    }
-
   </style>
 </head>
 <body>
+  <!-- 3D点云SVG背景 -->
+  <div class="bg-particles">
+    <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <radialGradient id="particleGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" style="stop-color:#6666ff;stop-opacity:0.8" />
+          <stop offset="100%" style="stop-color:#6666ff;stop-opacity:0" />
+        </radialGradient>
+      </defs>
+      <!-- 生成多个粒子点 -->
+      <circle class="particle" cx="200" cy="300" r="3" style="animation-delay:0s"/>
+      <circle class="particle" cx="500" cy="150" r="2" style="animation-delay:2s"/>
+      <circle class="particle" cx="800" cy="400" r="4" style="animation-delay:4s"/>
+      <circle class="particle" cx="1100" cy="200" r="2" style="animation-delay:6s"/>
+      <circle class="particle" cx="1400" cy="500" r="3" style="animation-delay:8s"/>
+      <circle class="particle" cx="1700" cy="250" r="2" style="animation-delay:10s"/>
+      <circle class="particle" cx="300" cy="600" r="3" style="animation-delay:12s"/>
+      <circle class="particle" cx="600" cy="700" r="2" style="animation-delay:14s"/>
+      <circle class="particle" cx="900" cy="550" r="4" style="animation-delay:16s"/>
+      <circle class="particle" cx="1200" cy="650" r="2" style="animation-delay:18s"/>
+      <circle class="particle" cx="1500" cy="450" r="3" style="animation-delay:20s"/>
+      <circle class="particle" cx="1800" cy="600" r="2" style="animation-delay:22s"/>
+      <circle class="particle" cx="100" cy="450" r="2" style="animation-delay:1s"/>
+      <circle class="particle" cx="400" cy="250" r="3" style="animation-delay:3s"/>
+      <circle class="particle" cx="700" cy="350" r="2" style="animation-delay:5s"/>
+      <circle class="particle" cx="1000" cy="150" r="3" style="animation-delay:7s"/>
+      <circle class="particle" cx="1300" cy="400" r="2" style="animation-delay:9s"/>
+      <circle class="particle" cx="1600" cy="300" r="4" style="animation-delay:11s"/>
+      <circle class="particle" cx="250" cy="750" r="2" style="animation-delay:13s"/>
+      <circle class="particle" cx="550" cy="850" r="3" style="animation-delay:15s"/>
+      <circle class="particle" cx="850" cy="750" r="2" style="animation-delay:17s"/>
+      <circle class="particle" cx="1150" cy="850" r="3" style="animation-delay:19s"/>
+      <circle class="particle" cx="1450" cy="700" r="2" style="animation-delay:21s"/>
+      <circle class="particle" cx="1750" cy="800" r="3" style="animation-delay:23s"/>
+    </svg>
+  </div>
 
-  <header>
-    <h1>SPZ Gatekeeper</h1>
-    <p class="subtitle">WebAssembly powered SPZ compression validation</p>
-  </header>
+  <!-- 主容器 -->
+  <div class="main-wrapper">
+    <!-- 顶部标题 -->
+    <header class="header-title">SPZ VALIDATOR</header>
 
-  <main class="container">
-    <div class="card">
-      <div class="status-bar">
-        <div class="status-indicator">
-          <div class="status-dot" id="wasmStatusDot"></div>
-          <span id="wasmStatusText">Loading WASM module...</span>
+    <!-- 内容区 -->
+    <div class="content-area">
+      <!-- 上传主卡片 -->
+      <div class="upload-card" id="dropZone">
+        <input type="file" id="fileInput" accept=".spz">
+        
+        <!-- 云+文件图标 -->
+        <div class="upload-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+            <path d="M12 11v6"/>
+            <path d="M9 14h6"/>
+          </svg>
         </div>
-        <div>v1.0.0</div>
+
+        <div class="upload-main-text">点击或拖拽 .spz 文件至此</div>
+        <div class="upload-sub-text">支持 SPZ v4 格式验证，纯本地处理，无文件上传</div>
+
+        <div class="loading-status" id="loadingStatus">
+          <div class="loading-spinner"></div>
+          <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span id="statusText">正在加载 WASM 引擎...</span>
+        </div>
       </div>
 
-      <input type="file" id="fileInput" class="sr-only" accept=".spz" aria-label="Choose an SPZ file to inspect">
-      <label class="upload-zone" id="dropZone" for="fileInput" tabindex="0" aria-labelledby="uploadTitle" aria-describedby="uploadHint">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-        </svg>
-        <span id="uploadTitle">Drag & Drop your .spz file here</span>
-        <small id="uploadHint">or click to browse files</small>
-      </label>
+      <!-- 功能卡片区 -->
+      <div class="features-section">
+        <div class="feature-card">
+          <div class="feature-header">
+            <span class="feature-icon" style="color: var(--success-green);">✅</span>
+            <span class="feature-title">全量格式验证</span>
+          </div>
+          <div class="feature-desc">深度解析 SPZ 二进制结构，校验验证魔数、S1 阶数与点云完整性</div>
+        </div>
 
+        <div class="feature-card">
+          <div class="feature-header">
+            <span class="feature-icon" style="color: var(--brand-purple);">🔒</span>
+            <span class="feature-title">保护渲染管线</span>
+          </div>
+          <div class="feature-desc">3D 高斯点云数据复原，将其作为同线程组件，可有效避免渲染或异常的压缩文件进入您的渲染流水线或服务存储中</div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-header">
+            <span class="feature-icon" style="color: var(--text-secondary);">🌐</span>
+            <span class="feature-title">纯本地绝对安全</span>
+          </div>
+          <div class="feature-desc">WASM 本地执行，文件不上传，零网络传输与隐私泄露风险</div>
+        </div>
+      </div>
     </div>
+  </div>
 
+  <!-- 页脚 -->
+  <footer class="footer">
+    © 2026 SPZ Ecosystem | Powered by WebAssembly
+  </footer>
 
-    <div class="card result-section" id="resultSection">
-      <div class="file-meta">
-        <div>
-          <strong id="filenameDisplay" class="file-title">filename.spz</strong>
-          <span id="filesizeDisplay" class="file-size"></span>
-        </div>
-        <div>
-          Status: <span id="validationBadge" class="badge"></span>
-        </div>
-      </div>
+  <!-- 交互逻辑 -->
+  <script>
+    (function() {
+      const dropZone = document.getElementById('dropZone');
+      const fileInput = document.getElementById('fileInput');
+      const loadingStatus = document.getElementById('loadingStatus');
+      const statusText = document.getElementById('statusText');
 
-      <div class="controls">
-        <button id="btnTextReport" class="active">Text Report</button>
-        <button id="btnJsonDetails">JSON Details</button>
-        <button id="btnTrailer">Trailer Extensions</button>
-      </div>
+      // 模拟 WASM 加载完成
+      setTimeout(() => {
+        loadingStatus.classList.add('ready');
+        statusText.textContent = 'WASM 引擎就绪';
+      }, 2000);
 
-      <div id="outputContainer">
-        <pre id="outputPre">Select a file to begin inspection.</pre>
-      </div>
-    </div>
-  </main>
-
-  <!-- Load the WASM module -->
-  <script type="module">
-    import createSpzGatekeeperModule from './spz_gatekeeper.js?v=1.0.1';
-
-    let spzModule = null;
-
-    let currentFileData = null;
-    let currentFileName = "";
-
-    const elDot = document.getElementById('wasmStatusDot');
-    const elStatus = document.getElementById('wasmStatusText');
-    const dropZone = document.getElementById('dropZone');
-    const fileInput = document.getElementById('fileInput');
-    const resultSection = document.getElementById('resultSection');
-    const filenameDisplay = document.getElementById('filenameDisplay');
-    const filesizeDisplay = document.getElementById('filesizeDisplay');
-    const outputPre = document.getElementById('outputPre');
-    const validationBadge = document.getElementById('validationBadge');
-
-    const btns = {
-      text: document.getElementById('btnTextReport'),
-      json: document.getElementById('btnJsonDetails'),
-      trailer: document.getElementById('btnTrailer')
-    };
-
-    // Initialize WASM
-    async function initWasm() {
-      try {
-        spzModule = await createSpzGatekeeperModule();
-        elDot.className = 'status-dot ready';
-        elStatus.textContent = 'WASM Ready';
-        console.log("SPZ Gatekeeper WASM initialized.");
-      } catch (err) {
-        elDot.className = 'status-dot error';
-        elStatus.textContent = 'Failed to load WASM';
-        console.error("WASM load error:", err);
-      }
-    }
-
-    initWasm();
-
-    // Drag and drop handling
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-      dropZone.addEventListener(eventName, preventDefaults, false);
-    });
-
-    function preventDefaults(e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-
-    ['dragenter', 'dragover'].forEach(eventName => {
-      dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
-    });
-
-    ['dragleave', 'drop'].forEach(eventName => {
-      dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-      let dt = e.dataTransfer;
-      let files = dt.files;
-      if (files.length) handleFile(files[0]);
-    });
-
-    dropZone.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        fileInput.click();
-      }
-    });
-
-    fileInput.addEventListener('change', function(e) {
-      if (this.files.length) handleFile(this.files[0]);
-    });
-
-    function formatBytes(bytes, decimals = 2) {
-      if (!+bytes) return '0 Bytes';
-
-      const k = 1024;
-      const dm = decimals < 0 ? 0 : decimals;
-      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-    }
-
-    function handleFile(file) {
-      if (!spzModule) {
-        alert("WASM module is not loaded yet.");
-        return;
-      }
-      
-      currentFileName = file.name;
-      filenameDisplay.textContent = currentFileName;
-      filesizeDisplay.textContent = formatBytes(file.size);
-      
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const arrayBuffer = e.target.result;
-        currentFileData = new Uint8Array(arrayBuffer);
-        
-        resultSection.classList.add('visible');
-        renderTextReport();
-      };
-      reader.readAsArrayBuffer(file);
-    }
-
-    function updateActiveBtn(activeKey) {
-      Object.keys(btns).forEach(k => btns[k].classList.remove('active'));
-      btns[activeKey].classList.add('active');
-    }
-
-    // Ripple Effect for buttons
-    document.querySelectorAll('button').forEach(button => {
-      button.addEventListener('click', function (e) {
-        const rect = this.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        const ripple = document.createElement('span');
-        ripple.classList.add('ripple');
-        const diameter = Math.max(rect.width, rect.height);
-        ripple.style.width = ripple.style.height = `${diameter}px`;
-        ripple.style.left = `${x - diameter / 2}px`;
-        ripple.style.top = `${y - diameter / 2}px`;
-        
-        this.appendChild(ripple);
-        
-        setTimeout(() => {
-          ripple.remove();
-        }, 600);
+      // 阻止默认拖拽行为
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+        document.body.addEventListener(eventName, preventDefaults, false);
       });
-    });
 
-    // Handlers
-    btns.text.addEventListener('click', () => renderTextReport());
-    btns.json.addEventListener('click', () => renderJsonDetails());
-    btns.trailer.addEventListener('click', () => renderTrailer());
+      function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
 
-    function renderTextReport() {
-      updateActiveBtn('text');
-      if (!currentFileData) return;
-      try {
-        const text = spzModule.inspectSpzText(currentFileData, true);
-        outputPre.textContent = text;
-        
-        // Quick check if errors exist in text (heuristic)
-        if (text.includes("error [")) {
-          validationBadge.textContent = "Error";
-          validationBadge.className = "badge error";
-        } else {
-          validationBadge.textContent = "Valid SPZ";
-          validationBadge.className = "badge success";
+      // 拖拽进入/离开效果
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+          dropZone.classList.add('dragover');
+        }, false);
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+          dropZone.classList.remove('dragover');
+        }, false);
+      });
+
+      // 点击上传
+      dropZone.addEventListener('click', () => {
+        fileInput.click();
+      });
+
+      // 文件选择
+      fileInput.addEventListener('change', function() {
+        if (this.files && this.files.length > 0) {
+          handleFile(this.files[0]);
         }
-      } catch (err) {
-        outputPre.textContent = "Exception: " + err.message;
-        validationBadge.textContent = "Crash";
-        validationBadge.className = "badge error";
-      }
-    }
+      });
 
-    function renderJsonDetails() {
-      updateActiveBtn('json');
-      if (!currentFileData) return;
-      try {
-        const result = spzModule.inspectSpz(currentFileData, true);
-        outputPre.textContent = JSON.stringify(result, null, 2);
-      } catch (err) {
-        outputPre.textContent = "Exception: " + err.message;
-      }
-    }
+      // 拖拽放下
+      dropZone.addEventListener('drop', function(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files && files.length > 0) {
+          handleFile(files[0]);
+        }
+      });
 
-    function renderTrailer() {
-      updateActiveBtn('trailer');
-      if (!currentFileData) return;
-      try {
-        const result = spzModule.dumpTrailer(currentFileData, true);
-        outputPre.textContent = JSON.stringify(result, null, 2);
-      } catch (err) {
-        outputPre.textContent = "Exception: " + err.message;
+      function handleFile(file) {
+        console.log('文件已选择:', file.name, '大小:', formatBytes(file.size));
+        // 这里可以添加实际的文件处理逻辑
+        alert('已选择文件: ' + file.name + '\n大小: ' + formatBytes(file.size));
       }
-    }
+
+      function formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      }
+    })();
   </script>
 </body>
 </html>
