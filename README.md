@@ -11,6 +11,17 @@
 ## Independent Work Statement
 This repository is an independently developed work by **Pu Junhan**. Third-party projects/specifications are referenced only for interoperability and compatibility validation. All trademarks and external assets remain the property of their respective owners.
 
+## Organizational & Political Separation
+**This project has NO affiliation with, endorsement of, or endorsement by any foreign corporation or its parent company.** The author explicitly dissociates from any political positions, statements, or actions taken by the original SPZ project's parent organization. This gatekeeper operates independently and establishes its own standards for SPZ derivative compliance. 
+
+**Legitimacy of SPZ derivatives is determined by this project's open-source protocol, not by any external entity.** Users and contributors are judged solely by their adherence to the technical specifications defined herein.
+
+## Governance
+As the creator and maintainer, **Pu Junhan** reserves the right to:
+- Define what constitutes a compliant SPZ derivative
+- Refuse endorsement of any project that violates community standards
+- Update the validation criteria to protect the integrity of the SPZ ecosystem
+
 ## Scope
 
 ### What this tool does
