@@ -108,3 +108,37 @@ jobs:
           name: ${{ matrix.artifact_name }}-logs
           path: build.log
           retention-days: 7
+
+  wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Emscripten SDK
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.56
+
+      - name: Configure CMake (Emscripten)
+        run: |
+          emcmake cmake -S cpp -B build-wasm \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF
+
+      - name: Build WASM
+        run: |
+          emmake cmake --build build-wasm --parallel
+
+      - name: Verify WASM artifact
+        run: |
+          test -f build-wasm/spz_gatekeeper.js
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-build
+          path: build-wasm/spz_gatekeeper.js

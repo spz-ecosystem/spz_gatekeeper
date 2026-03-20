@@ -1,0 +1,81 @@
+name: Pages
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build_pages:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Emscripten SDK
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.56
+
+      - name: Configure CMake (Emscripten)
+        run: |
+          emcmake cmake -S cpp -B build-pages \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF
+
+      - name: Build WASM
+        run: |
+          emmake cmake --build build-pages --parallel
+
+      - name: Prepare Pages artifact
+        run: |
+          mkdir -p site
+          cp build-pages/spz_gatekeeper.js site/spz_gatekeeper.js
+          cat > site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width,initial-scale=1" />
+            <title>SPZ Gatekeeper WASM</title>
+          </head>
+          <body>
+            <h1>SPZ Gatekeeper WASM</h1>
+            <p>Module file: <code>spz_gatekeeper.js</code></p>
+            <p>Load from console:</p>
+            <pre><code>const mod = await createSpzGatekeeperModule();</code></pre>
+            <script type="module" src="./spz_gatekeeper.js"></script>
+          </body>
+          </html>
+          HTML
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy_pages:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build_pages
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

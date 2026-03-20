@@ -18,6 +18,17 @@ option(SPZ_GATEKEEPER_SYNC_COMPILE_COMMANDS
 option(SPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS
   "Build benchmark-oriented tests"
   OFF)
+option(SPZ_GATEKEEPER_BUILD_WASM
+  "Build WebAssembly target (Emscripten only)"
+  OFF)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  set(SPZ_GATEKEEPER_BUILD_WASM ON)
+endif()
+
+if(SPZ_GATEKEEPER_BUILD_WASM AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  message(FATAL_ERROR "SPZ_GATEKEEPER_BUILD_WASM requires Emscripten toolchain (use emcmake).")
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -28,7 +39,13 @@ set(SPZ_GATEKEEPER_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
 set(SPZ_GATEKEEPER_VERSION_MINOR ${PROJECT_VERSION_MINOR})
 set(SPZ_GATEKEEPER_VERSION_PATCH ${PROJECT_VERSION_PATCH})
 
-find_package(ZLIB REQUIRED)
+add_library(spz_gatekeeper_zlib INTERFACE)
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  target_link_options(spz_gatekeeper_zlib INTERFACE "-sUSE_ZLIB=1")
+else()
+  find_package(ZLIB REQUIRED)
+  target_link_libraries(spz_gatekeeper_zlib INTERFACE ZLIB::ZLIB)
+endif()
 
 set(SPZ_GATEKEEPER_CORE_SOURCES
   src/json_min.cc
@@ -47,7 +64,7 @@ target_include_directories(spz_gatekeeper_core
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/extensions>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/extensions>
 )
-target_link_libraries(spz_gatekeeper_core PUBLIC ZLIB::ZLIB)
+target_link_libraries(spz_gatekeeper_core PUBLIC spz_gatekeeper_zlib)
 
 target_compile_options(spz_gatekeeper_core PRIVATE
   $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>:
@@ -56,21 +73,42 @@ target_compile_options(spz_gatekeeper_core PRIVATE
     /W4 /permissive->
 )
 
-add_executable(spz_gatekeeper src/main.cc)
-target_link_libraries(spz_gatekeeper PRIVATE spz_gatekeeper_core)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  add_executable(spz_gatekeeper src/main.cc)
+  target_link_libraries(spz_gatekeeper PRIVATE spz_gatekeeper_core)
 
-if(MSVC)
-  target_compile_options(spz_gatekeeper PRIVATE /Zc:strictStrings-)
+  if(MSVC)
+    target_compile_options(spz_gatekeeper PRIVATE /Zc:strictStrings-)
+  endif()
+
+  set_target_properties(spz_gatekeeper PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    OUTPUT_NAME "spz_gatekeeper"
+  )
+
+  install(TARGETS spz_gatekeeper
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  )
 endif()
 
-set_target_properties(spz_gatekeeper PROPERTIES
-  VERSION ${PROJECT_VERSION}
-  OUTPUT_NAME "spz_gatekeeper"
-)
+if(SPZ_GATEKEEPER_BUILD_WASM)
+  add_executable(spz_gatekeeper-wasm src/wasm_main.cc)
+  target_link_libraries(spz_gatekeeper-wasm PRIVATE spz_gatekeeper_core)
+  target_link_options(spz_gatekeeper-wasm PRIVATE
+    "-O3"
+    "--bind"
+    "--no-entry"
+    "-sMODULARIZE=1"
+    "-sEXPORT_NAME=createSpzGatekeeperModule"
+    "-sALLOW_MEMORY_GROWTH=1"
+    "-sENVIRONMENT=web"
+    "-sEXPORT_ES6=1"
+    "-sSINGLE_FILE=1"
+    "-sFILESYSTEM=0"
+  )
+  set_target_properties(spz_gatekeeper-wasm PROPERTIES OUTPUT_NAME "spz_gatekeeper")
+endif()
 
-install(TARGETS spz_gatekeeper
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(DIRECTORY extensions/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/extensions)
 
@@ -86,7 +124,7 @@ if(SPZ_GATEKEEPER_SYNC_COMPILE_COMMANDS
   )
 endif()
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   function(spz_gatekeeper_add_test target source)
     add_executable(${target} ${source})
     target_link_libraries(${target} PRIVATE spz_gatekeeper_core ${ARGN})
@@ -123,6 +161,7 @@ else()
 endif()
 message(STATUS "Build testing: ${BUILD_TESTING}")
 message(STATUS "Benchmark tests: ${SPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS}")
+message(STATUS "Build WASM: ${SPZ_GATEKEEPER_BUILD_WASM}")
 message(STATUS "Sync compile_commands: ${SPZ_GATEKEEPER_SYNC_COMPILE_COMMANDS}")
 message(STATUS "Install prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
