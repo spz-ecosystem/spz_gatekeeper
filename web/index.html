@@ -382,9 +382,9 @@
   </main>
 
   <!-- Load the WASM module -->
-  <script src="./spz_gatekeeper.js"></script>
-  
-  <script>
+  <script type="module">
+    import createSpzGatekeeperModule from './spz_gatekeeper.js';
+
     let spzModule = null;
     let currentFileData = null;
     let currentFileName = "";
