@@ -156,11 +156,35 @@ spz_gatekeeper guide [--json]
 spz_gatekeeper --self-test
 ```
 
+### Command guide
+- `check-spz`: main L2 legality check for CI, release gating, and manual audits.
+- `dump-trailer`: inspect raw TLV records, offsets, and lengths after the base SPZ payload.
+- `registry`: browse built-in extension specs; use `registry show <type>` when you need one contract in detail.
+- `gen-fixture`: generate the smallest valid or invalid `.spz` sample for extension-validator development.
+- `compat-check`: run the fast strict/non-strict compatibility summary for one asset.
+- `compat-board`: inspect extension integration maturity; this is a governance board, not a performance ranking.
+- `guide`: print the extension-author checklist and governance notes.
+- `--self-test`: verify the binary's built-in assumptions without needing an external asset.
+
 ## Registry, self-test, and compatibility board
 - `registry` is the machine-readable catalog of built-in extension contracts.
 - `--self-test` verifies the gatekeeper's own TLV/header assumptions without requiring external assets.
 - `compat-board` reports extension integration maturity, not an algorithm leaderboard.
 - `docs/extension_registry.json` mirrors the current built-in registry and compatibility-board snapshot for docs/Web use.
+- The Web/WASM entry points reuse the same registry/report vocabulary as the CLI, so the JSON fields stay aligned across terminal, browser, and docs.
+
+## Extension author quick loop
+```bash
+spz_gatekeeper registry show 0xADBE0002 --json
+spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --out fixture_valid.spz
+spz_gatekeeper gen-fixture --type 0xADBE0002 --mode invalid-size --out fixture_invalid.spz
+spz_gatekeeper check-spz fixture_valid.spz --json
+spz_gatekeeper dump-trailer fixture_valid.spz --json
+spz_gatekeeper compat-check fixture_valid.spz --json
+spz_gatekeeper compat-board --json
+```
+
+Use this loop to confirm, in order, the registered contract, a minimal valid/invalid sample pair, the raw TLV layout, the structured compatibility summary, and the current maturity-board status before cutting a release.
 
 ## Validation details
 

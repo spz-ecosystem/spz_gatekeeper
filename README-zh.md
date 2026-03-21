@@ -156,11 +156,35 @@ spz_gatekeeper guide [--json]
 spz_gatekeeper --self-test
 ```
 
+### 命令分工速览
+- `check-spz`：主入口的 L2 合法性校验，适合 CI、发布前检查和人工审计。
+- `dump-trailer`：查看 base payload 之后的原始 TLV 记录、offset 与 length。
+- `registry`：浏览内置扩展规范；需要单条契约细节时用 `registry show <type>`。
+- `gen-fixture`：为扩展验证器开发生成最小合法/非法 `.spz` 样例。
+- `compat-check`：对单个资产执行 strict / non-strict 的快速兼容性摘要。
+- `compat-board`：查看扩展接入成熟度看板，不是算法性能排行榜。
+- `guide`：输出扩展作者开发清单与治理说明。
+- `--self-test`：不依赖外部资产，直接验证二进制内置假设。
+
 ## Registry、自测与兼容性看板的分工
 - `registry` 是内置扩展契约的机器可读目录。
 - `--self-test` 用于验证门卫自身的 header / TLV 假设，不依赖外部资产。
 - `compat-board` 展示的是扩展接入成熟度，不是算法排行榜。
 - `docs/extension_registry.json` 提供当前内置 registry 与 compatibility board 的文档镜像，供文档或 Web 页面复用。
+- Web/WASM 与 CLI 复用同一套 registry / report 字段口径，保证终端、浏览器和文档里的 JSON 结构一致。
+
+## 扩展作者快速自测闭环
+```bash
+spz_gatekeeper registry show 0xADBE0002 --json
+spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --out fixture_valid.spz
+spz_gatekeeper gen-fixture --type 0xADBE0002 --mode invalid-size --out fixture_invalid.spz
+spz_gatekeeper check-spz fixture_valid.spz --json
+spz_gatekeeper dump-trailer fixture_valid.spz --json
+spz_gatekeeper compat-check fixture_valid.spz --json
+spz_gatekeeper compat-board --json
+```
+
+这条闭环路径依次确认：已登记契约、最小合法/非法样例、原始 TLV 布局、结构化兼容性摘要，以及当前成熟度看板状态，适合作为发布前的最短核对流程。
 
 ## 校验细节
 
