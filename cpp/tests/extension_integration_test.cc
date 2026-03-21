@@ -21,15 +21,21 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <string>
+#include <utility>
 #include <vector>
 #include <zlib.h>
 
+
+#include "spz_gatekeeper/extension_spec_registry.h"
 #include "spz_gatekeeper/extension_validator.h"
 #include "spz_gatekeeper/safe_orbit_camera_validator.h"
 #include "spz_gatekeeper/spz.h"
 #include "spz_gatekeeper/validator_registry.h"
+#include "test_fixtures.h"
 
 namespace {
+
 
 constexpr float kHalfPi = 1.57079632679f;
 constexpr uint8_t kFlagHasExtensions = spz_gatekeeper::kFlagHasExtensions;
@@ -37,7 +43,66 @@ constexpr uint8_t kFlagHasExtensions = spz_gatekeeper::kFlagHasExtensions;
 int g_tests_run = 0;
 int g_tests_passed = 0;
 
+bool has_issue_code(const spz_gatekeeper::GateReport& report, const char* code) {
+  for (const auto& issue : report.issues) {
+    if (issue.code == code) {
+      return true;
+    }
+  }
+  return false;
+}
+
+spz_gatekeeper::ExtensionSpec make_spec(uint32_t type,
+                                        std::string vendor_name,
+                                        std::string extension_name) {
+  spz_gatekeeper::ExtensionSpec spec;
+  spec.type = type;
+  spec.vendor_id = static_cast<uint16_t>(type >> 16);
+  spec.extension_id = static_cast<uint16_t>(type & 0xFFFFu);
+  spec.vendor_name = std::move(vendor_name);
+  spec.extension_name = std::move(extension_name);
+  spec.category = "algorithm";
+  spec.status = "draft";
+  spec.spec_url = "docs/specs/test.md";
+  spec.short_description = "integration test spec";
+  spec.min_spz_version = 1;
+  spec.requires_has_extensions_flag = true;
+  return spec;
+}
+
+class AcceptAllTestValidator : public spz_gatekeeper::SpzExtensionValidator {
+ public:
+  explicit AcceptAllTestValidator(uint32_t type, std::string name)
+      : type_(type), name_(std::move(name)) {}
+
+  std::string GetName() const override {
+    return name_;
+  }
+
+  uint32_t GetExtensionType() const override {
+    return type_;
+  }
+
+  bool Validate(const uint8_t* data, size_t size, std::string* error) const override {
+    if (size > 0 && data == nullptr) {
+      if (error) {
+        *error = "payload pointer must not be null";
+      }
+      return false;
+    }
+    if (error) {
+      error->clear();
+    }
+    return true;
+  }
+
+ private:
+  uint32_t type_;
+  std::string name_;
+};
+
 #define TEST(name) void name()
+
 #define RUN_TEST(name) do { \
   std::cout << "Running " << #name << "... "; \
   g_tests_run++; \
@@ -83,106 +148,20 @@ std::vector<uint8_t> create_minimal_spz(
     uint8_t fractional_bits = 8,
     uint8_t flags = 0x00,
     const std::vector<uint8_t>* trailer = nullptr) {
-  std::vector<uint8_t> uncompressed;
-
-  uncompressed.push_back(0x4e);
-  uncompressed.push_back(0x47);
-  uncompressed.push_back(0x53);
-  uncompressed.push_back(0x50);
-
-  uncompressed.push_back(version);
-  uncompressed.push_back(0x00);
-  uncompressed.push_back(0x00);
-  uncompressed.push_back(0x00);
-
-  uncompressed.push_back(num_points & 0xFF);
-  uncompressed.push_back((num_points >> 8) & 0xFF);
-  uncompressed.push_back((num_points >> 16) & 0xFF);
-  uncompressed.push_back((num_points >> 24) & 0xFF);
-
-  uncompressed.push_back(sh_degree);
-  uncompressed.push_back(fractional_bits);
-  uncompressed.push_back(flags);
-  uncompressed.push_back(0x00);
-
-  const bool uses_float16 = (version == 1);
-  const bool uses_quat_smallest_three = (version >= 3);
-  auto sh_dim_for_degree = [](uint8_t degree) -> int {
-    switch (degree) {
-      case 0: return 0;
-      case 1: return 3;
-      case 2: return 8;
-      case 3: return 15;
-      case 4: return 24;
-      default: return 0;
-    }
-  };
-
-  const uint32_t n = num_points;
-  const int positions_bytes_per_point = uses_float16 ? 6 : 9;
-  const int alphas_bytes_per_point = 1;
-  const int colors_bytes_per_point = 3;
-  const int scales_bytes_per_point = 3;
-  const int rotations_bytes_per_point = uses_quat_smallest_three ? 4 : 3;
-  const int sh_bytes_per_point = sh_dim_for_degree(sh_degree) * 3;
-
-  uncompressed.insert(uncompressed.end(), n * positions_bytes_per_point, 0);
-  uncompressed.insert(uncompressed.end(), n * alphas_bytes_per_point, 255);
-  uncompressed.insert(uncompressed.end(), n * colors_bytes_per_point, 0);
-  uncompressed.insert(uncompressed.end(), n * scales_bytes_per_point, 0);
-  uncompressed.insert(uncompressed.end(), n * rotations_bytes_per_point, 0);
-  uncompressed.insert(uncompressed.end(), n * sh_bytes_per_point, 0);
-
-  if (trailer) {
-    uncompressed.insert(uncompressed.end(), trailer->begin(), trailer->end());
-  }
-
-  std::vector<uint8_t> compressed(1024);
-  z_stream strm = {};
-  if (deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
-    throw std::runtime_error("deflateInit failed");
-  }
-
-  strm.next_in = uncompressed.data();
-  strm.avail_in = static_cast<uInt>(uncompressed.size());
-  strm.next_out = compressed.data();
-  strm.avail_out = static_cast<uInt>(compressed.size());
-
-  int ret = deflate(&strm, Z_FINISH);
-  if (ret != Z_STREAM_END) {
-    deflateEnd(&strm);
-    throw std::runtime_error("deflate failed");
-  }
-
-  compressed.resize(strm.total_out);
-  deflateEnd(&strm);
-  return compressed;
+  return spz_gatekeeper_test::CreateMinimalSpz(num_points, version, sh_degree,
+                                               fractional_bits, flags, trailer);
 }
 
-std::vector<uint8_t> create_trailer(const std::vector<std::pair<uint32_t, std::vector<uint8_t>>>& records) {
-  std::vector<uint8_t> trailer;
-  for (const auto& rec : records) {
-    trailer.push_back(rec.first & 0xFF);
-    trailer.push_back((rec.first >> 8) & 0xFF);
-    trailer.push_back((rec.first >> 16) & 0xFF);
-    trailer.push_back((rec.first >> 24) & 0xFF);
-
-    uint32_t len = static_cast<uint32_t>(rec.second.size());
-    trailer.push_back(len & 0xFF);
-    trailer.push_back((len >> 8) & 0xFF);
-    trailer.push_back((len >> 16) & 0xFF);
-    trailer.push_back((len >> 24) & 0xFF);
-
-    trailer.insert(trailer.end(), rec.second.begin(), rec.second.end());
-  }
-  return trailer;
+std::vector<uint8_t> create_trailer(
+    const std::vector<std::pair<uint32_t, std::vector<uint8_t>>>& records) {
+  return spz_gatekeeper_test::CreateTrailer(records);
 }
 
 std::vector<uint8_t> write_float(float value) {
-  std::vector<uint8_t> bytes(4);
-  std::memcpy(bytes.data(), &value, sizeof(float));
-  return bytes;
+  return spz_gatekeeper_test::WriteFloat(value);
 }
+
+
 
 TEST(test_spz_no_extensions) {
   auto adobe_validator = std::make_shared<spz_gatekeeper::AdobeSafeOrbitCameraValidator>();
@@ -223,8 +202,15 @@ TEST(test_spz_valid_adobe_extension) {
   ASSERT_EQ(report.extension_reports[0].type, 0xADBE0002u);
   ASSERT_EQ(report.extension_reports[0].vendor_name, "Adobe");
   ASSERT_EQ(report.extension_reports[0].extension_name, "Adobe Safe Orbit Camera");
+  ASSERT_TRUE(report.extension_reports[0].known_extension);
+  ASSERT_TRUE(report.extension_reports[0].has_validator);
+  ASSERT_EQ(report.extension_reports[0].status, "stable");
+  ASSERT_EQ(report.extension_reports[0].category, "camera");
+  ASSERT_FALSE(report.extension_reports[0].spec_url.empty());
+  ASSERT_FALSE(report.extension_reports[0].short_description.empty());
   ASSERT_TRUE(report.extension_reports[0].validation_result);
   ASSERT_TRUE(report.extension_reports[0].error_message.empty());
+
   ASSERT_TRUE(report.spz_l2.has_value());
   ASSERT_EQ(report.spz_l2->tlv_records.size(), 1u);
   auto payload_view = report.spz_l2->tlv_records[0].ValueView();
@@ -267,13 +253,64 @@ TEST(test_spz_unknown_extension_type) {
   ASSERT_FALSE(report.HasErrors());
   ASSERT_EQ(report.extension_reports.size(), 1u);
   ASSERT_EQ(report.extension_reports[0].type, 0xDEADBEEFu);
+  ASSERT_FALSE(report.extension_reports[0].known_extension);
+  ASSERT_FALSE(report.extension_reports[0].has_validator);
   ASSERT_EQ(report.extension_reports[0].extension_name, "Unknown");
   ASSERT_TRUE(report.extension_reports[0].validation_result);
   ASSERT_TRUE(report.ToJson().find("\"extension_reports\"") != std::string::npos);
+  ASSERT_TRUE(has_issue_code(report, "L2_EXT_UNKNOWN"));
   ASSERT_GT(report.issues.size(), 0u);
 }
 
+TEST(test_spz_registered_extension_without_validator) {
+  const uint32_t type = 0xACDC0001u;
+  auto spec = make_spec(type, "ACDC Labs", "Registered Without Validator");
+  spz_gatekeeper::ExtensionSpecRegistry::Instance().RegisterSpec(spec);
+
+  std::vector<uint8_t> payload = {0x10, 0x20, 0x30};
+  auto trailer = create_trailer({{type, payload}});
+  auto spz_data = create_minimal_spz(1, 3, 0, 8, kFlagHasExtensions, &trailer);
+
+  spz_gatekeeper::SpzInspectOptions opt;
+  opt.strict = false;
+
+  auto report = spz_gatekeeper::InspectSpzBlob(spz_data, opt, "test");
+  ASSERT_FALSE(report.HasErrors());
+  ASSERT_EQ(report.extension_reports.size(), 1u);
+  ASSERT_TRUE(report.extension_reports[0].known_extension);
+  ASSERT_FALSE(report.extension_reports[0].has_validator);
+  ASSERT_EQ(report.extension_reports[0].vendor_name, "ACDC Labs");
+  ASSERT_EQ(report.extension_reports[0].extension_name, "Registered Without Validator");
+  ASSERT_EQ(report.extension_reports[0].status, "draft");
+  ASSERT_EQ(report.extension_reports[0].category, "algorithm");
+  ASSERT_TRUE(report.extension_reports[0].validation_result);
+  ASSERT_TRUE(has_issue_code(report, "L2_EXT_REGISTERED_NO_VALIDATOR"));
+}
+
+TEST(test_spz_unregistered_extension_with_validator) {
+  const uint32_t type = 0xBEEF0002u;
+  auto validator = std::make_shared<AcceptAllTestValidator>(type, "Unregistered Validator");
+  spz_gatekeeper::ExtensionValidatorRegistry::Instance().RegisterValidator(type, validator);
+
+  std::vector<uint8_t> payload = {0x01, 0x02};
+  auto trailer = create_trailer({{type, payload}});
+  auto spz_data = create_minimal_spz(1, 3, 0, 8, kFlagHasExtensions, &trailer);
+
+  spz_gatekeeper::SpzInspectOptions opt;
+  opt.strict = false;
+
+  auto report = spz_gatekeeper::InspectSpzBlob(spz_data, opt, "test");
+  ASSERT_FALSE(report.HasErrors());
+  ASSERT_EQ(report.extension_reports.size(), 1u);
+  ASSERT_FALSE(report.extension_reports[0].known_extension);
+  ASSERT_TRUE(report.extension_reports[0].has_validator);
+  ASSERT_EQ(report.extension_reports[0].extension_name, "Unregistered Validator");
+  ASSERT_TRUE(report.extension_reports[0].validation_result);
+  ASSERT_TRUE(has_issue_code(report, "L2_EXT_UNREGISTERED_VALIDATOR"));
+}
+
 TEST(test_spz_multiple_extensions) {
+
   auto adobe_validator = std::make_shared<spz_gatekeeper::AdobeSafeOrbitCameraValidator>();
   spz_gatekeeper::ExtensionValidatorRegistry::Instance().RegisterValidator(0xADBE0002u, adobe_validator);
 
@@ -296,12 +333,18 @@ TEST(test_spz_multiple_extensions) {
   ASSERT_FALSE(report.HasErrors());
   ASSERT_EQ(report.extension_reports.size(), 2u);
   ASSERT_EQ(report.extension_reports[0].type, 0xADBE0002u);
+  ASSERT_TRUE(report.extension_reports[0].known_extension);
+  ASSERT_TRUE(report.extension_reports[0].has_validator);
   ASSERT_TRUE(report.extension_reports[0].validation_result);
   ASSERT_EQ(report.extension_reports[1].type, 0xCAFE0001u);
+  ASSERT_FALSE(report.extension_reports[1].known_extension);
+  ASSERT_FALSE(report.extension_reports[1].has_validator);
   ASSERT_EQ(report.extension_reports[1].extension_name, "Unknown");
   ASSERT_TRUE(report.extension_reports[1].validation_result);
+  ASSERT_TRUE(has_issue_code(report, "L2_EXT_UNKNOWN"));
   ASSERT_GT(report.issues.size(), 0u);
 }
+
 
 TEST(test_spz_version_four_ok) {
   auto spz_data = create_minimal_spz(1, 4, 0, 8, 0x00);
@@ -407,7 +450,10 @@ int main() {
   RUN_TEST(test_spz_valid_adobe_extension);
   RUN_TEST(test_spz_invalid_adobe_extension_wrong_size);
   RUN_TEST(test_spz_unknown_extension_type);
+  RUN_TEST(test_spz_registered_extension_without_validator);
+  RUN_TEST(test_spz_unregistered_extension_with_validator);
   RUN_TEST(test_spz_multiple_extensions);
+
   RUN_TEST(test_spz_version_four_ok);
   RUN_TEST(test_spz_new_version_warning);
   RUN_TEST(test_spz_very_new_version_warning);

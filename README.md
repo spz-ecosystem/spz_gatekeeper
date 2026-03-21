@@ -75,21 +75,12 @@ Features:
 ### Build Web Version Locally
 
 ```bash
-# Install Emscripten (first time)
-git clone https://github.com/emscripten-core/emsdk.git
-cd emsdk && ./emsdk install 3.1.56 && ./emsdk activate 3.1.56
-source ./emsdk_env.sh
+# In a WSL shell with Emscripten already available
+emcmake cmake -S cpp -B build-pages -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+emmake cmake --build build-pages --parallel
 
-# Build WASM
-emcmake cmake -S cpp -B build-web -DCMAKE_BUILD_TYPE=Release
-emmake cmake --build build-web --parallel
-
-# Copy artifacts to web directory
-cp build-web/spz_gatekeeper.js web/
-cp build-web/spz_gatekeeper.wasm web/
-
-# Preview locally
-cd web && python3 -m http.server 8080
+# The build stays in build-pages/site and does not dirty web/
+cd build-pages/site && python3 -m http.server 8080
 # Open http://localhost:8080
 ```
 
@@ -133,6 +124,28 @@ spz_gatekeeper check-spz <file.spz> [--strict|--no-strict] [--json]
 spz_gatekeeper dump-trailer <file.spz> [--strict|--no-strict] [--json]
 ```
 
+### Browse registered extensions
+```bash
+spz_gatekeeper registry [--json]
+spz_gatekeeper registry show 0xADBE0002 [--json]
+```
+
+### Run compatibility summary for one asset
+```bash
+spz_gatekeeper compat-check <file.spz> [--json]
+```
+
+### Show compatibility maturity board
+```bash
+spz_gatekeeper compat-board [--json]
+```
+
+### Generate a minimal SPZ fixture
+```bash
+spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --out fixture.spz
+spz_gatekeeper gen-fixture --type 0xADBE0002 --mode invalid-size --out fixture_bad.spz
+```
+
 ### Show extension-development guide
 ```bash
 spz_gatekeeper guide [--json]
@@ -142,6 +155,12 @@ spz_gatekeeper guide [--json]
 ```bash
 spz_gatekeeper --self-test
 ```
+
+## Registry, self-test, and compatibility board
+- `registry` is the machine-readable catalog of built-in extension contracts.
+- `--self-test` verifies the gatekeeper's own TLV/header assumptions without requiring external assets.
+- `compat-board` reports extension integration maturity, not an algorithm leaderboard.
+- `docs/extension_registry.json` mirrors the current built-in registry and compatibility-board snapshot for docs/Web use.
 
 ## Validation details
 
@@ -172,7 +191,7 @@ float32 minRadius      // >= 0
 ### Text
 ```text
 asset: extended.spz
-ext type=2914908162 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
+ext type=2914910210 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
 ```
 
 ### JSON
@@ -182,9 +201,15 @@ ext type=2914908162 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
   "issues": [],
   "extension_reports": [
     {
-      "type": 2914908162,
+      "type": 2914910210,
       "vendor_name": "Adobe",
       "extension_name": "Adobe Safe Orbit Camera",
+      "known_extension": true,
+      "has_validator": true,
+      "status": "stable",
+      "category": "camera",
+      "spec_url": "docs/Implementing_Custom_Extension.md",
+      "short_description": "Constrains orbit elevation and minimum radius for safer camera control.",
       "validation_result": true,
       "error_message": ""
     }
@@ -200,7 +225,7 @@ ext type=2914908162 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
     "base_payload_size": 28000000,
     "trailer_size": 24,
     "tlv_records": [
-      {"type": 2914908162, "length": 12, "offset": 28000000}
+      {"type": 2914910210, "length": 12, "offset": 28000000}
     ]
   }
 }

@@ -13,28 +13,46 @@
  * Usage:
  *   spz_gatekeeper check-spz <file.spz> [--strict|--no-strict] [--json]
  *   spz_gatekeeper dump-trailer <file.spz> [--strict|--no-strict] [--json]
+ *   spz_gatekeeper registry [--json]
+ *   spz_gatekeeper registry show <type> [--json]
+ *   spz_gatekeeper compat-check <file.spz> [--json]
+ *   spz_gatekeeper compat-board [--json]
+ *   spz_gatekeeper gen-fixture --type <u32> [--mode valid|invalid-size] --out <file.spz>
  *   spz_gatekeeper guide [--json]
+
  *   spz_gatekeeper --self-test
+
+
  *
  * @author PuJunhan
  * @copyright Copyright (c) 2026 PuJunhan
  * @license MIT
  */
 
+#include "spz_gatekeeper/extension_spec_registry.h"
 #include "spz_gatekeeper/json_min.h"
 #include "spz_gatekeeper/spz.h"
+#include "spz_gatekeeper/validator_registry.h"
 
+
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <optional>
+
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 #include <zlib.h>
 
+
 namespace {
 
+static void PrintUsage();
+
 static bool ReadAllBytes(const std::string& path, std::vector<std::uint8_t>* out) {
+
   std::ifstream in(path, std::ios::binary | std::ios::ate);
   if (!in.good()) return false;
   std::size_t size = static_cast<std::size_t>(in.tellg());
@@ -87,20 +105,66 @@ static bool HasIssueCode(const spz_gatekeeper::GateReport& rep, const char* code
   return false;
 }
 
-static std::vector<std::uint8_t> BuildDecompressedSpz(std::uint32_t version, std::uint8_t flags,
-                                                      bool with_trailer) {
-  auto write_u32 = [](std::vector<std::uint8_t>* b, std::uint32_t v) {
-    b->push_back(static_cast<std::uint8_t>(v & 0xFF));
-    b->push_back(static_cast<std::uint8_t>((v >> 8) & 0xFF));
-    b->push_back(static_cast<std::uint8_t>((v >> 16) & 0xFF));
-    b->push_back(static_cast<std::uint8_t>((v >> 24) & 0xFF));
-  };
+static bool HasWarnings(const spz_gatekeeper::GateReport& rep) {
+  for (const auto& it : rep.issues) {
+    if (it.severity == spz_gatekeeper::Severity::kWarning) return true;
+  }
+  return false;
+}
 
+static void WriteU32Le(std::vector<std::uint8_t>* bytes, std::uint32_t value) {
+  bytes->push_back(static_cast<std::uint8_t>(value & 0xFFu));
+  bytes->push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+  bytes->push_back(static_cast<std::uint8_t>((value >> 16) & 0xFFu));
+  bytes->push_back(static_cast<std::uint8_t>((value >> 24) & 0xFFu));
+}
+
+static bool WriteAllBytes(const std::string& path, const std::vector<std::uint8_t>& bytes) {
+  std::ofstream out(path, std::ios::binary | std::ios::trunc);
+  if (!out.good()) return false;
+  out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+  return out.good();
+}
+
+static std::vector<std::uint8_t> BuildTlvTrailer(
+    const std::vector<std::pair<std::uint32_t, std::vector<std::uint8_t>>>& records) {
+  std::vector<std::uint8_t> trailer;
+  for (const auto& record : records) {
+    WriteU32Le(&trailer, record.first);
+    WriteU32Le(&trailer, static_cast<std::uint32_t>(record.second.size()));
+    trailer.insert(trailer.end(), record.second.begin(), record.second.end());
+  }
+  return trailer;
+}
+
+static std::vector<std::uint8_t> WriteFloatBytes(float value) {
+  std::vector<std::uint8_t> bytes(sizeof(float));
+  std::memcpy(bytes.data(), &value, sizeof(float));
+  return bytes;
+}
+
+static std::vector<std::uint8_t> BuildAdobeSafeOrbitPayload(bool invalid_size) {
+  if (invalid_size) {
+    return std::vector<std::uint8_t>(8, 0);
+  }
+
+  std::vector<std::uint8_t> payload;
+  const auto min_elevation = WriteFloatBytes(-0.5f);
+  const auto max_elevation = WriteFloatBytes(0.5f);
+  const auto min_radius = WriteFloatBytes(1.0f);
+  payload.insert(payload.end(), min_elevation.begin(), min_elevation.end());
+  payload.insert(payload.end(), max_elevation.begin(), max_elevation.end());
+  payload.insert(payload.end(), min_radius.begin(), min_radius.end());
+  return payload;
+}
+
+static std::vector<std::uint8_t> BuildDecompressedSpz(std::uint32_t version, std::uint8_t flags,
+                                                      const std::vector<std::uint8_t>* trailer) {
   std::vector<std::uint8_t> decomp;
   decomp.reserve(64);
-  write_u32(&decomp, 0x5053474e);
-  write_u32(&decomp, version);
-  write_u32(&decomp, 1);
+  WriteU32Le(&decomp, 0x5053474eu);
+  WriteU32Le(&decomp, version);
+  WriteU32Le(&decomp, 1);
   decomp.push_back(0);
   decomp.push_back(12);
   decomp.push_back(flags);
@@ -112,16 +176,13 @@ static std::vector<std::uint8_t> BuildDecompressedSpz(std::uint32_t version, std
   const std::size_t rotations = uses_quat_smallest_three ? 4 : 3;
   decomp.insert(decomp.end(), positions + 1 + 3 + 3 + rotations, 0);
 
-  if (with_trailer) {
-    write_u32(&decomp, 1);
-    write_u32(&decomp, 3);
-    decomp.push_back('a');
-    decomp.push_back('b');
-    decomp.push_back('c');
+  if (trailer != nullptr) {
+    decomp.insert(decomp.end(), trailer->begin(), trailer->end());
   }
 
   return decomp;
 }
+
 
 static int SelfTest() {
   using namespace spz_gatekeeper;
@@ -133,8 +194,10 @@ static int SelfTest() {
     return out;
   };
 
+  const auto sample_trailer = BuildTlvTrailer({{1u, {'a', 'b', 'c'}}});
+
   {
-    auto gz = gzip(BuildDecompressedSpz(3, 0, false));
+    auto gz = gzip(BuildDecompressedSpz(3, 0, nullptr));
     if (!gz.has_value()) return 10;
     SpzInspectOptions opt;
     GateReport rep = InspectSpzBlob(gz.value(), opt, "self-test:noext:notrailer");
@@ -143,7 +206,7 @@ static int SelfTest() {
   }
 
   {
-    auto gz = gzip(BuildDecompressedSpz(3, 0, true));
+    auto gz = gzip(BuildDecompressedSpz(3, 0, &sample_trailer));
     if (!gz.has_value()) return 20;
     SpzInspectOptions opt;
     GateReport rep = InspectSpzBlob(gz.value(), opt, "self-test:noext:trailer");
@@ -152,7 +215,7 @@ static int SelfTest() {
   }
 
   {
-    auto gz = gzip(BuildDecompressedSpz(3, kFlagHasExtensions, true));
+    auto gz = gzip(BuildDecompressedSpz(3, kFlagHasExtensions, &sample_trailer));
     if (!gz.has_value()) return 30;
     SpzInspectOptions opt;
     GateReport rep = InspectSpzBlob(gz.value(), opt, "self-test:ext:trailer");
@@ -162,7 +225,7 @@ static int SelfTest() {
   }
 
   {
-    auto gz = gzip(BuildDecompressedSpz(3, kFlagHasExtensions, false));
+    auto gz = gzip(BuildDecompressedSpz(3, kFlagHasExtensions, nullptr));
     if (!gz.has_value()) return 40;
     SpzInspectOptions opt;
     GateReport rep = InspectSpzBlob(gz.value(), opt, "self-test:ext:notrailer");
@@ -171,13 +234,14 @@ static int SelfTest() {
   }
 
   {
-    auto gz = gzip(BuildDecompressedSpz(4, 0, false));
+    auto gz = gzip(BuildDecompressedSpz(4, 0, nullptr));
     if (!gz.has_value()) return 50;
     SpzInspectOptions opt;
     GateReport rep = InspectSpzBlob(gz.value(), opt, "self-test:v4");
     if (rep.HasErrors()) return 51;
     if (HasIssueCode(rep, "L2_VERSION")) return 52;
   }
+
 
   return 0;
 }
@@ -224,20 +288,548 @@ static void PrintGuide(bool json) {
   std::cout << "  - docs/WIKI.md\n";
 }
 
+static std::string RegistryEntryToJson(const spz_gatekeeper::ExtensionSpec& spec) {
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"type\":" << spec.type;
+  oss << ",\"vendor_id\":" << spec.vendor_id;
+  oss << ",\"extension_id\":" << spec.extension_id;
+  oss << ",\"vendor_name\":\"" << spz_gatekeeper::JsonEscape(spec.vendor_name) << "\"";
+  oss << ",\"extension_name\":\"" << spz_gatekeeper::JsonEscape(spec.extension_name) << "\"";
+  oss << ",\"category\":\"" << spz_gatekeeper::JsonEscape(spec.category) << "\"";
+  oss << ",\"status\":\"" << spz_gatekeeper::JsonEscape(spec.status) << "\"";
+  oss << ",\"spec_url\":\"" << spz_gatekeeper::JsonEscape(spec.spec_url) << "\"";
+  oss << ",\"short_description\":\"" << spz_gatekeeper::JsonEscape(spec.short_description) << "\"";
+  oss << ",\"min_spz_version\":" << spec.min_spz_version;
+  oss << ",\"requires_has_extensions_flag\":"
+      << (spec.requires_has_extensions_flag ? "true" : "false");
+  oss << ",\"has_validator\":"
+      << (spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type) ? "true" : "false");
+  oss << "}";
+  return oss.str();
+}
+
+static void PrintRegistryList(bool json) {
+  const auto specs = spz_gatekeeper::ExtensionSpecRegistry::Instance().ListSpecs();
+  if (json) {
+    std::ostringstream oss;
+    oss << "{";
+    oss << "\"count\":" << specs.size();
+    oss << ",\"extensions\":[";
+    for (std::size_t i = 0; i < specs.size(); ++i) {
+      if (i) {
+        oss << ",";
+      }
+      oss << RegistryEntryToJson(specs[i]);
+    }
+    oss << "]}";
+    std::cout << oss.str() << "\n";
+    return;
+  }
+
+  std::cout << "Registered extensions: " << specs.size() << "\n";
+  for (const auto& spec : specs) {
+    std::cout << "- type=" << spec.type
+              << " vendor=\"" << spec.vendor_name << "\""
+              << " name=\"" << spec.extension_name << "\""
+              << " status=\"" << spec.status << "\""
+              << " category=\"" << spec.category << "\""
+              << " has_validator="
+              << (spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type) ? "true" : "false")
+              << "\n";
+  }
+}
+
+static bool ParseExtensionType(const std::string& text, std::uint32_t* out) {
+  try {
+    std::size_t parsed = 0;
+    const auto value = std::stoull(text, &parsed, 0);
+    if (parsed != text.size() || value > 0xFFFFFFFFull) {
+      return false;
+    }
+    *out = static_cast<std::uint32_t>(value);
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+static bool PrintRegistryShow(const std::string& type_text, bool json) {
+  std::uint32_t type = 0;
+  if (!ParseExtensionType(type_text, &type)) {
+    if (json) {
+      std::cout << "{\"error\":\"invalid extension type\",\"type_input\":\""
+                << spz_gatekeeper::JsonEscape(type_text) << "\"}\n";
+    } else {
+      std::cerr << "invalid extension type: " << type_text << "\n";
+    }
+    return false;
+  }
+
+  const auto spec = spz_gatekeeper::ExtensionSpecRegistry::Instance().GetSpec(type);
+  if (!spec.has_value()) {
+    if (json) {
+      std::cout << "{\"error\":\"extension not found\",\"type\":" << type
+                << ",\"type_input\":\"" << spz_gatekeeper::JsonEscape(type_text) << "\"}\n";
+    } else {
+      std::cerr << "extension not found: " << type_text << "\n";
+    }
+    return false;
+  }
+
+
+  if (json) {
+    std::cout << RegistryEntryToJson(*spec) << "\n";
+  } else {
+    std::cout << "type=" << spec->type << "\n";
+    std::cout << "vendor_id=" << spec->vendor_id << "\n";
+    std::cout << "extension_id=" << spec->extension_id << "\n";
+    std::cout << "vendor_name=\"" << spec->vendor_name << "\"\n";
+    std::cout << "extension_name=\"" << spec->extension_name << "\"\n";
+    std::cout << "category=\"" << spec->category << "\"\n";
+    std::cout << "status=\"" << spec->status << "\"\n";
+    std::cout << "spec_url=\"" << spec->spec_url << "\"\n";
+    std::cout << "short_description=\"" << spec->short_description << "\"\n";
+    std::cout << "min_spz_version=" << spec->min_spz_version << "\n";
+    std::cout << "requires_has_extensions_flag="
+              << (spec->requires_has_extensions_flag ? "true" : "false") << "\n";
+    std::cout << "has_validator="
+              << (spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec->type) ? "true" : "false")
+              << "\n";
+  }
+  return true;
+}
+
+static int HandleRegistryCommand(int argc, char** argv) {
+  bool json = false;
+  bool show = false;
+  std::string type_text;
+  int flag_start = 2;
+
+  if (argc >= 3) {
+    const std::string arg = argv[2];
+    if (arg == "list") {
+      flag_start = 3;
+    } else if (arg == "show") {
+      if (argc < 4) {
+        PrintUsage();
+        return 2;
+      }
+      show = true;
+      type_text = argv[3];
+      flag_start = 4;
+    } else if (arg == "--json") {
+      json = true;
+      flag_start = 3;
+    } else {
+      PrintUsage();
+      return 2;
+    }
+  }
+
+  for (int i = flag_start; i < argc; ++i) {
+    const std::string flag = argv[i];
+    if (flag == "--json") {
+      json = true;
+    } else {
+      PrintUsage();
+      return 2;
+    }
+  }
+
+  if (show) {
+    return PrintRegistryShow(type_text, json) ? 0 : 1;
+  }
+
+  PrintRegistryList(json);
+  return 0;
+}
+
+struct FixtureBlob {
+  std::vector<std::uint8_t> bytes;
+  std::string mode;
+  bool placeholder_payload = false;
+};
+
+static bool IsSupportedFixtureMode(const std::string& mode) {
+  return mode == "valid" || mode == "invalid-size";
+}
+
+static FixtureBlob BuildFixtureBlob(std::uint32_t type, const std::string& mode) {
+  FixtureBlob fixture;
+  fixture.mode = mode;
+
+  std::vector<std::uint8_t> payload;
+  if (type == 0xADBE0002u) {
+    payload = BuildAdobeSafeOrbitPayload(mode == "invalid-size");
+  } else {
+    fixture.placeholder_payload = true;
+    payload = (mode == "invalid-size") ? std::vector<std::uint8_t>{0x00}
+                                         : std::vector<std::uint8_t>{0x00, 0x00, 0x00, 0x00};
+  }
+
+  const auto trailer = BuildTlvTrailer({{type, payload}});
+  const auto decompressed = BuildDecompressedSpz(3, spz_gatekeeper::kFlagHasExtensions, &trailer);
+  std::string error;
+  if (!GzipCompress(decompressed, &fixture.bytes, &error)) {
+    throw std::runtime_error(error.empty() ? "gzip compression failed" : error);
+  }
+  return fixture;
+}
+
+static int HandleGenFixtureCommand(int argc, char** argv) {
+  std::string type_text;
+  std::string out_path;
+  std::string mode = "valid";
+
+  for (int i = 2; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--type" && i + 1 < argc) {
+      type_text = argv[++i];
+    } else if (arg == "--out" && i + 1 < argc) {
+      out_path = argv[++i];
+    } else if (arg == "--mode" && i + 1 < argc) {
+      mode = argv[++i];
+    } else {
+      PrintUsage();
+      return 2;
+    }
+  }
+
+  std::uint32_t type = 0;
+  if (type_text.empty() || out_path.empty() || !ParseExtensionType(type_text, &type) ||
+      !IsSupportedFixtureMode(mode)) {
+    PrintUsage();
+    return 2;
+  }
+
+  try {
+    const auto fixture = BuildFixtureBlob(type, mode);
+    if (!WriteAllBytes(out_path, fixture.bytes)) {
+      std::cerr << "failed to write fixture: " << out_path << "\n";
+      return 2;
+    }
+
+    std::cout << "wrote fixture path=\"" << out_path << "\" type=" << type
+              << " mode=\"" << fixture.mode << "\" placeholder="
+              << (fixture.placeholder_payload ? "true" : "false") << "\n";
+    return 0;
+  } catch (const std::exception& ex) {
+    std::cerr << "gen-fixture failed: " << ex.what() << "\n";
+    return 1;
+  }
+}
+
+static std::string BuildExtensionSummaryJson(const spz_gatekeeper::GateReport& report) {
+  std::ostringstream oss;
+  oss << "[";
+  for (std::size_t i = 0; i < report.extension_reports.size(); ++i) {
+    if (i) oss << ",";
+    const auto& ext = report.extension_reports[i];
+    oss << "{";
+    oss << "\"type\":" << ext.type;
+    oss << ",\"extension_name\":\"" << spz_gatekeeper::JsonEscape(ext.extension_name) << "\"";
+    oss << ",\"known_extension\":" << (ext.known_extension ? "true" : "false");
+    oss << ",\"has_validator\":" << (ext.has_validator ? "true" : "false");
+    oss << ",\"validation_result\":" << (ext.validation_result ? "true" : "false");
+    oss << ",\"status\":\"" << spz_gatekeeper::JsonEscape(ext.status) << "\"";
+    oss << "}";
+  }
+  oss << "]";
+  return oss.str();
+}
+
+static std::string BuildIssueListJson(const spz_gatekeeper::GateReport& report) {
+  std::ostringstream oss;
+  oss << "[";
+  for (std::size_t i = 0; i < report.issues.size(); ++i) {
+    if (i) oss << ",";
+    const auto& issue = report.issues[i];
+    oss << "{";
+    oss << "\"severity\":\"";
+    switch (issue.severity) {
+      case spz_gatekeeper::Severity::kError: oss << "error"; break;
+      case spz_gatekeeper::Severity::kWarning: oss << "warning"; break;
+      case spz_gatekeeper::Severity::kNote: oss << "note"; break;
+    }
+    oss << "\"";
+    oss << ",\"code\":\"" << spz_gatekeeper::JsonEscape(issue.code) << "\"";
+    oss << ",\"message\":\"" << spz_gatekeeper::JsonEscape(issue.message) << "\"";
+    oss << "}";
+  }
+  oss << "]";
+  return oss.str();
+}
+
+static std::string BuildRegistrySummaryJson(const spz_gatekeeper::GateReport& report) {
+  std::size_t known_extensions = 0;
+  std::size_t validator_backed_extensions = 0;
+  std::size_t unknown_extensions = 0;
+  for (const auto& ext : report.extension_reports) {
+    if (ext.known_extension) {
+      ++known_extensions;
+    } else {
+      ++unknown_extensions;
+    }
+    if (ext.has_validator) {
+      ++validator_backed_extensions;
+    }
+  }
+
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"registered_extensions\":"
+      << spz_gatekeeper::ExtensionSpecRegistry::Instance().SpecCount();
+  oss << ",\"known_extensions\":" << known_extensions;
+  oss << ",\"validator_backed_extensions\":" << validator_backed_extensions;
+  oss << ",\"unknown_extensions\":" << unknown_extensions;
+  oss << "}";
+  return oss.str();
+}
+
+static const spz_gatekeeper::ExtensionReport* FindExtensionReport(
+    const spz_gatekeeper::GateReport& report, std::uint32_t type) {
+  for (const auto& ext : report.extension_reports) {
+    if (ext.type == type) {
+      return &ext;
+    }
+  }
+  return nullptr;
+}
+
+static std::string BuildCompatibilityBoardJson() {
+  const auto specs = spz_gatekeeper::ExtensionSpecRegistry::Instance().ListSpecs();
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"count\":" << specs.size();
+  oss << ",\"extensions\":[";
+
+  for (std::size_t i = 0; i < specs.size(); ++i) {
+    if (i) {
+      oss << ",";
+    }
+
+    const auto& spec = specs[i];
+    const auto valid_fixture = BuildFixtureBlob(spec.type, "valid");
+    const auto invalid_fixture = BuildFixtureBlob(spec.type, "invalid-size");
+
+    spz_gatekeeper::SpzInspectOptions strict_options;
+    strict_options.strict = true;
+    const auto strict_valid_report =
+        spz_gatekeeper::InspectSpzBlob(valid_fixture.bytes, strict_options, "compat-board:valid");
+    const auto strict_invalid_report =
+        spz_gatekeeper::InspectSpzBlob(invalid_fixture.bytes, strict_options, "compat-board:invalid");
+
+    spz_gatekeeper::SpzInspectOptions non_strict_options;
+    non_strict_options.strict = false;
+    const auto non_strict_valid_report =
+        spz_gatekeeper::InspectSpzBlob(valid_fixture.bytes, non_strict_options, "compat-board:valid");
+
+    const auto* valid_ext = FindExtensionReport(strict_valid_report, spec.type);
+    const auto* invalid_ext = FindExtensionReport(strict_invalid_report, spec.type);
+    const bool fixture_valid_pass = valid_ext != nullptr && valid_ext->validation_result;
+    const bool fixture_invalid_pass = invalid_ext != nullptr && !invalid_ext->validation_result;
+    const bool strict_check_pass = !strict_valid_report.HasErrors() && !HasWarnings(strict_valid_report);
+    const bool non_strict_check_pass = !non_strict_valid_report.HasErrors();
+
+    oss << "{";
+    oss << "\"type\":" << spec.type;
+    oss << ",\"vendor_name\":\"" << spz_gatekeeper::JsonEscape(spec.vendor_name) << "\"";
+    oss << ",\"extension_name\":\"" << spz_gatekeeper::JsonEscape(spec.extension_name) << "\"";
+    oss << ",\"status\":\"" << spz_gatekeeper::JsonEscape(spec.status) << "\"";
+    oss << ",\"has_spec\":true";
+    oss << ",\"has_validator\":"
+        << (spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type) ? "true" : "false");
+    oss << ",\"fixture_valid_pass\":" << (fixture_valid_pass ? "true" : "false");
+    oss << ",\"fixture_invalid_pass\":" << (fixture_invalid_pass ? "true" : "false");
+    oss << ",\"strict_check_pass\":" << (strict_check_pass ? "true" : "false");
+    oss << ",\"non_strict_check_pass\":" << (non_strict_check_pass ? "true" : "false");
+    oss << "}";
+  }
+
+  oss << "]}";
+  return oss.str();
+}
+
+static void PrintCompatibilityBoard(bool json) {
+  const auto specs = spz_gatekeeper::ExtensionSpecRegistry::Instance().ListSpecs();
+  if (json) {
+    std::cout << BuildCompatibilityBoardJson() << "\n";
+    return;
+  }
+
+  std::cout << "Compatibility board: " << specs.size() << " registered extension(s)\n";
+  for (const auto& spec : specs) {
+    const auto valid_fixture = BuildFixtureBlob(spec.type, "valid");
+    const auto invalid_fixture = BuildFixtureBlob(spec.type, "invalid-size");
+
+    spz_gatekeeper::SpzInspectOptions strict_options;
+    strict_options.strict = true;
+    const auto strict_valid_report =
+        spz_gatekeeper::InspectSpzBlob(valid_fixture.bytes, strict_options, "compat-board:valid");
+    const auto strict_invalid_report =
+        spz_gatekeeper::InspectSpzBlob(invalid_fixture.bytes, strict_options, "compat-board:invalid");
+
+    spz_gatekeeper::SpzInspectOptions non_strict_options;
+    non_strict_options.strict = false;
+    const auto non_strict_valid_report =
+        spz_gatekeeper::InspectSpzBlob(valid_fixture.bytes, non_strict_options, "compat-board:valid");
+
+    const auto* valid_ext = FindExtensionReport(strict_valid_report, spec.type);
+    const auto* invalid_ext = FindExtensionReport(strict_invalid_report, spec.type);
+    const bool fixture_valid_pass = valid_ext != nullptr && valid_ext->validation_result;
+    const bool fixture_invalid_pass = invalid_ext != nullptr && !invalid_ext->validation_result;
+    const bool strict_check_pass = !strict_valid_report.HasErrors() && !HasWarnings(strict_valid_report);
+    const bool non_strict_check_pass = !non_strict_valid_report.HasErrors();
+
+    std::cout << "- type=" << spec.type
+              << " vendor=\"" << spec.vendor_name << "\""
+              << " name=\"" << spec.extension_name << "\""
+              << " status=\"" << spec.status << "\""
+              << " has_spec=true"
+              << " has_validator="
+              << (spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type) ? "true" : "false")
+              << " fixture_valid_pass=" << (fixture_valid_pass ? "true" : "false")
+              << " fixture_invalid_pass=" << (fixture_invalid_pass ? "true" : "false")
+              << " strict_check_pass=" << (strict_check_pass ? "true" : "false")
+              << " non_strict_check_pass=" << (non_strict_check_pass ? "true" : "false")
+              << "\n";
+  }
+}
+
+
+static void PrintCompatCheck(const std::string& path,
+
+                             const spz_gatekeeper::GateReport& strict_report,
+                             const spz_gatekeeper::GateReport& non_strict_report,
+                             bool json) {
+  const bool strict_ok = !strict_report.HasErrors() && !HasWarnings(strict_report);
+  const bool non_strict_ok = !non_strict_report.HasErrors();
+
+  if (json) {
+    std::ostringstream oss;
+    oss << "{";
+    oss << "\"asset_path\":\"" << spz_gatekeeper::JsonEscape(path) << "\"";
+    oss << ",\"strict_ok\":" << (strict_ok ? "true" : "false");
+    oss << ",\"non_strict_ok\":" << (non_strict_ok ? "true" : "false");
+    oss << ",\"registry_summary\":" << BuildRegistrySummaryJson(non_strict_report);
+    oss << ",\"extension_summary\":" << BuildExtensionSummaryJson(non_strict_report);
+    oss << ",\"issue_summary\":{";
+    oss << "\"strict\":" << BuildIssueListJson(strict_report);
+    oss << ",\"non_strict\":" << BuildIssueListJson(non_strict_report);
+    oss << "}";
+    oss << ",\"upstream_tools\":{\"spz_info\":\"skipped\",\"spz_to_ply\":\"skipped\"}";
+    oss << "}";
+    std::cout << oss.str() << "\n";
+    return;
+  }
+
+  std::cout << "asset=\"" << path << "\"\n";
+  std::cout << "strict_ok=" << (strict_ok ? "true" : "false") << "\n";
+  std::cout << "non_strict_ok=" << (non_strict_ok ? "true" : "false") << "\n";
+  std::cout << "registered_extensions="
+            << spz_gatekeeper::ExtensionSpecRegistry::Instance().SpecCount() << "\n";
+  std::cout << "extension_count=" << non_strict_report.extension_reports.size() << "\n";
+  for (const auto& issue : strict_report.issues) {
+    std::cout << "strict_issue=" << issue.code << "\n";
+  }
+  for (const auto& issue : non_strict_report.issues) {
+    std::cout << "non_strict_issue=" << issue.code << "\n";
+  }
+  std::cout << "upstream_tools=skipped\n";
+}
+
+static int HandleCompatCheckCommand(int argc, char** argv) {
+  if (argc < 3) {
+    PrintUsage();
+    return 2;
+  }
+
+  const std::string path = argv[2];
+  bool json = false;
+  for (int i = 3; i < argc; ++i) {
+    const std::string flag = argv[i];
+    if (flag == "--json") {
+      json = true;
+    } else {
+      PrintUsage();
+      return 2;
+    }
+  }
+
+  std::vector<std::uint8_t> bytes;
+  if (!ReadAllBytes(path, &bytes)) {
+    std::cerr << "failed to read: " << path << "\n";
+    return 2;
+  }
+
+  spz_gatekeeper::SpzInspectOptions strict_options;
+  strict_options.strict = true;
+  const auto strict_report = spz_gatekeeper::InspectSpzBlob(bytes, strict_options, path);
+
+  spz_gatekeeper::SpzInspectOptions non_strict_options;
+  non_strict_options.strict = false;
+  const auto non_strict_report = spz_gatekeeper::InspectSpzBlob(bytes, non_strict_options, path);
+
+  const bool strict_ok = !strict_report.HasErrors() && !HasWarnings(strict_report);
+  const bool non_strict_ok = !non_strict_report.HasErrors();
+  PrintCompatCheck(path, strict_report, non_strict_report, json);
+  return (strict_ok && non_strict_ok) ? 0 : 1;
+}
+
+static int HandleCompatBoardCommand(int argc, char** argv) {
+  bool json = false;
+  for (int i = 2; i < argc; ++i) {
+    const std::string flag = argv[i];
+    if (flag == "--json") {
+      json = true;
+    } else {
+      PrintUsage();
+      return 2;
+    }
+  }
+
+  try {
+    PrintCompatibilityBoard(json);
+    return 0;
+  } catch (const std::exception& ex) {
+    std::cerr << "compat-board failed: " << ex.what() << "\n";
+    return 1;
+  }
+}
+
 static void PrintUsage() {
+
+
+
   std::cerr << "SPZ Gatekeeper - SPZ Format Legality Checker\n\n";
   std::cerr << "Usage:\n";
   std::cerr << "  spz_gatekeeper check-spz <file.spz> [--strict|--no-strict] [--json]\n";
   std::cerr << "  spz_gatekeeper dump-trailer <file.spz> [--strict|--no-strict] [--json]\n";
+  std::cerr << "  spz_gatekeeper registry [--json]\n";
+  std::cerr << "  spz_gatekeeper registry list [--json]\n";
+  std::cerr << "  spz_gatekeeper registry show <type> [--json]\n";
+  std::cerr << "  spz_gatekeeper compat-check <file.spz> [--json]\n";
+  std::cerr << "  spz_gatekeeper compat-board [--json]\n";
+  std::cerr << "  spz_gatekeeper gen-fixture --type <u32> [--mode valid|invalid-size] --out <file.spz>\n";
   std::cerr << "  spz_gatekeeper guide [--json]\n";
+
   std::cerr << "  spz_gatekeeper --self-test\n";
+
   std::cerr << "  spz_gatekeeper --help\n\n";
   std::cerr << "Commands:\n";
   std::cerr << "  check-spz     Validate SPZ file (L2 validation)\n";
   std::cerr << "  dump-trailer  Show trailer TLV records\n";
+  std::cerr << "  registry      List registered extensions or inspect one entry\n";
+  std::cerr << "  compat-check  Run strict/non-strict compatibility summary\n";
+  std::cerr << "  compat-board  Show compatibility maturity board for registered extensions\n";
+  std::cerr << "  gen-fixture   Generate a minimal SPZ fixture with one TLV record\n";
   std::cerr << "  guide         Show vendor extension development guide\n";
+
+
   std::cerr << "  --self-test   Run built-in self-tests\n";
   std::cerr << "  --help        Show this help message\n\n";
+
   std::cerr << "Options:\n";
   std::cerr << "  --strict      Strict mode: warnings become errors\n";
   std::cerr << "  --no-strict   Normal mode: warnings are non-fatal\n";
@@ -245,8 +837,16 @@ static void PrintUsage() {
   std::cerr << "Examples:\n";
   std::cerr << "  spz_gatekeeper check-spz model.spz\n";
   std::cerr << "  spz_gatekeeper dump-trailer extended.spz --json\n";
+  std::cerr << "  spz_gatekeeper registry --json\n";
+  std::cerr << "  spz_gatekeeper registry show 0xADBE0002 --json\n";
+  std::cerr << "  spz_gatekeeper compat-check model.spz --json\n";
+  std::cerr << "  spz_gatekeeper compat-board --json\n";
+  std::cerr << "  spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --out fixture.spz\n";
   std::cerr << "  spz_gatekeeper guide\n";
+
+
 }
+
 
 }  // namespace
 
@@ -277,7 +877,26 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  if (cmd == "registry") {
+    return HandleRegistryCommand(argc, argv);
+  }
+
+  if (cmd == "compat-check") {
+    return HandleCompatCheckCommand(argc, argv);
+  }
+
+  if (cmd == "compat-board") {
+    return HandleCompatBoardCommand(argc, argv);
+  }
+
+  if (cmd == "gen-fixture") {
+    return HandleGenFixtureCommand(argc, argv);
+  }
+
+
   bool strict = true;
+
+
   bool json = false;
   auto parse_flags = [&](int start_idx) {
     for (int i = start_idx; i < argc; ++i) {

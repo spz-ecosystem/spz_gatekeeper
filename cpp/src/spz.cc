@@ -4,9 +4,11 @@
 #include "spz_gatekeeper/spz.h"
 
 #include "spz_gatekeeper/tlv.h"
+#include "spz_gatekeeper/extension_spec_registry.h"
 #include "spz_gatekeeper/extension_validator.h"
 #include "spz_gatekeeper/validator_registry.h"
 #include "spz_gatekeeper/safe_orbit_camera_validator.h"
+
 
 #include <zlib.h>
 
@@ -23,7 +25,24 @@ constexpr std::uint32_t kKnownMaxVersion = 4;
 // Auto-register built-in Adobe validator for runtime check-spz paths.
 static RegisterValidator<AdobeSafeOrbitCameraValidator> kAutoRegisterAdobeValidator;
 
+static bool RegisterBuiltInSpecs() {
+  ExtensionSpec adobe_spec;
+  adobe_spec.type = kAdobeSafeOrbitCameraType;
+  adobe_spec.vendor_id = static_cast<std::uint16_t>(kAdobeSafeOrbitCameraType >> 16);
+  adobe_spec.extension_id = static_cast<std::uint16_t>(kAdobeSafeOrbitCameraType & 0xFFFFu);
+  adobe_spec.vendor_name = "Adobe";
+  adobe_spec.extension_name = "Adobe Safe Orbit Camera";
+  adobe_spec.category = "camera";
+  adobe_spec.status = "stable";
+  adobe_spec.spec_url = "docs/Implementing_Custom_Extension.md";
+  adobe_spec.short_description = "Constrains orbit elevation and minimum radius for safer camera control.";
+  adobe_spec.min_spz_version = 1;
+  adobe_spec.requires_has_extensions_flag = true;
+  ExtensionSpecRegistry::Instance().RegisterSpec(adobe_spec);
+  return true;
+}
 
+static const bool kAutoRegisterBuiltInSpecs = RegisterBuiltInSpecs();
 
 /// Convert integer to hex string
 static std::string ToHexString(uint32_t value) {
@@ -32,15 +51,11 @@ static std::string ToHexString(uint32_t value) {
   return std::string(buf);
 }
 
-/// Extract vendor name from extension type (high 16 bits)
-static std::string GetVendorName(uint32_t type) {
-  uint16_t vendor_id = static_cast<uint16_t>(type >> 16);
-  switch (vendor_id) {
-    case 0xADBE: return "Adobe";
-    case 0x4E41: return "Niantic";
-    default: return "Unknown (0x" + ToHexString(vendor_id) + ")";
-  }
+static std::string GetFallbackVendorName(uint32_t type) {
+  const auto vendor_id = static_cast<std::uint16_t>(type >> 16);
+  return "Unknown (0x" + ToHexString(vendor_id) + ")";
 }
+
 
 static std::uint32_t ReadU32LE(const std::vector<std::uint8_t>& b, std::size_t off) {
   return static_cast<std::uint32_t>(b[off]) |
@@ -278,38 +293,50 @@ GateReport InspectSpzBlob(const std::vector<std::uint8_t>& gz_spz, const SpzInsp
 
       // 逐条校验扩展；这里直接复用 record 视图，不再回到原始 buffer 重新切片。
       for (const auto& record : info.tlv_records) {
+        const auto spec = ExtensionSpecRegistry::Instance().GetSpec(record.type);
         auto validator = ExtensionValidatorRegistry::Instance().GetValidator(record.type);
+
+        ExtensionReport ext_report;
+        ext_report.type = record.type;
+        ext_report.known_extension = spec.has_value();
+        ext_report.has_validator = static_cast<bool>(validator);
+        ext_report.vendor_name = spec.has_value() ? spec->vendor_name : GetFallbackVendorName(record.type);
+        ext_report.extension_name = spec.has_value()
+            ? spec->extension_name
+            : (validator ? validator->GetName() : "Unknown");
+        ext_report.status = spec.has_value() ? spec->status : "";
+        ext_report.category = spec.has_value() ? spec->category : "";
+        ext_report.spec_url = spec.has_value() ? spec->spec_url : "";
+        ext_report.short_description = spec.has_value() ? spec->short_description : "";
+        ext_report.validation_result = true;
+
         if (validator) {
           std::string error;
           const auto payload = record.ValueView();
-          bool valid = validator->Validate(payload.data(), record.length, &error);
-
-          ExtensionReport ext_report;
-          ext_report.type = record.type;
-          ext_report.vendor_name = GetVendorName(record.type);
-          ext_report.extension_name = validator->GetName();
+          const bool valid = validator->Validate(payload.data(), record.length, &error);
           ext_report.validation_result = valid;
           ext_report.error_message = error;
-          rep.extension_reports.push_back(ext_report);
-
           if (!valid) {
             AddIssue(&rep, Severity::kError, "L2_EXT_VALIDATION",
-                     "Extension validation failed: " + validator->GetName() + " - " + error, where);
+                     "Extension validation failed: " + ext_report.extension_name + " - " + error, where);
           }
-        } else {
-          ExtensionReport ext_report;
-          ext_report.type = record.type;
-          ext_report.vendor_name = GetVendorName(record.type);
-          ext_report.extension_name = "Unknown";
-          ext_report.validation_result = true;
-          ext_report.error_message = "";
-          rep.extension_reports.push_back(ext_report);
+        }
 
+        rep.extension_reports.push_back(ext_report);
+
+        if (spec.has_value() && !validator) {
+          AddIssue(&rep, Severity::kWarning, "L2_EXT_REGISTERED_NO_VALIDATOR",
+                   "Registered extension has no validator: " + ext_report.extension_name, where);
+        } else if (!spec.has_value() && validator) {
+          AddIssue(&rep, Severity::kWarning, "L2_EXT_UNREGISTERED_VALIDATOR",
+                   "Validator exists for unregistered extension type: 0x" + ToHexString(record.type), where);
+        } else if (!spec.has_value() && !validator) {
           AddIssue(&rep, Severity::kWarning, "L2_EXT_UNKNOWN",
                    "Unknown extension type: 0x" + ToHexString(record.type) +
                    " (" + std::to_string(record.length) + " bytes)", where);
         }
       }
+
     }
 
   } else {

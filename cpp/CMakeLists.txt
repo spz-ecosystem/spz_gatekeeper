@@ -49,6 +49,7 @@ else()
 endif()
 
 set(SPZ_GATEKEEPER_CORE_SOURCES
+  src/extension_spec_registry.cc
   src/json_min.cc
   src/report.cc
   src/spz.cc
@@ -93,6 +94,8 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 endif()
 
 if(SPZ_GATEKEEPER_BUILD_WASM)
+  set(SPZ_GATEKEEPER_WASM_SITE_DIR "${CMAKE_CURRENT_BINARY_DIR}/site")
+
   add_executable(spz_gatekeeper-wasm src/wasm_main.cc)
   target_link_libraries(spz_gatekeeper-wasm PRIVATE spz_gatekeeper_core)
   target_link_options(spz_gatekeeper-wasm PRIVATE
@@ -107,7 +110,25 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
     "-sSINGLE_FILE=1"
     "-sFILESYSTEM=0"
   )
-  set_target_properties(spz_gatekeeper-wasm PROPERTIES OUTPUT_NAME "spz_gatekeeper")
+  set_target_properties(spz_gatekeeper-wasm PROPERTIES
+    OUTPUT_NAME "spz_gatekeeper"
+    RUNTIME_OUTPUT_DIRECTORY "${SPZ_GATEKEEPER_WASM_SITE_DIR}"
+  )
+
+  add_custom_command(
+    OUTPUT "${SPZ_GATEKEEPER_WASM_SITE_DIR}/index.html"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${SPZ_GATEKEEPER_WASM_SITE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/../web/index.html"
+            "${SPZ_GATEKEEPER_WASM_SITE_DIR}/index.html"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../web/index.html"
+    COMMENT "Copy web entrypoint into WASM site directory"
+    VERBATIM
+  )
+
+  add_custom_target(spz_gatekeeper_wasm_site ALL
+    DEPENDS spz_gatekeeper-wasm "${SPZ_GATEKEEPER_WASM_SITE_DIR}/index.html"
+  )
 endif()
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
@@ -142,6 +163,10 @@ if(BUILD_TESTING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   spz_gatekeeper_add_test(extension_validator_test tests/extension_validator_test.cc)
   spz_gatekeeper_add_test(adobe_extension_test tests/adobe_extension_test.cc)
   spz_gatekeeper_add_test(validator_registry_test tests/validator_registry_test.cc)
+  spz_gatekeeper_add_test(extension_spec_registry_test tests/extension_spec_registry_test.cc)
+  spz_gatekeeper_add_test(registry_cli_test tests/registry_cli_test.cc)
+  spz_gatekeeper_add_test(gen_fixture_test tests/gen_fixture_test.cc)
+  spz_gatekeeper_add_test(compat_check_test tests/compat_check_test.cc)
   spz_gatekeeper_add_test(tlv_multi_record_test tests/tlv_multi_record_test.cc)
   spz_gatekeeper_add_test(extension_integration_test tests/extension_integration_test.cc ZLIB::ZLIB)
   spz_gatekeeper_add_test(sh_quantization_test tests/sh_quantization_test.cc)

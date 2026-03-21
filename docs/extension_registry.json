@@ -1,0 +1,38 @@
+{
+  "registry": {
+    "count": 1,
+    "extensions": [
+      {
+        "type": 2914910210,
+        "vendor_id": 44478,
+        "extension_id": 2,
+        "vendor_name": "Adobe",
+        "extension_name": "Adobe Safe Orbit Camera",
+        "category": "camera",
+        "status": "stable",
+        "spec_url": "docs/Implementing_Custom_Extension.md",
+        "short_description": "Constrains orbit elevation and minimum radius for safer camera control.",
+        "min_spz_version": 1,
+        "requires_has_extensions_flag": true,
+        "has_validator": true
+      }
+    ]
+  },
+  "compatibility_board": {
+    "count": 1,
+    "extensions": [
+      {
+        "type": 2914910210,
+        "vendor_name": "Adobe",
+        "extension_name": "Adobe Safe Orbit Camera",
+        "status": "stable",
+        "has_spec": true,
+        "has_validator": true,
+        "fixture_valid_pass": true,
+        "fixture_invalid_pass": true,
+        "strict_check_pass": true,
+        "non_strict_check_pass": true
+      }
+    ]
+  }
+}

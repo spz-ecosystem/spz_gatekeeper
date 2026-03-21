@@ -90,6 +90,12 @@ struct ExtensionReport {
   std::uint32_t type = 0;
   std::string vendor_name;
   std::string extension_name;
+  bool known_extension = false;
+  bool has_validator = false;
+  std::string status;
+  std::string category;
+  std::string spec_url;
+  std::string short_description;
   bool validation_result = false;
   std::string error_message;
 };

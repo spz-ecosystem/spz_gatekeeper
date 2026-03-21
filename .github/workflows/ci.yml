@@ -135,10 +135,11 @@ jobs:
 
       - name: Verify WASM artifact
         run: |
-          test -f build-wasm/spz_gatekeeper.js
+          test -f build-wasm/site/spz_gatekeeper.js
+          test -f build-wasm/site/index.html
 
       - name: Upload WASM artifact
         uses: actions/upload-artifact@v4
         with:
           name: wasm-build
-          path: build-wasm/spz_gatekeeper.js
+          path: build-wasm/site

@@ -1,7 +1,10 @@
 # Build output
 build/
 build_wsl/
+build-*/
 cmake-build-*/
+web/spz_gatekeeper.js
+web/spz_gatekeeper.wasm
 cpp/compile_commands.json
 bin/
 lib/

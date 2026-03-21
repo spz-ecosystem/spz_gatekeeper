@@ -40,10 +40,11 @@ jobs:
 
       - name: Prepare Pages artifact
         run: |
+          test -f build-pages/site/spz_gatekeeper.js
+          test -f build-pages/site/index.html
           mkdir -p site
-          cp build-pages/spz_gatekeeper.js site/spz_gatekeeper.js
-          cp build-pages/spz_gatekeeper.wasm site/spz_gatekeeper.wasm || true
-          cp web/index.html site/index.html
+          cp -R build-pages/site/. site/
+
 
 
       - name: Setup Pages

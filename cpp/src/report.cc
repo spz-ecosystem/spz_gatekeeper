@@ -51,9 +51,16 @@ std::string GateReport::ToJson() const {
     oss << "\"type\":" << er.type;
     oss << ",\"vendor_name\":\"" << JsonEscape(er.vendor_name) << "\"";
     oss << ",\"extension_name\":\"" << JsonEscape(er.extension_name) << "\"";
+    oss << ",\"known_extension\":" << (er.known_extension ? "true" : "false");
+    oss << ",\"has_validator\":" << (er.has_validator ? "true" : "false");
+    oss << ",\"status\":\"" << JsonEscape(er.status) << "\"";
+    oss << ",\"category\":\"" << JsonEscape(er.category) << "\"";
+    oss << ",\"spec_url\":\"" << JsonEscape(er.spec_url) << "\"";
+    oss << ",\"short_description\":\"" << JsonEscape(er.short_description) << "\"";
     oss << ",\"validation_result\":" << (er.validation_result ? "true" : "false");
     oss << ",\"error_message\":\"" << JsonEscape(er.error_message) << "\"";
     oss << "}";
+
   }
   oss << "]";
 
@@ -99,12 +106,23 @@ std::string GateReport::ToText() const {
     oss << "ext type=" << er.type
         << " vendor=\"" << er.vendor_name << "\""
         << " name=\"" << er.extension_name << "\""
+        << " known=" << (er.known_extension ? "true" : "false")
+        << " has_validator=" << (er.has_validator ? "true" : "false")
+        << " status=\"" << er.status << "\""
+        << " category=\"" << er.category << "\""
         << " valid=" << (er.validation_result ? "true" : "false");
+    if (!er.spec_url.empty()) {
+      oss << " spec_url=\"" << er.spec_url << "\"";
+    }
+    if (!er.short_description.empty()) {
+      oss << " description=\"" << er.short_description << "\"";
+    }
     if (!er.error_message.empty()) {
       oss << " error=\"" << er.error_message << "\"";
     }
     oss << "\n";
   }
+
   return oss.str();
 }
 

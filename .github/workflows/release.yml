@@ -134,15 +134,17 @@ jobs:
         run: |
           emmake cmake --build build-wasm --parallel
 
-      - name: Rename WASM artifact
+      - name: Package WASM site
         run: |
-          cp build-wasm/spz_gatekeeper.js spz-gatekeeper-web.js
+          test -f build-wasm/site/spz_gatekeeper.js
+          test -f build-wasm/site/index.html
+          tar -C build-wasm/site -czf spz-gatekeeper-web-site.tar.gz .
 
       - name: Upload WASM artifact
         uses: actions/upload-artifact@v4
         with:
-          name: spz-gatekeeper-web.js
-          path: spz-gatekeeper-web.js
+          name: spz-gatekeeper-web-site
+          path: spz-gatekeeper-web-site.tar.gz
 
   release:
     needs: [build, build_wasm]

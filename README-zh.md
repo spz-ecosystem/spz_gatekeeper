@@ -75,21 +75,12 @@ SPZ Validator 提供在线 Web 界面，无需安装即可使用：
 ### 本地构建 Web 版本
 
 ```bash
-# 安装 Emscripten（首次）
-git clone https://github.com/emscripten-core/emsdk.git
-cd emsdk && ./emsdk install 3.1.56 && ./emsdk activate 3.1.56
-source ./emsdk_env.sh
+# 在已配置 Emscripten 的 WSL 环境中执行
+emcmake cmake -S cpp -B build-pages -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+emmake cmake --build build-pages --parallel
 
-# 构建 WASM
-emcmake cmake -S cpp -B build-web -DCMAKE_BUILD_TYPE=Release
-emmake cmake --build build-web --parallel
-
-# 复制产物到 web 目录
-cp build-web/spz_gatekeeper.js web/
-cp build-web/spz_gatekeeper.wasm web/
-
-# 本地预览
-cd web && python3 -m http.server 8080
+# 构建产物会保留在 build-pages/site，不污染 web/
+cd build-pages/site && python3 -m http.server 8080
 # 打开 http://localhost:8080
 ```
 
@@ -128,9 +119,31 @@ sudo apt-get install -y zlib1g-dev
 spz_gatekeeper check-spz <file.spz> [--strict|--no-strict] [--json]
 ```
 
+### 查看已登记扩展
+```bash
+spz_gatekeeper registry [--json]
+spz_gatekeeper registry show 0xADBE0002 [--json]
+```
+
 ### 导出 trailer TLV 记录
 ```bash
 spz_gatekeeper dump-trailer <file.spz> [--strict|--no-strict] [--json]
+```
+
+### 查看单个资产的兼容性摘要
+```bash
+spz_gatekeeper compat-check <file.spz> [--json]
+```
+
+### 查看兼容性成熟度看板
+```bash
+spz_gatekeeper compat-board [--json]
+```
+
+### 生成最小 SPZ 夹具
+```bash
+spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --out fixture.spz
+spz_gatekeeper gen-fixture --type 0xADBE0002 --mode invalid-size --out fixture_bad.spz
 ```
 
 ### 查看扩展开发指南
@@ -142,6 +155,12 @@ spz_gatekeeper guide [--json]
 ```bash
 spz_gatekeeper --self-test
 ```
+
+## Registry、自测与兼容性看板的分工
+- `registry` 是内置扩展契约的机器可读目录。
+- `--self-test` 用于验证门卫自身的 header / TLV 假设，不依赖外部资产。
+- `compat-board` 展示的是扩展接入成熟度，不是算法排行榜。
+- `docs/extension_registry.json` 提供当前内置 registry 与 compatibility board 的文档镜像，供文档或 Web 页面复用。
 
 ## 校验细节
 
@@ -172,7 +191,7 @@ float32 minRadius      // >= 0
 ### 文本
 ```text
 asset: extended.spz
-ext type=2914908162 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
+ext type=2914910210 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
 ```
 
 ### JSON
@@ -182,9 +201,15 @@ ext type=2914908162 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
   "issues": [],
   "extension_reports": [
     {
-      "type": 2914908162,
+      "type": 2914910210,
       "vendor_name": "Adobe",
       "extension_name": "Adobe Safe Orbit Camera",
+      "known_extension": true,
+      "has_validator": true,
+      "status": "stable",
+      "category": "camera",
+      "spec_url": "docs/Implementing_Custom_Extension.md",
+      "short_description": "Constrains orbit elevation and minimum radius for safer camera control.",
       "validation_result": true,
       "error_message": ""
     }
@@ -200,7 +225,7 @@ ext type=2914908162 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
     "base_payload_size": 28000000,
     "trailer_size": 24,
     "tlv_records": [
-      {"type": 2914908162, "length": 12, "offset": 28000000}
+      {"type": 2914910210, "length": 12, "offset": 28000000}
     ]
   }
 }
