@@ -4,7 +4,11 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+
+#if !defined(_WIN32)
 #include <sys/wait.h>
+#endif
+
 
 namespace {
 
@@ -37,26 +41,51 @@ struct CommandResult {
   std::string output;
 };
 
+const char* CliBinaryPath() {
+#if defined(_WIN32)
+  return "spz_gatekeeper.exe";
+#else
+  return "./spz_gatekeeper";
+#endif
+}
+
+int NormalizeProcessExitCode(int status) {
+#if defined(_WIN32)
+  return status;
+#else
+  return WIFEXITED(status) ? WEXITSTATUS(status) : status;
+#endif
+}
+
 CommandResult RunCommand(const std::string& command) {
   std::array<char, 256> buffer{};
   std::string output;
   const std::string redirected = command + " 2>&1";
+#if defined(_WIN32)
+  FILE* pipe = _popen(redirected.c_str(), "r");
+#else
   FILE* pipe = popen(redirected.c_str(), "r");
+#endif
   if (pipe == nullptr) {
     throw std::runtime_error("popen failed");
   }
   while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr) {
     output += buffer.data();
   }
+#if defined(_WIN32)
+  const int status = _pclose(pipe);
+#else
   const int status = pclose(pipe);
+#endif
   if (status == -1) {
     throw std::runtime_error("pclose failed");
   }
-  return {WIFEXITED(status) ? WEXITSTATUS(status) : status, output};
+  return {NormalizeProcessExitCode(status), output};
 }
 
+
 TEST(test_registry_json_lists_builtin_extension) {
-  const auto result = RunCommand("./spz_gatekeeper registry --json");
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " registry --json");
   ASSERT_TRUE(result.exit_code == 0);
   ASSERT_TRUE(result.output.find("Adobe Safe Orbit Camera") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"status\":\"stable\"") != std::string::npos);
@@ -64,14 +93,14 @@ TEST(test_registry_json_lists_builtin_extension) {
 }
 
 TEST(test_registry_list_json_alias_works) {
-  const auto result = RunCommand("./spz_gatekeeper registry list --json");
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " registry list --json");
   ASSERT_TRUE(result.exit_code == 0);
   ASSERT_TRUE(result.output.find("Adobe Safe Orbit Camera") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"category\":\"camera\"") != std::string::npos);
 }
 
 TEST(test_registry_show_json_returns_single_entry) {
-  const auto result = RunCommand("./spz_gatekeeper registry show 0xADBE0002 --json");
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " registry show 0xADBE0002 --json");
   ASSERT_TRUE(result.exit_code == 0);
   ASSERT_TRUE(result.output.find("Adobe Safe Orbit Camera") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"type\":2914910210") != std::string::npos);
@@ -79,7 +108,7 @@ TEST(test_registry_show_json_returns_single_entry) {
 }
 
 TEST(test_registry_show_text_includes_full_contract) {
-  const auto result = RunCommand("./spz_gatekeeper registry show 0xADBE0002");
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " registry show 0xADBE0002");
   ASSERT_TRUE(result.exit_code == 0);
   ASSERT_TRUE(result.output.find("vendor_name=\"Adobe\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("extension_name=\"Adobe Safe Orbit Camera\"") != std::string::npos);
@@ -87,21 +116,21 @@ TEST(test_registry_show_text_includes_full_contract) {
 }
 
 TEST(test_registry_show_invalid_type_json_reports_original_input) {
-  const auto result = RunCommand("./spz_gatekeeper registry show not-a-type --json");
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " registry show not-a-type --json");
   ASSERT_TRUE(result.exit_code == 1);
   ASSERT_TRUE(result.output.find("\"error\":\"invalid extension type\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"type_input\":\"not-a-type\"") != std::string::npos);
 }
 
 TEST(test_registry_show_missing_type_json_reports_original_input) {
-  const auto result = RunCommand("./spz_gatekeeper registry show 0xBEEF0001 --json");
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " registry show 0xBEEF0001 --json");
   ASSERT_TRUE(result.exit_code == 1);
   ASSERT_TRUE(result.output.find("\"error\":\"extension not found\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"type_input\":\"0xBEEF0001\"") != std::string::npos);
 }
 
 TEST(test_compat_board_json_exposes_maturity_fields) {
-  const auto result = RunCommand("./spz_gatekeeper compat-board --json");
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-board --json");
   ASSERT_TRUE(result.exit_code == 0);
   ASSERT_TRUE(result.output.find("\"extensions\":[") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"vendor_name\":\"Adobe\"") != std::string::npos);
@@ -112,12 +141,13 @@ TEST(test_compat_board_json_exposes_maturity_fields) {
 }
 
 TEST(test_compat_board_text_mentions_registry_role) {
-  const auto result = RunCommand("./spz_gatekeeper compat-board");
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-board");
   ASSERT_TRUE(result.exit_code == 0);
   ASSERT_TRUE(result.output.find("Compatibility board:") != std::string::npos);
   ASSERT_TRUE(result.output.find("Adobe Safe Orbit Camera") != std::string::npos);
   ASSERT_TRUE(result.output.find("fixture_valid_pass=true") != std::string::npos);
 }
+
 
 }  // namespace
 

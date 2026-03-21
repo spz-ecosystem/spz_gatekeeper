@@ -6,7 +6,11 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+
+#if !defined(_WIN32)
 #include <sys/wait.h>
+#endif
+
 
 #include "test_fixtures.h"
 
@@ -43,6 +47,22 @@ struct CommandResult {
   std::string output;
 };
 
+const char* CliBinaryPath() {
+#if defined(_WIN32)
+  return "spz_gatekeeper.exe";
+#else
+  return "./spz_gatekeeper";
+#endif
+}
+
+int NormalizeProcessExitCode(int status) {
+#if defined(_WIN32)
+  return status;
+#else
+  return WIFEXITED(status) ? WEXITSTATUS(status) : status;
+#endif
+}
+
 class TempPathGuard {
  public:
   explicit TempPathGuard(std::filesystem::path path) : path_(std::move(path)) {}
@@ -63,19 +83,28 @@ CommandResult RunCommand(const std::string& command) {
   std::array<char, 256> buffer{};
   std::string output;
   const std::string redirected = command + " 2>&1";
+#if defined(_WIN32)
+  FILE* pipe = _popen(redirected.c_str(), "r");
+#else
   FILE* pipe = popen(redirected.c_str(), "r");
+#endif
   if (pipe == nullptr) {
     throw std::runtime_error("popen failed");
   }
   while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr) {
     output += buffer.data();
   }
+#if defined(_WIN32)
+  const int status = _pclose(pipe);
+#else
   const int status = pclose(pipe);
+#endif
   if (status == -1) {
     throw std::runtime_error("pclose failed");
   }
-  return {WIFEXITED(status) ? WEXITSTATUS(status) : status, output};
+  return {NormalizeProcessExitCode(status), output};
 }
+
 
 std::filesystem::path MakeTempPath(const std::string& stem) {
   return std::filesystem::temp_directory_path() /
@@ -100,7 +129,7 @@ TEST(test_compat_check_reports_dual_path_for_valid_adobe_fixture) {
   WriteBinaryFile(input_path.path(),
                   spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &trailer));
 
-  const auto result = RunCommand("./spz_gatekeeper compat-check \"" + input_path.path().string() + "\" --json");
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check \"" + input_path.path().string() + "\" --json");
   ASSERT_TRUE(result.exit_code == 0);
   ASSERT_TRUE(result.output.find("\"strict_ok\":true") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"non_strict_ok\":true") != std::string::npos);
@@ -116,13 +145,14 @@ TEST(test_compat_check_surfaces_unknown_extension_issue_summary) {
   WriteBinaryFile(input_path.path(),
                   spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &trailer));
 
-  const auto result = RunCommand("./spz_gatekeeper compat-check \"" + input_path.path().string() + "\" --json");
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check \"" + input_path.path().string() + "\" --json");
   ASSERT_TRUE(result.exit_code == 1);
   ASSERT_TRUE(result.output.find("\"strict_ok\":false") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"non_strict_ok\":true") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"issue_summary\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("L2_EXT_UNKNOWN") != std::string::npos);
 }
+
 
 }  // namespace
 
