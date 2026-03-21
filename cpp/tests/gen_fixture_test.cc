@@ -42,13 +42,24 @@ struct CommandResult {
   std::string output;
 };
 
-const char* CliBinaryPath() {
+std::string CliBinaryPath() {
 #if defined(_WIN32)
+  const std::array<std::string, 3> candidates = {
+      "spz_gatekeeper.exe",
+      ".\\spz_gatekeeper.exe",
+      "Release\\spz_gatekeeper.exe",
+  };
+  for (const auto& candidate : candidates) {
+    if (std::filesystem::exists(candidate)) {
+      return candidate;
+    }
+  }
   return "spz_gatekeeper.exe";
 #else
   return "./spz_gatekeeper";
 #endif
 }
+
 
 int NormalizeProcessExitCode(int status) {
 #if defined(_WIN32)
