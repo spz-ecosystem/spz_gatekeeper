@@ -103,15 +103,22 @@
       border-radius: 20px;
       box-shadow: 0 8px 32px rgba(102, 102, 255, 0.12);
       border: 1px solid transparent;
+      display: flex;
+      flex-direction: column;
     }
 
+
     .upload-card {
-      width: min(760px, 100%);
-      padding: 42px 32px;
+      width: 100%;
+      max-width: 1200px;
+      padding: 52px 32px;
       text-align: center;
       cursor: pointer;
       transition: all 0.25s ease;
+      align-items: center;
+      justify-content: center;
     }
+
 
     .upload-card:hover {
       transform: translateY(-2px);
@@ -205,13 +212,19 @@
 
     .features-section {
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      width: min(960px, 100%);
+      width: 100%;
     }
+
+
 
     .feature-card {
       padding: 24px 20px;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+      background: #ffffff;
+      border-radius: 20px;
+      border: 1px solid transparent;
     }
+
 
     .feature-header {
       display: flex;
@@ -235,7 +248,9 @@
     .panel-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       align-items: start;
+      max-width: 1200px;
     }
+
 
     .panel {
       padding: 24px;
@@ -437,26 +452,27 @@
       <div class="features-section">
         <div class="feature-card">
           <div class="feature-header">
-            <span style="color: var(--success-green);">✅</span>
+            <span style="color: var(--success-green); font-size: 20px;">✅</span>
             <span class="feature-title">真实 L2 校验</span>
           </div>
-          <div class="feature-desc">直接调用 `inspectSpz()`，展示 header、flags、TLV trailer 与扩展验证结果，而不是占位提示。</div>
+          <div class="feature-desc">直接调用 <code>inspectSpz()</code>，展示 header、flags、TLV trailer 与扩展验证结果，而不是占位提示。</div>
         </div>
         <div class="feature-card">
           <div class="feature-header">
-            <span style="color: var(--brand-purple);">📋</span>
+            <span style="color: var(--brand-purple); font-size: 20px;">📋</span>
             <span class="feature-title">扩展登记查看</span>
           </div>
-          <div class="feature-desc">通过 `listRegisteredExtensions()` 与 `describeExtension()` 查看当前内置 registry，并对齐 CLI JSON 字段。</div>
+          <div class="feature-desc">通过 <code>listRegisteredExtensions()</code> 与 <code>describeExtension()</code> 查看当前内置 registry，并对齐 CLI JSON 字段。</div>
         </div>
         <div class="feature-card">
           <div class="feature-header">
-            <span style="color: var(--text-secondary);">📈</span>
+            <span style="color: var(--text-secondary); font-size: 20px;">📈</span>
             <span class="feature-title">兼容性成熟度</span>
           </div>
           <div class="feature-desc">展示 Compatibility Board，强调接入成熟度而非算法排名，避免把不同扩展混成排行榜。</div>
         </div>
       </div>
+
 
       <div class="panel-grid">
         <section class="panel">
@@ -687,14 +703,25 @@
 
     async function initializeWasm() {
       try {
-        const moduleFactory = (await import('./spz_gatekeeper.js')).default;
+        const wasmEntry = './spz_gatekeeper.js';
+        const probe = await fetch(wasmEntry, { cache: 'no-store' });
+        if (!probe.ok) {
+          throw new Error('未检测到 WASM 构建产物。请先执行 Emscripten 构建，再打开 build-pages/site/index.html。');
+        }
+
+        const source = await probe.text();
+        if (source.includes('__SPZ_PLACEHOLDER__')) {
+          throw new Error('当前是 web/ 模板入口，不是运行入口。请打开 build-pages/site/index.html。');
+        }
+
+        const moduleFactory = (await import(wasmEntry)).default;
         wasmModule = await moduleFactory();
         setEngineStatus('ready', 'WASM 引擎就绪');
         await renderRegistryViewer();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setEngineStatus('error', `WASM 加载失败：${message}`);
-        registryEmpty.textContent = `无法加载 spz_gatekeeper.js：${message}`;
+        registryEmpty.textContent = `WASM 未就绪：${message}`;
       }
     }
 
