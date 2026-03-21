@@ -84,6 +84,29 @@ cd build-pages/site && python3 -m http.server 8080
 # Open http://localhost:8080
 ```
 
+### v1.1.1 Browser smoke baseline (synthetic fixture only)
+
+`v1.1.1` ships a browser smoke flow that avoids real `.spz` assets by default:
+
+```bash
+# 1) Build native CLI for fixture generation
+cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+cmake --build build --parallel
+
+# 2) Build WASM site
+emcmake cmake -S cpp -B build-pages -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+emmake cmake --build build-pages --parallel
+
+# 3) Generate synthetic valid fixture (repo-owned path)
+./build/spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --out build-pages/site/synthetic_valid.spz
+
+# 4) Run local server + browser smoke
+python3 -m http.server 4173 --directory build-pages/site
+node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-pages/site/synthetic_valid.spz
+```
+
+Policy: CI/Web smoke uses synthetic fixtures by default; real local assets remain optional and are not required for release gating.
+
 ## Quick Start
 
 ### Build in WSL/Linux/macOS

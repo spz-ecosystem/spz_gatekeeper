@@ -84,6 +84,29 @@ cd build-pages/site && python3 -m http.server 8080
 # 打开 http://localhost:8080
 ```
 
+### v1.1.1 浏览器 smoke 基线（仅合成 fixture）
+
+`v1.1.1` 起默认采用“合成 `.spz` 夹具”进行浏览器验收，避免真实样例的协议风险：
+
+```bash
+# 1）先构建本地 CLI（用于生成 fixture）
+cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+cmake --build build --parallel
+
+# 2）构建 WASM 站点
+emcmake cmake -S cpp -B build-pages -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+emmake cmake --build build-pages --parallel
+
+# 3）生成合成合法样例（仓库内可控路径）
+./build/spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --out build-pages/site/synthetic_valid.spz
+
+# 4）启动本地服务并跑浏览器 smoke
+python3 -m http.server 4173 --directory build-pages/site
+node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-pages/site/synthetic_valid.spz
+```
+
+策略说明：CI/Web smoke 默认只依赖合成 fixture；真实本地样例仅可选，不作为发布门禁必需输入。
+
 ## 快速开始
 
 ### 在 WSL/Linux/macOS 构建
