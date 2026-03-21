@@ -33,6 +33,7 @@
 - [ ] `extension_integration_test` 通过
 - [ ] `registry_cli_test` / `compat_check_test` / `gen_fixture_test` 通过
 - [ ] `./build/spz_gatekeeper --help` 与 README 中的命令面一致
+- [ ] WASM 浏览器 smoke test 通过（仅使用程序生成的合成 fixture，不依赖真实 `.spz`）
 - [ ] GitHub Pages / Emscripten 构建通过或已明确记录非本次范围
 
 ## 发布步骤
@@ -45,6 +46,9 @@ ctest --test-dir build --output-on-failure
 ./build/spz_gatekeeper compat-board --json
 emcmake cmake -S cpp -B build-pages -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 emmake cmake --build build-pages --parallel
+./build/spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --out build-pages/site/synthetic_valid.spz
+python3 -m http.server 4173 --directory build-pages/site
+# 新终端执行：node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-pages/site/synthetic_valid.spz
 ```
 
 ## 后续规划

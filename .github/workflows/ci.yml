@@ -136,10 +136,63 @@ jobs:
         run: |
           emmake cmake --build build-wasm --parallel
 
+      - name: Build native fixture generator (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zlib1g-dev cmake g++
+          cmake -S cpp -B build-native \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF
+          cmake --build build-native --parallel
+
+      - name: Generate synthetic fixture for browser smoke
+        run: |
+          mkdir -p build-wasm/site
+          ./build-native/spz_gatekeeper gen-fixture \
+            --type 0xADBE0002 \
+            --mode valid \
+            --out build-wasm/site/synthetic_valid.spz
+
       - name: Verify WASM artifact
         run: |
           test -f build-wasm/site/spz_gatekeeper.js
           test -f build-wasm/site/index.html
+          test -f build-wasm/site/synthetic_valid.spz
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install browser test dependencies
+        run: |
+          npm install --no-save @playwright/test
+          npx playwright install --with-deps chromium
+
+      - name: Run WASM browser smoke test
+        run: |
+          python3 -m http.server 4173 --directory build-wasm/site > wasm-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill ${SERVER_PID}' EXIT
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:4173/index.html > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-wasm/site/synthetic_valid.spz | tee wasm-smoke.log
+
+      - name: Upload WASM smoke logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-smoke-logs
+          path: |
+            wasm-http.log
+            wasm-smoke.log
+            wasm-smoke-failure.png
+          retention-days: 7
 
       - name: Upload WASM artifact
         uses: actions/upload-artifact@v4
