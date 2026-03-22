@@ -195,6 +195,69 @@ spz_gatekeeper --self-test
 - `compat-board` 展示的是扩展接入成熟度，不是算法排行榜。
 - `docs/extension_registry.json` 提供当前内置 registry 与 compatibility board 的文档镜像，供文档或 Web 页面复用。
 - Web/WASM 与 CLI 复用同一套 registry / report 字段口径，保证终端、浏览器和文档里的 JSON 结构一致。
+- 当前注册表模型已经明确拆成双层：
+  - `ExtensionSpecRegistry`：负责扩展契约元数据，如厂商、状态、类别、规范链接、`min_spz_version`、`requires_has_extensions_flag`
+  - `ExtensionValidatorRegistry`：负责按 `type` 挂接运行时 payload 校验器
+- 常见扩展状态语义：
+  - `known_extension=false`：未登记扩展
+  - `known_extension=true && has_validator=false`：已登记但暂未实现 validator（`L2_EXT_REGISTERED_NO_VALIDATOR`）
+  - `known_extension=true && has_validator=true`：已登记且已接入 validator
+- 当需要查看完整契约字段，而不是只看成熟度结果时，优先使用 `registry show <type>`。
+- 延伸阅读：
+  - `docs/extension_registry.json`
+  - `docs/Implementing_Custom_Extension.md`
+  - `docs/plans/2026-03-20-spz-extension-registry-and-selftest-design.md`
+  - `docs/plans/2026-03-20-spz-extension-registry-implementation-plan.md`
+
+## WASM 质量审查模式
+Web/WASM 侧现在不再只是“构建 + smoke”口径，当前自述文档同步为两种本地审查模式：
+
+- `browser_lightweight_wasm_audit`：浏览器端轻量门禁，输入为标准 zip 审查包
+- `local_cli_spz_artifact_audit`：本地 CLI 深审，输入为真实 `.spz` 产物、目录或 manifest
+
+### 浏览器端审查包结构
+浏览器端固定接收一个标准审查包：
+
+```text
+<algo-name>-wasm-audit.zip
+├─ manifest.json
+├─ module.wasm
+├─ loader.mjs
+└─ tiny_fixtures/
+```
+
+最小约束如下：
+- `manifest.json`：声明 profile、导出 API、预算和包元数据
+- `module.wasm`：待审查主模块
+- `loader.mjs`：浏览器加载入口
+- `tiny_fixtures/`：可选微型样本，仅用于轻量 smoke
+
+### 统一审查摘要字段
+两种模式会逐步对齐到同一套顶层字段：
+- `audit_profile`
+- `audit_mode`
+- `verdict`
+- `summary`
+- `budgets`
+- `issues`
+- `next_action`
+
+三档结论语义保持固定：
+- `pass`：可继续进入本地 CLI 深审或集成测试
+- `review_required`：可运行，但存在明显工程风险，需要人工复核
+- `block`：包结构、正确性或预算存在阻断问题，不应继续推进
+
+### 当前 `wasm_quality_gate` 状态
+`docs/extension_registry.json` 已暴露基线版 `wasm_quality_gate` 快照：
+- 已接线：`validator_coverage_ok`、`api_surface_wired`、`browser_smoke_wired`、`empty_shell_guard_wired`
+- 尚未完整接线：`warning_budget_wired`、`copy_budget_wired`、`memory_budget_wired`、`performance_budget_wired`、`artifact_audit_wired`
+- 当前发布状态：`release_ready=false`
+
+由于浏览器端和 CLI 端都运行在用户本地，所以项目默认就具备“本地双端协同”。浏览器到 CLI 的 `handoff` 只是一个可选的标准化能力，不是后台服务。
+
+延伸阅读：
+- `docs/plans/2026-03-22-spz-gatekeeper-wasm-audit-modes-design.md`
+- `docs/plans/2026-03-22-spz-gatekeeper-wasm-audit-implementation-plan.md`
 
 ## 扩展作者快速自测闭环
 ```bash

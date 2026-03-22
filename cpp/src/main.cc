@@ -29,10 +29,12 @@
  * @license MIT
  */
 
+#include "spz_gatekeeper/audit_summary.h"
 #include "spz_gatekeeper/extension_spec_registry.h"
 #include "spz_gatekeeper/json_min.h"
 #include "spz_gatekeeper/spz.h"
 #include "spz_gatekeeper/validator_registry.h"
+
 
 
 #include <cstring>
@@ -105,14 +107,8 @@ static bool HasIssueCode(const spz_gatekeeper::GateReport& rep, const char* code
   return false;
 }
 
-static bool HasWarnings(const spz_gatekeeper::GateReport& rep) {
-  for (const auto& it : rep.issues) {
-    if (it.severity == spz_gatekeeper::Severity::kWarning) return true;
-  }
-  return false;
-}
-
 static void WriteU32Le(std::vector<std::uint8_t>* bytes, std::uint32_t value) {
+
   bytes->push_back(static_cast<std::uint8_t>(value & 0xFFu));
   bytes->push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
   bytes->push_back(static_cast<std::uint8_t>((value >> 16) & 0xFFu));
@@ -520,109 +516,7 @@ static int HandleGenFixtureCommand(int argc, char** argv) {
   }
 }
 
-static std::string BuildExtensionSummaryJson(const spz_gatekeeper::GateReport& report) {
-  std::ostringstream oss;
-  oss << "[";
-  for (std::size_t i = 0; i < report.extension_reports.size(); ++i) {
-    if (i) oss << ",";
-    const auto& ext = report.extension_reports[i];
-    oss << "{";
-    oss << "\"type\":" << ext.type;
-    oss << ",\"extension_name\":\"" << spz_gatekeeper::JsonEscape(ext.extension_name) << "\"";
-    oss << ",\"known_extension\":" << (ext.known_extension ? "true" : "false");
-    oss << ",\"has_validator\":" << (ext.has_validator ? "true" : "false");
-    oss << ",\"validation_result\":" << (ext.validation_result ? "true" : "false");
-    oss << ",\"status\":\"" << spz_gatekeeper::JsonEscape(ext.status) << "\"";
-    oss << "}";
-  }
-  oss << "]";
-  return oss.str();
-}
 
-static std::string BuildIssueListJson(const spz_gatekeeper::GateReport& report) {
-  std::ostringstream oss;
-  oss << "[";
-  for (std::size_t i = 0; i < report.issues.size(); ++i) {
-    if (i) oss << ",";
-    const auto& issue = report.issues[i];
-    oss << "{";
-    oss << "\"severity\":\"";
-    switch (issue.severity) {
-      case spz_gatekeeper::Severity::kError: oss << "error"; break;
-      case spz_gatekeeper::Severity::kWarning: oss << "warning"; break;
-      case spz_gatekeeper::Severity::kNote: oss << "note"; break;
-    }
-    oss << "\"";
-    oss << ",\"code\":\"" << spz_gatekeeper::JsonEscape(issue.code) << "\"";
-    oss << ",\"message\":\"" << spz_gatekeeper::JsonEscape(issue.message) << "\"";
-    oss << "}";
-  }
-  oss << "]";
-  return oss.str();
-}
-
-static std::string BuildRegistrySummaryJson(const spz_gatekeeper::GateReport& report) {
-  std::size_t known_extensions = 0;
-  std::size_t validator_backed_extensions = 0;
-  std::size_t unknown_extensions = 0;
-  for (const auto& ext : report.extension_reports) {
-    if (ext.known_extension) {
-      ++known_extensions;
-    } else {
-      ++unknown_extensions;
-    }
-    if (ext.has_validator) {
-      ++validator_backed_extensions;
-    }
-  }
-
-  std::ostringstream oss;
-  oss << "{";
-  oss << "\"registered_extensions\":"
-      << spz_gatekeeper::ExtensionSpecRegistry::Instance().SpecCount();
-  oss << ",\"known_extensions\":" << known_extensions;
-  oss << ",\"validator_backed_extensions\":" << validator_backed_extensions;
-  oss << ",\"unknown_extensions\":" << unknown_extensions;
-  oss << "}";
-  return oss.str();
-}
-
-static bool HasValidatorCoverage(const spz_gatekeeper::GateReport& report) {
-  for (const auto& ext : report.extension_reports) {
-    if (!ext.has_validator) {
-      return false;
-    }
-  }
-  return true;
-}
-
-static bool HasEmptyShellRisk(const spz_gatekeeper::GateReport& report) {
-  for (const auto& ext : report.extension_reports) {
-    if (!ext.has_validator) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static std::string BuildWasmQualityGateJson(bool validator_coverage_ok, bool empty_shell_risk) {
-  std::ostringstream oss;
-  oss << "{";
-  oss << "\"coverage_level\":\"baseline\"";
-  oss << ",\"validator_coverage_ok\":" << (validator_coverage_ok ? "true" : "false");
-  oss << ",\"empty_shell_risk\":" << (empty_shell_risk ? "true" : "false");
-  oss << ",\"api_surface_wired\":true";
-  oss << ",\"browser_smoke_wired\":true";
-  oss << ",\"empty_shell_guard_wired\":true";
-  oss << ",\"warning_budget_wired\":false";
-  oss << ",\"copy_budget_wired\":false";
-  oss << ",\"memory_budget_wired\":false";
-  oss << ",\"performance_budget_wired\":false";
-  oss << ",\"artifact_audit_wired\":false";
-  oss << ",\"release_ready\":false";
-  oss << "}";
-  return oss.str();
-}
 
 static const spz_gatekeeper::ExtensionReport* FindExtensionReport(
 
@@ -669,10 +563,12 @@ static std::string BuildCompatibilityBoardJson() {
         spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type);
     const bool fixture_valid_pass = valid_ext != nullptr && valid_ext->validation_result;
     const bool fixture_invalid_pass = invalid_ext != nullptr && !invalid_ext->validation_result;
-    const bool strict_check_pass = !strict_valid_report.HasErrors() && !HasWarnings(strict_valid_report);
+    const bool strict_check_pass =
+        !strict_valid_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_valid_report);
     const bool non_strict_check_pass = !non_strict_valid_report.HasErrors();
 
     oss << "{";
+
     oss << "\"type\":" << spec.type;
     oss << ",\"vendor_name\":\"" << spz_gatekeeper::JsonEscape(spec.vendor_name) << "\"";
     oss << ",\"extension_name\":\"" << spz_gatekeeper::JsonEscape(spec.extension_name) << "\"";
@@ -684,7 +580,8 @@ static std::string BuildCompatibilityBoardJson() {
     oss << ",\"strict_check_pass\":" << (strict_check_pass ? "true" : "false");
     oss << ",\"non_strict_check_pass\":" << (non_strict_check_pass ? "true" : "false");
     oss << ",\"wasm_quality_gate\":"
-        << BuildWasmQualityGateJson(has_validator, !has_validator);
+        << spz_gatekeeper::BuildWasmQualityGateJson(has_validator, !has_validator);
+
     oss << "}";
 
   }
@@ -723,10 +620,12 @@ static void PrintCompatibilityBoard(bool json) {
         spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type);
     const bool fixture_valid_pass = valid_ext != nullptr && valid_ext->validation_result;
     const bool fixture_invalid_pass = invalid_ext != nullptr && !invalid_ext->validation_result;
-    const bool strict_check_pass = !strict_valid_report.HasErrors() && !HasWarnings(strict_valid_report);
+    const bool strict_check_pass =
+        !strict_valid_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_valid_report);
     const bool non_strict_check_pass = !non_strict_valid_report.HasErrors();
 
     std::cout << "- type=" << spec.type
+
               << " vendor=\"" << spec.vendor_name << "\""
               << " name=\"" << spec.extension_name << "\""
               << " status=\"" << spec.status << "\""
@@ -750,32 +649,19 @@ static void PrintCompatCheck(const std::string& path,
                              const spz_gatekeeper::GateReport& strict_report,
                              const spz_gatekeeper::GateReport& non_strict_report,
                              bool json) {
-  const bool strict_ok = !strict_report.HasErrors() && !HasWarnings(strict_report);
+  const bool strict_ok = !strict_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_report);
   const bool non_strict_ok = !non_strict_report.HasErrors();
-  const bool validator_coverage_ok = HasValidatorCoverage(non_strict_report);
-  const bool empty_shell_risk = HasEmptyShellRisk(non_strict_report);
+  const bool validator_coverage_ok = spz_gatekeeper::HasValidatorCoverage(non_strict_report);
+  const bool empty_shell_risk = spz_gatekeeper::HasEmptyShellRisk(non_strict_report);
 
   if (json) {
-    std::ostringstream oss;
-    oss << "{";
-    oss << "\"asset_path\":\"" << spz_gatekeeper::JsonEscape(path) << "\"";
-    oss << ",\"strict_ok\":" << (strict_ok ? "true" : "false");
-    oss << ",\"non_strict_ok\":" << (non_strict_ok ? "true" : "false");
-    oss << ",\"registry_summary\":" << BuildRegistrySummaryJson(non_strict_report);
-    oss << ",\"extension_summary\":" << BuildExtensionSummaryJson(non_strict_report);
-    oss << ",\"wasm_quality_gate\":"
-        << BuildWasmQualityGateJson(validator_coverage_ok, empty_shell_risk);
-    oss << ",\"issue_summary\":{";
-    oss << "\"strict\":" << BuildIssueListJson(strict_report);
-    oss << ",\"non_strict\":" << BuildIssueListJson(non_strict_report);
-    oss << "}";
-    oss << ",\"upstream_tools\":{\"spz_info\":\"skipped\",\"spz_to_ply\":\"skipped\"}";
-    oss << "}";
-    std::cout << oss.str() << "\n";
+    std::cout << spz_gatekeeper::BuildCompatCheckAuditJson(path, strict_report, non_strict_report)
+              << "\n";
     return;
   }
 
   std::cout << "asset=\"" << path << "\"\n";
+
   std::cout << "strict_ok=" << (strict_ok ? "true" : "false") << "\n";
   std::cout << "non_strict_ok=" << (non_strict_ok ? "true" : "false") << "\n";
   std::cout << "registered_extensions="
@@ -826,9 +712,10 @@ static int HandleCompatCheckCommand(int argc, char** argv) {
   non_strict_options.strict = false;
   const auto non_strict_report = spz_gatekeeper::InspectSpzBlob(bytes, non_strict_options, path);
 
-  const bool strict_ok = !strict_report.HasErrors() && !HasWarnings(strict_report);
+  const bool strict_ok = !strict_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_report);
   const bool non_strict_ok = !non_strict_report.HasErrors();
   PrintCompatCheck(path, strict_report, non_strict_report, json);
+
   return (strict_ok && non_strict_ok) ? 0 : 1;
 }
 

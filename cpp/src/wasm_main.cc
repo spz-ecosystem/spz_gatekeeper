@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 PuJunhan
 
+#include "spz_gatekeeper/audit_summary.h"
 #include "spz_gatekeeper/extension_spec_registry.h"
 #include "spz_gatekeeper/json_min.h"
 #include "spz_gatekeeper/spz.h"
 #include "spz_gatekeeper/validator_registry.h"
 
 #include <cstddef>
+
 #include <cstdint>
 #include <cstring>
 #include <sstream>
@@ -62,14 +64,7 @@ bool TryInspect(const emscripten::val& input, bool strict, spz_gatekeeper::GateR
   }
 }
 
-bool HasWarnings(const spz_gatekeeper::GateReport& rep) {
-  for (const auto& issue : rep.issues) {
-    if (issue.severity == spz_gatekeeper::Severity::kWarning) {
-      return true;
-    }
-  }
-  return false;
-}
+
 
 const spz_gatekeeper::ExtensionReport* FindExtensionReport(const spz_gatekeeper::GateReport& report,
                                                            std::uint32_t type) {
@@ -260,24 +255,7 @@ std::string BuildRegistryListJson() {
   return oss.str();
 }
 
-std::string BuildWasmQualityGateJson(bool validator_coverage_ok, bool empty_shell_risk) {
-  std::ostringstream oss;
-  oss << "{";
-  oss << "\"coverage_level\":\"baseline\"";
-  oss << ",\"validator_coverage_ok\":" << (validator_coverage_ok ? "true" : "false");
-  oss << ",\"empty_shell_risk\":" << (empty_shell_risk ? "true" : "false");
-  oss << ",\"api_surface_wired\":true";
-  oss << ",\"browser_smoke_wired\":true";
-  oss << ",\"empty_shell_guard_wired\":true";
-  oss << ",\"warning_budget_wired\":false";
-  oss << ",\"copy_budget_wired\":false";
-  oss << ",\"memory_budget_wired\":false";
-  oss << ",\"performance_budget_wired\":false";
-  oss << ",\"artifact_audit_wired\":false";
-  oss << ",\"release_ready\":false";
-  oss << "}";
-  return oss.str();
-}
+
 
 std::string BuildCompatibilityBoardJson() {
 
@@ -314,8 +292,10 @@ std::string BuildCompatibilityBoardJson() {
         spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type);
     const bool fixture_valid_pass = valid_ext != nullptr && valid_ext->validation_result;
     const bool fixture_invalid_pass = invalid_ext != nullptr && !invalid_ext->validation_result;
-    const bool strict_check_pass = !strict_valid_report.HasErrors() && !HasWarnings(strict_valid_report);
+    const bool strict_check_pass =
+        !strict_valid_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_valid_report);
     const bool non_strict_check_pass = !non_strict_valid_report.HasErrors();
+
 
     oss << "{";
     oss << "\"type\":" << spec.type;
@@ -329,7 +309,8 @@ std::string BuildCompatibilityBoardJson() {
     oss << ",\"strict_check_pass\":" << (strict_check_pass ? "true" : "false");
     oss << ",\"non_strict_check_pass\":" << (non_strict_check_pass ? "true" : "false");
     oss << ",\"wasm_quality_gate\":"
-        << BuildWasmQualityGateJson(has_validator, !has_validator);
+        << spz_gatekeeper::BuildWasmQualityGateJson(has_validator, !has_validator);
+
     oss << "}";
 
   }
@@ -402,9 +383,39 @@ std::string inspectSpzText(const emscripten::val& spz_buffer, bool strict) {
   return rep.ToText();
 }
 
+emscripten::val inspectCompatSummary(const emscripten::val& spz_buffer) {
+  spz_gatekeeper::GateReport strict_report;
+  std::string strict_err;
+  if (!TryInspect(spz_buffer, true, &strict_report, &strict_err)) {
+    emscripten::val out = emscripten::val::object();
+    out.set("audit_profile", std::string(spz_gatekeeper::kAuditProfileSpz));
+    out.set("audit_mode", std::string(spz_gatekeeper::kAuditModeLocalCliSpzArtifactAudit));
+    out.set("verdict", std::string("block"));
+    out.set("next_action", std::string("block_artifact"));
+    out.set("error", strict_err);
+    return out;
+  }
+
+  spz_gatekeeper::GateReport non_strict_report;
+  std::string non_strict_err;
+  if (!TryInspect(spz_buffer, false, &non_strict_report, &non_strict_err)) {
+    emscripten::val out = emscripten::val::object();
+    out.set("audit_profile", std::string(spz_gatekeeper::kAuditProfileSpz));
+    out.set("audit_mode", std::string(spz_gatekeeper::kAuditModeLocalCliSpzArtifactAudit));
+    out.set("verdict", std::string("block"));
+    out.set("next_action", std::string("block_artifact"));
+    out.set("error", non_strict_err);
+    return out;
+  }
+
+  return ParseJsonObject(
+      spz_gatekeeper::BuildCompatCheckAuditJson("<wasm>", strict_report, non_strict_report));
+}
+
 emscripten::val listRegisteredExtensions() {
   return ParseJsonObject(BuildRegistryListJson());
 }
+
 
 emscripten::val describeExtension(double type_value) {
   const auto type = static_cast<std::uint32_t>(type_value);
@@ -427,6 +438,8 @@ EMSCRIPTEN_BINDINGS(spz_gatekeeper_module) {
   emscripten::function("inspectSpz", &inspectSpz);
   emscripten::function("dumpTrailer", &dumpTrailer);
   emscripten::function("inspectSpzText", &inspectSpzText);
+  emscripten::function("inspectCompatSummary", &inspectCompatSummary);
+
   emscripten::function("listRegisteredExtensions", &listRegisteredExtensions);
   emscripten::function("describeExtension", &describeExtension);
   emscripten::function("getCompatibilityBoard", &getCompatibilityBoard);

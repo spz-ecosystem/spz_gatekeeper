@@ -49,6 +49,7 @@ else()
 endif()
 
 set(SPZ_GATEKEEPER_CORE_SOURCES
+  src/audit_summary.cc
   src/extension_spec_registry.cc
   src/json_min.cc
   src/report.cc
@@ -167,6 +168,7 @@ if(BUILD_TESTING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   spz_gatekeeper_add_test(registry_cli_test tests/registry_cli_test.cc)
   spz_gatekeeper_add_test(gen_fixture_test tests/gen_fixture_test.cc)
   spz_gatekeeper_add_test(compat_check_test tests/compat_check_test.cc)
+  spz_gatekeeper_add_test(audit_summary_test tests/audit_summary_test.cc)
   spz_gatekeeper_add_test(tlv_multi_record_test tests/tlv_multi_record_test.cc)
   spz_gatekeeper_add_test(extension_integration_test tests/extension_integration_test.cc ZLIB::ZLIB)
   spz_gatekeeper_add_test(sh_quantization_test tests/sh_quantization_test.cc)

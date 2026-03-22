@@ -142,6 +142,13 @@ TEST(test_compat_check_reports_dual_path_for_valid_adobe_fixture) {
 
   const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check \"" + input_path.path().string() + "\" --json");
   ASSERT_TRUE(result.exit_code == 0);
+  ASSERT_TRUE(result.output.find("\"audit_profile\":\"spz\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"audit_mode\":\"local_cli_spz_artifact_audit\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"verdict\":\"pass\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"summary\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"budgets\":{}") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"issues\":[") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"next_action\":\"artifact_ready\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"strict_ok\":true") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"non_strict_ok\":true") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"registry_summary\"") != std::string::npos);
@@ -151,6 +158,7 @@ TEST(test_compat_check_reports_dual_path_for_valid_adobe_fixture) {
   ASSERT_TRUE(result.output.find("\"empty_shell_risk\":false") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"release_ready\":false") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"upstream_tools\"") != std::string::npos);
+
 }
 
 TEST(test_compat_check_surfaces_unknown_extension_issue_summary) {
@@ -162,12 +170,20 @@ TEST(test_compat_check_surfaces_unknown_extension_issue_summary) {
 
   const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check \"" + input_path.path().string() + "\" --json");
   ASSERT_TRUE(result.exit_code == 1);
+  ASSERT_TRUE(result.output.find("\"audit_profile\":\"spz\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"audit_mode\":\"local_cli_spz_artifact_audit\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"verdict\":\"review_required\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"summary\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"budgets\":{}") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"issues\":[") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"next_action\":\"review_artifact\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"strict_ok\":false") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"non_strict_ok\":true") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"issue_summary\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"validator_coverage_ok\":false") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"empty_shell_risk\":true") != std::string::npos);
   ASSERT_TRUE(result.output.find("L2_EXT_UNKNOWN") != std::string::npos);
+
 }
 
 

@@ -195,6 +195,69 @@ spz_gatekeeper --self-test
 - `compat-board` reports extension integration maturity, not an algorithm leaderboard.
 - `docs/extension_registry.json` mirrors the current built-in registry and compatibility-board snapshot for docs/Web use.
 - The Web/WASM entry points reuse the same registry/report vocabulary as the CLI, so the JSON fields stay aligned across terminal, browser, and docs.
+- The registry model is now explicitly split into two layers:
+  - `ExtensionSpecRegistry`: contract metadata such as vendor name, status, category, spec link, `min_spz_version`, and `requires_has_extensions_flag`
+  - `ExtensionValidatorRegistry`: runtime payload validators keyed by `type`
+- Common extension states:
+  - `known_extension=false`: unregistered extension
+  - `known_extension=true && has_validator=false`: registered but validator not implemented yet (`L2_EXT_REGISTERED_NO_VALIDATOR`)
+  - `known_extension=true && has_validator=true`: registered and validator-backed
+- Use `registry show <type>` when you need the full spec-facing fields instead of only the compact board view.
+- Further reading:
+  - `docs/extension_registry.json`
+  - `docs/Implementing_Custom_Extension.md`
+  - `docs/plans/2026-03-20-spz-extension-registry-and-selftest-design.md`
+  - `docs/plans/2026-03-20-spz-extension-registry-implementation-plan.md`
+
+## WASM quality audit modes
+The Web/WASM side is no longer just "build + smoke" in documentation. The current contract distinguishes two local audit modes:
+
+- `browser_lightweight_wasm_audit`: browser-only gate for a standard zip audit bundle
+- `local_cli_spz_artifact_audit`: local CLI audit for real `.spz` outputs, directories, or manifests
+
+### Browser-side audit bundle
+The browser mode expects one standard audit bundle:
+
+```text
+<algo-name>-wasm-audit.zip
+├─ manifest.json
+├─ module.wasm
+├─ loader.mjs
+└─ tiny_fixtures/
+```
+
+Minimum expectations:
+- `manifest.json`: declares profile, exports, budgets, and package metadata
+- `module.wasm`: main module under review
+- `loader.mjs`: browser loader entry
+- `tiny_fixtures/`: optional micro-fixtures for lightweight smoke only
+
+### Shared verdict schema
+Both modes are being aligned around the same top-level summary fields:
+- `audit_profile`
+- `audit_mode`
+- `verdict`
+- `summary`
+- `budgets`
+- `issues`
+- `next_action`
+
+Verdict semantics stay intentionally simple:
+- `pass`: safe to continue into local CLI deep audit or integration testing
+- `review_required`: runnable, but with visible engineering risk that should be reviewed
+- `block`: package structure, correctness, or budget problems stop further rollout
+
+### Current `wasm_quality_gate` status
+`docs/extension_registry.json` currently exposes a baseline `wasm_quality_gate` snapshot:
+- already wired: `validator_coverage_ok`, `api_surface_wired`, `browser_smoke_wired`, `empty_shell_guard_wired`
+- not fully wired yet: `warning_budget_wired`, `copy_budget_wired`, `memory_budget_wired`, `performance_budget_wired`, `artifact_audit_wired`
+- current release posture: `release_ready=false`
+
+Because both browser and CLI run on the user's local machine, the project already has a local dual-end workflow by default. A browser-to-CLI `handoff` is optional standardization, not a backend service.
+
+Further reading:
+- `docs/plans/2026-03-22-spz-gatekeeper-wasm-audit-modes-design.md`
+- `docs/plans/2026-03-22-spz-gatekeeper-wasm-audit-implementation-plan.md`
 
 ## Extension author quick loop
 ```bash
