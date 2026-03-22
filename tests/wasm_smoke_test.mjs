@@ -85,6 +85,10 @@ async function runSmoke() {
       const badge = document.getElementById('summaryBadge');
       return badge && badge.textContent && badge.textContent.trim() === 'PASS';
     }, { timeout: 15000 });
+    await page.waitForFunction(() => {
+      const registry = document.getElementById('registryList');
+      return registry && registry.textContent && registry.textContent.includes('WASM Gate:');
+    }, { timeout: 15000 });
 
     const statusClasses = await page.$eval('#loadingStatus', (el) => el.className);
     if (statusClasses.includes('error')) {
@@ -92,6 +96,7 @@ async function runSmoke() {
     }
 
     console.log(`WASM smoke PASS: ${baseUrl} fixture=${fixture.source}`);
+
 
   } catch (error) {
     await page.screenshot({ path: 'wasm-smoke-failure.png', fullPage: true });

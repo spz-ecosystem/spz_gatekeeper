@@ -151,6 +151,11 @@ TEST(test_compat_board_json_exposes_maturity_fields) {
   ASSERT_TRUE(result.output.find("\"fixture_invalid_pass\":true") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"strict_check_pass\":true") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"non_strict_check_pass\":true") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"wasm_quality_gate\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"coverage_level\":\"baseline\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"validator_coverage_ok\":true") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"empty_shell_risk\":false") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"release_ready\":false") != std::string::npos);
 }
 
 TEST(test_compat_board_text_mentions_registry_role) {
@@ -159,7 +164,9 @@ TEST(test_compat_board_text_mentions_registry_role) {
   ASSERT_TRUE(result.output.find("Compatibility board:") != std::string::npos);
   ASSERT_TRUE(result.output.find("Adobe Safe Orbit Camera") != std::string::npos);
   ASSERT_TRUE(result.output.find("fixture_valid_pass=true") != std::string::npos);
+  ASSERT_TRUE(result.output.find("wasm_release_ready=false") != std::string::npos);
 }
+
 
 
 }  // namespace

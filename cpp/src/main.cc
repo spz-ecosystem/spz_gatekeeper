@@ -587,7 +587,45 @@ static std::string BuildRegistrySummaryJson(const spz_gatekeeper::GateReport& re
   return oss.str();
 }
 
+static bool HasValidatorCoverage(const spz_gatekeeper::GateReport& report) {
+  for (const auto& ext : report.extension_reports) {
+    if (!ext.has_validator) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool HasEmptyShellRisk(const spz_gatekeeper::GateReport& report) {
+  for (const auto& ext : report.extension_reports) {
+    if (!ext.has_validator) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static std::string BuildWasmQualityGateJson(bool validator_coverage_ok, bool empty_shell_risk) {
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"coverage_level\":\"baseline\"";
+  oss << ",\"validator_coverage_ok\":" << (validator_coverage_ok ? "true" : "false");
+  oss << ",\"empty_shell_risk\":" << (empty_shell_risk ? "true" : "false");
+  oss << ",\"api_surface_wired\":true";
+  oss << ",\"browser_smoke_wired\":true";
+  oss << ",\"empty_shell_guard_wired\":true";
+  oss << ",\"warning_budget_wired\":false";
+  oss << ",\"copy_budget_wired\":false";
+  oss << ",\"memory_budget_wired\":false";
+  oss << ",\"performance_budget_wired\":false";
+  oss << ",\"artifact_audit_wired\":false";
+  oss << ",\"release_ready\":false";
+  oss << "}";
+  return oss.str();
+}
+
 static const spz_gatekeeper::ExtensionReport* FindExtensionReport(
+
     const spz_gatekeeper::GateReport& report, std::uint32_t type) {
   for (const auto& ext : report.extension_reports) {
     if (ext.type == type) {
@@ -627,6 +665,8 @@ static std::string BuildCompatibilityBoardJson() {
 
     const auto* valid_ext = FindExtensionReport(strict_valid_report, spec.type);
     const auto* invalid_ext = FindExtensionReport(strict_invalid_report, spec.type);
+    const bool has_validator =
+        spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type);
     const bool fixture_valid_pass = valid_ext != nullptr && valid_ext->validation_result;
     const bool fixture_invalid_pass = invalid_ext != nullptr && !invalid_ext->validation_result;
     const bool strict_check_pass = !strict_valid_report.HasErrors() && !HasWarnings(strict_valid_report);
@@ -638,13 +678,15 @@ static std::string BuildCompatibilityBoardJson() {
     oss << ",\"extension_name\":\"" << spz_gatekeeper::JsonEscape(spec.extension_name) << "\"";
     oss << ",\"status\":\"" << spz_gatekeeper::JsonEscape(spec.status) << "\"";
     oss << ",\"has_spec\":true";
-    oss << ",\"has_validator\":"
-        << (spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type) ? "true" : "false");
+    oss << ",\"has_validator\":" << (has_validator ? "true" : "false");
     oss << ",\"fixture_valid_pass\":" << (fixture_valid_pass ? "true" : "false");
     oss << ",\"fixture_invalid_pass\":" << (fixture_invalid_pass ? "true" : "false");
     oss << ",\"strict_check_pass\":" << (strict_check_pass ? "true" : "false");
     oss << ",\"non_strict_check_pass\":" << (non_strict_check_pass ? "true" : "false");
+    oss << ",\"wasm_quality_gate\":"
+        << BuildWasmQualityGateJson(has_validator, !has_validator);
     oss << "}";
+
   }
 
   oss << "]}";
@@ -677,6 +719,8 @@ static void PrintCompatibilityBoard(bool json) {
 
     const auto* valid_ext = FindExtensionReport(strict_valid_report, spec.type);
     const auto* invalid_ext = FindExtensionReport(strict_invalid_report, spec.type);
+    const bool has_validator =
+        spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type);
     const bool fixture_valid_pass = valid_ext != nullptr && valid_ext->validation_result;
     const bool fixture_invalid_pass = invalid_ext != nullptr && !invalid_ext->validation_result;
     const bool strict_check_pass = !strict_valid_report.HasErrors() && !HasWarnings(strict_valid_report);
@@ -687,13 +731,16 @@ static void PrintCompatibilityBoard(bool json) {
               << " name=\"" << spec.extension_name << "\""
               << " status=\"" << spec.status << "\""
               << " has_spec=true"
-              << " has_validator="
-              << (spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type) ? "true" : "false")
+              << " has_validator=" << (has_validator ? "true" : "false")
               << " fixture_valid_pass=" << (fixture_valid_pass ? "true" : "false")
               << " fixture_invalid_pass=" << (fixture_invalid_pass ? "true" : "false")
               << " strict_check_pass=" << (strict_check_pass ? "true" : "false")
               << " non_strict_check_pass=" << (non_strict_check_pass ? "true" : "false")
+              << " wasm_validator_coverage_ok=" << (has_validator ? "true" : "false")
+              << " wasm_empty_shell_risk=" << (!has_validator ? "true" : "false")
+              << " wasm_release_ready=false"
               << "\n";
+
   }
 }
 
@@ -705,6 +752,8 @@ static void PrintCompatCheck(const std::string& path,
                              bool json) {
   const bool strict_ok = !strict_report.HasErrors() && !HasWarnings(strict_report);
   const bool non_strict_ok = !non_strict_report.HasErrors();
+  const bool validator_coverage_ok = HasValidatorCoverage(non_strict_report);
+  const bool empty_shell_risk = HasEmptyShellRisk(non_strict_report);
 
   if (json) {
     std::ostringstream oss;
@@ -714,6 +763,8 @@ static void PrintCompatCheck(const std::string& path,
     oss << ",\"non_strict_ok\":" << (non_strict_ok ? "true" : "false");
     oss << ",\"registry_summary\":" << BuildRegistrySummaryJson(non_strict_report);
     oss << ",\"extension_summary\":" << BuildExtensionSummaryJson(non_strict_report);
+    oss << ",\"wasm_quality_gate\":"
+        << BuildWasmQualityGateJson(validator_coverage_ok, empty_shell_risk);
     oss << ",\"issue_summary\":{";
     oss << "\"strict\":" << BuildIssueListJson(strict_report);
     oss << ",\"non_strict\":" << BuildIssueListJson(non_strict_report);
@@ -730,6 +781,9 @@ static void PrintCompatCheck(const std::string& path,
   std::cout << "registered_extensions="
             << spz_gatekeeper::ExtensionSpecRegistry::Instance().SpecCount() << "\n";
   std::cout << "extension_count=" << non_strict_report.extension_reports.size() << "\n";
+  std::cout << "wasm_validator_coverage_ok=" << (validator_coverage_ok ? "true" : "false") << "\n";
+  std::cout << "wasm_empty_shell_risk=" << (empty_shell_risk ? "true" : "false") << "\n";
+  std::cout << "wasm_release_ready=false\n";
   for (const auto& issue : strict_report.issues) {
     std::cout << "strict_issue=" << issue.code << "\n";
   }
@@ -738,6 +792,7 @@ static void PrintCompatCheck(const std::string& path,
   }
   std::cout << "upstream_tools=skipped\n";
 }
+
 
 static int HandleCompatCheckCommand(int argc, char** argv) {
   if (argc < 3) {

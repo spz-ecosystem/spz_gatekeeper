@@ -260,7 +260,27 @@ std::string BuildRegistryListJson() {
   return oss.str();
 }
 
+std::string BuildWasmQualityGateJson(bool validator_coverage_ok, bool empty_shell_risk) {
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"coverage_level\":\"baseline\"";
+  oss << ",\"validator_coverage_ok\":" << (validator_coverage_ok ? "true" : "false");
+  oss << ",\"empty_shell_risk\":" << (empty_shell_risk ? "true" : "false");
+  oss << ",\"api_surface_wired\":true";
+  oss << ",\"browser_smoke_wired\":true";
+  oss << ",\"empty_shell_guard_wired\":true";
+  oss << ",\"warning_budget_wired\":false";
+  oss << ",\"copy_budget_wired\":false";
+  oss << ",\"memory_budget_wired\":false";
+  oss << ",\"performance_budget_wired\":false";
+  oss << ",\"artifact_audit_wired\":false";
+  oss << ",\"release_ready\":false";
+  oss << "}";
+  return oss.str();
+}
+
 std::string BuildCompatibilityBoardJson() {
+
   const auto specs = spz_gatekeeper::ExtensionSpecRegistry::Instance().ListSpecs();
   std::ostringstream oss;
   oss << "{";
@@ -290,6 +310,8 @@ std::string BuildCompatibilityBoardJson() {
 
     const auto* valid_ext = FindExtensionReport(strict_valid_report, spec.type);
     const auto* invalid_ext = FindExtensionReport(strict_invalid_report, spec.type);
+    const bool has_validator =
+        spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type);
     const bool fixture_valid_pass = valid_ext != nullptr && valid_ext->validation_result;
     const bool fixture_invalid_pass = invalid_ext != nullptr && !invalid_ext->validation_result;
     const bool strict_check_pass = !strict_valid_report.HasErrors() && !HasWarnings(strict_valid_report);
@@ -301,13 +323,15 @@ std::string BuildCompatibilityBoardJson() {
     oss << ",\"extension_name\":\"" << spz_gatekeeper::JsonEscape(spec.extension_name) << "\"";
     oss << ",\"status\":\"" << spz_gatekeeper::JsonEscape(spec.status) << "\"";
     oss << ",\"has_spec\":true";
-    oss << ",\"has_validator\":"
-        << (spz_gatekeeper::ExtensionValidatorRegistry::Instance().HasValidator(spec.type) ? "true" : "false");
+    oss << ",\"has_validator\":" << (has_validator ? "true" : "false");
     oss << ",\"fixture_valid_pass\":" << (fixture_valid_pass ? "true" : "false");
     oss << ",\"fixture_invalid_pass\":" << (fixture_invalid_pass ? "true" : "false");
     oss << ",\"strict_check_pass\":" << (strict_check_pass ? "true" : "false");
     oss << ",\"non_strict_check_pass\":" << (non_strict_check_pass ? "true" : "false");
+    oss << ",\"wasm_quality_gate\":"
+        << BuildWasmQualityGateJson(has_validator, !has_validator);
     oss << "}";
+
   }
 
   oss << "]}";

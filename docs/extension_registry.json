@@ -31,8 +31,23 @@
         "fixture_valid_pass": true,
         "fixture_invalid_pass": true,
         "strict_check_pass": true,
-        "non_strict_check_pass": true
+        "non_strict_check_pass": true,
+        "wasm_quality_gate": {
+          "coverage_level": "baseline",
+          "validator_coverage_ok": true,
+          "empty_shell_risk": false,
+          "api_surface_wired": true,
+          "browser_smoke_wired": true,
+          "empty_shell_guard_wired": true,
+          "warning_budget_wired": false,
+          "copy_budget_wired": false,
+          "memory_budget_wired": false,
+          "performance_budget_wired": false,
+          "artifact_audit_wired": false,
+          "release_ready": false
+        }
       }
+
     ]
   }
 }

@@ -673,7 +673,9 @@
               <strong>Category:</strong> ${escapeHtml(detail.category || 'n/a')}<br>
               <strong>Validator:</strong> ${escapeHtml(String(Boolean(detail.has_validator)))}<br>
               <strong>Spec:</strong> ${escapeHtml(detail.spec_url || 'n/a')}<br>
-              <strong>Board:</strong> valid=${escapeHtml(String(Boolean(maturity?.fixture_valid_pass)))} / invalid=${escapeHtml(String(Boolean(maturity?.fixture_invalid_pass)))} / strict=${escapeHtml(String(Boolean(maturity?.strict_check_pass)))} / non_strict=${escapeHtml(String(Boolean(maturity?.non_strict_check_pass)))}
+              <strong>Board:</strong> valid=${escapeHtml(String(Boolean(maturity?.fixture_valid_pass)))} / invalid=${escapeHtml(String(Boolean(maturity?.fixture_invalid_pass)))} / strict=${escapeHtml(String(Boolean(maturity?.strict_check_pass)))} / non_strict=${escapeHtml(String(Boolean(maturity?.non_strict_check_pass)))}<br>
+              <strong>WASM Gate:</strong> release=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.release_ready)))} / validator=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.validator_coverage_ok)))} / shell_risk=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.empty_shell_risk)))} / api=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.api_surface_wired)))} / smoke=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.browser_smoke_wired)))} / copy=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.copy_budget_wired)))} / memory=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.memory_budget_wired)))} / perf=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.performance_budget_wired)))}
+
             </div>
           </div>
         `);
