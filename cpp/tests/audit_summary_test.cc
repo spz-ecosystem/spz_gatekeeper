@@ -64,8 +64,10 @@ TEST(test_build_compat_check_audit_json_reports_pass_schema) {
   ASSERT_TRUE(json.find("\"audit_mode\":\"local_cli_spz_artifact_audit\"") != std::string::npos);
   ASSERT_TRUE(json.find("\"verdict\":\"pass\"") != std::string::npos);
   ASSERT_TRUE(json.find("\"summary\":{") != std::string::npos);
-  ASSERT_TRUE(json.find("\"budgets\":{}") != std::string::npos);
+  ASSERT_TRUE(json.find("\"artifact_summary\":{") != std::string::npos);
+  ASSERT_TRUE(json.find("\"budgets\":{") != std::string::npos);
   ASSERT_TRUE(json.find("\"issues\":[") != std::string::npos);
+
   ASSERT_TRUE(json.find("\"next_action\":\"artifact_ready\"") != std::string::npos);
 }
 
@@ -92,8 +94,11 @@ TEST(test_build_compat_check_audit_json_reports_review_required_for_unknown_exte
   const std::string json =
       spz_gatekeeper::BuildCompatCheckAuditJson("fixture_unknown.spz", strict_report, non_strict_report);
   ASSERT_TRUE(json.find("\"verdict\":\"review_required\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"artifact_summary\":{") != std::string::npos);
+  ASSERT_TRUE(json.find("\"budgets\":{") != std::string::npos);
   ASSERT_TRUE(json.find("\"next_action\":\"review_artifact\"") != std::string::npos);
   ASSERT_TRUE(json.find("L2_EXT_UNKNOWN") != std::string::npos);
+
 }
 
 }  // namespace

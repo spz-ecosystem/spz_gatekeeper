@@ -90,6 +90,25 @@ class TempPathGuard {
   std::filesystem::path path_;
 };
 
+class TempDirGuard {
+ public:
+  explicit TempDirGuard(std::filesystem::path path) : path_(std::move(path)) {
+    std::filesystem::create_directories(path_);
+  }
+  ~TempDirGuard() {
+    std::error_code ec;
+    std::filesystem::remove_all(path_, ec);
+  }
+
+  const std::filesystem::path& path() const {
+    return path_;
+  }
+
+ private:
+  std::filesystem::path path_;
+};
+
+
 CommandResult RunCommand(const std::string& command) {
   std::array<char, 256> buffer{};
   std::string output;
@@ -122,6 +141,12 @@ std::filesystem::path MakeTempPath(const std::string& stem) {
          (stem + "_" + std::to_string(std::rand()) + ".spz");
 }
 
+std::filesystem::path MakeTempDirPath(const std::string& stem) {
+  return std::filesystem::temp_directory_path() /
+         (stem + "_" + std::to_string(std::rand()));
+}
+
+
 void WriteBinaryFile(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes) {
   std::ofstream out(path, std::ios::binary);
   if (!out.good()) {
@@ -146,8 +171,12 @@ TEST(test_compat_check_reports_dual_path_for_valid_adobe_fixture) {
   ASSERT_TRUE(result.output.find("\"audit_mode\":\"local_cli_spz_artifact_audit\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"verdict\":\"pass\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"summary\":{") != std::string::npos);
-  ASSERT_TRUE(result.output.find("\"budgets\":{}") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"artifact_summary\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"budgets\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"file_size_bytes\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"decompressed_size_bytes\":{") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"issues\":[") != std::string::npos);
+
   ASSERT_TRUE(result.output.find("\"next_action\":\"artifact_ready\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"strict_ok\":true") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"non_strict_ok\":true") != std::string::npos);
@@ -174,8 +203,12 @@ TEST(test_compat_check_surfaces_unknown_extension_issue_summary) {
   ASSERT_TRUE(result.output.find("\"audit_mode\":\"local_cli_spz_artifact_audit\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"verdict\":\"review_required\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"summary\":{") != std::string::npos);
-  ASSERT_TRUE(result.output.find("\"budgets\":{}") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"artifact_summary\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"budgets\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"file_size_bytes\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"decompressed_size_bytes\":{") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"issues\":[") != std::string::npos);
+
   ASSERT_TRUE(result.output.find("\"next_action\":\"review_artifact\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"strict_ok\":false") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"non_strict_ok\":true") != std::string::npos);
@@ -183,12 +216,62 @@ TEST(test_compat_check_surfaces_unknown_extension_issue_summary) {
   ASSERT_TRUE(result.output.find("\"validator_coverage_ok\":false") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"empty_shell_risk\":true") != std::string::npos);
   ASSERT_TRUE(result.output.find("L2_EXT_UNKNOWN") != std::string::npos);
-
 }
 
+TEST(test_compat_check_dir_mode_outputs_batch_summary) {
+  TempDirGuard workdir(MakeTempDirPath("compat_check_dir_mode"));
+  const auto pass_trailer = spz_gatekeeper_test::CreateTrailer(
+      {{0xADBE0002u, spz_gatekeeper_test::CreateAdobeSafeOrbitPayload()}});
+  const auto review_trailer = spz_gatekeeper_test::CreateTrailer(
+      {{0xCAFE0001u, std::vector<std::uint8_t>{0x01, 0x02, 0x03, 0x04}}});
 
+  const auto pass_path = workdir.path() / "pass.spz";
+  const auto review_path = workdir.path() / "review.spz";
+  WriteBinaryFile(pass_path,
+                  spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &pass_trailer));
+  WriteBinaryFile(review_path,
+                  spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &review_trailer));
+
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check --dir \"" + workdir.path().string() + "\" --json");
+  ASSERT_TRUE(result.exit_code == 1);
+  ASSERT_TRUE(result.output.find("\"audit_mode\":\"local_cli_spz_artifact_audit\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"summary\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"total\":2") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"pass\":1") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"review_required\":1") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"items\":[") != std::string::npos);
+}
+
+TEST(test_compat_check_manifest_mode_outputs_batch_summary) {
+  TempDirGuard workdir(MakeTempDirPath("compat_check_manifest_mode"));
+  const auto pass_trailer = spz_gatekeeper_test::CreateTrailer(
+      {{0xADBE0002u, spz_gatekeeper_test::CreateAdobeSafeOrbitPayload()}});
+  const auto block_trailer = spz_gatekeeper_test::CreateTrailer(
+      {{0xADBE0002u, std::vector<std::uint8_t>{0x00, 0x00, 0x00, 0x00}}});
+
+  const auto pass_path = workdir.path() / "manifest_pass.spz";
+  const auto block_path = workdir.path() / "manifest_block.spz";
+  WriteBinaryFile(pass_path,
+                  spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &pass_trailer));
+  WriteBinaryFile(block_path,
+                  spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &block_trailer));
+
+  const auto manifest_path = workdir.path() / "manifest.json";
+  std::ofstream manifest(manifest_path);
+  manifest << "{\"files\":[\"" << pass_path.string() << "\",\"" << block_path.string() << "\"]}";
+  manifest.close();
+
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check --manifest \"" + manifest_path.string() + "\" --json");
+  ASSERT_TRUE(result.exit_code == 1);
+  ASSERT_TRUE(result.output.find("\"summary\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"total\":2") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"pass\":1") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"block\":1") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"top_issues\":[") != std::string::npos);
+}
 
 }  // namespace
+
 
 int main() {
   std::cout << "=== compat-check CLI Tests ===" << std::endl;
@@ -196,6 +279,9 @@ int main() {
 
   RUN_TEST(test_compat_check_reports_dual_path_for_valid_adobe_fixture);
   RUN_TEST(test_compat_check_surfaces_unknown_extension_issue_summary);
+  RUN_TEST(test_compat_check_dir_mode_outputs_batch_summary);
+  RUN_TEST(test_compat_check_manifest_mode_outputs_batch_summary);
+
 
   std::cout << std::endl;
   std::cout << "=== Test Summary ===" << std::endl;

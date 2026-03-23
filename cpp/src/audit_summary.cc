@@ -93,7 +93,109 @@ std::string ResolveCompatNextAction(const std::string& verdict) {
   return "block_artifact";
 }
 
+std::string BuildBudgetItemJson(bool has_declared,
+                                double declared,
+                                bool has_observed,
+                                double observed) {
+  std::ostringstream oss;
+  oss << "{";
+  if (has_declared) {
+    oss << "\"declared\":" << declared;
+  } else {
+    oss << "\"declared\":null";
+  }
+  oss << ",\"observed\":";
+  if (has_observed) {
+    oss << observed;
+  } else {
+    oss << "null";
+  }
+  if (!has_observed) {
+    oss << ",\"status\":\"not_collected\",\"within_budget\":null";
+  } else if (!has_declared) {
+    oss << ",\"status\":\"observed_without_budget\",\"within_budget\":null";
+  } else {
+    const bool within_budget = observed <= declared;
+    oss << ",\"status\":\"" << (within_budget ? "within_budget" : "over_budget") << "\"";
+    oss << ",\"within_budget\":" << (within_budget ? "true" : "false");
+  }
+  oss << "}";
+  return oss.str();
+}
+
+std::string BuildArtifactSummaryJson(const GateReport& non_strict_report,
+                                     const CompatAuditMetrics* metrics) {
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"file_size_bytes\":";
+  if (metrics != nullptr && metrics->has_file_size_bytes) {
+    oss << metrics->file_size_bytes;
+  } else {
+    oss << "null";
+  }
+  oss << ",\"decompressed_size_bytes\":";
+  if (non_strict_report.spz_l2.has_value()) {
+    oss << non_strict_report.spz_l2->decompressed_size;
+  } else {
+    oss << "null";
+  }
+  oss << ",\"trailer_size_bytes\":";
+  if (non_strict_report.spz_l2.has_value()) {
+    oss << non_strict_report.spz_l2->trailer_size;
+  } else {
+    oss << "null";
+  }
+  oss << ",\"extension_count\":" << non_strict_report.extension_reports.size();
+  oss << "}";
+  return oss.str();
+}
+
+std::string BuildArtifactBudgetsJson(const GateReport& non_strict_report,
+                                     const CompatAuditMetrics* metrics) {
+  const bool has_decompressed_size = non_strict_report.spz_l2.has_value();
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"file_size_bytes\":"
+      << BuildBudgetItemJson(false,
+                             0.0,
+                             metrics != nullptr && metrics->has_file_size_bytes,
+                             metrics != nullptr && metrics->has_file_size_bytes
+                                 ? static_cast<double>(metrics->file_size_bytes)
+                                 : 0.0);
+  oss << ",\"decompressed_size_bytes\":"
+      << BuildBudgetItemJson(false,
+                             0.0,
+                             has_decompressed_size,
+                             has_decompressed_size
+                                 ? static_cast<double>(non_strict_report.spz_l2->decompressed_size)
+                                 : 0.0);
+  oss << ",\"process_time_ms\":"
+      << BuildBudgetItemJson(false,
+                             0.0,
+                             metrics != nullptr && metrics->has_process_time_ms,
+                             metrics != nullptr && metrics->has_process_time_ms
+                                 ? metrics->process_time_ms
+                                 : 0.0);
+  oss << ",\"peak_memory_mb\":"
+      << BuildBudgetItemJson(false,
+                             0.0,
+                             metrics != nullptr && metrics->has_peak_memory_mb,
+                             metrics != nullptr && metrics->has_peak_memory_mb
+                                 ? metrics->peak_memory_mb
+                                 : 0.0);
+  oss << ",\"memory_growth_count\":"
+      << BuildBudgetItemJson(false,
+                             0.0,
+                             metrics != nullptr && metrics->has_memory_growth_count,
+                             metrics != nullptr && metrics->has_memory_growth_count
+                                 ? static_cast<double>(metrics->memory_growth_count)
+                                 : 0.0);
+  oss << "}";
+  return oss.str();
+}
+
 }  // namespace
+
 
 bool HasWarnings(const GateReport& report) {
   for (const auto& issue : report.issues) {
@@ -193,7 +295,9 @@ std::string BuildWasmQualityGateJson(bool validator_coverage_ok, bool empty_shel
 
 std::string BuildCompatCheckAuditJson(const std::string& path,
                                       const GateReport& strict_report,
-                                      const GateReport& non_strict_report) {
+                                      const GateReport& non_strict_report,
+                                      const CompatAuditMetrics* metrics) {
+
   const bool strict_ok = !strict_report.HasErrors() && !HasWarnings(strict_report);
   const bool non_strict_ok = !non_strict_report.HasErrors();
   const bool validator_coverage_ok = HasValidatorCoverage(non_strict_report);
@@ -215,8 +319,10 @@ std::string BuildCompatCheckAuditJson(const std::string& path,
   oss << ",\"extension_count\":" << non_strict_report.extension_reports.size();
   oss << ",\"issue_count\":" << merged_issues.size();
   oss << "}";
-  oss << ",\"budgets\":{}";
+  oss << ",\"artifact_summary\":" << BuildArtifactSummaryJson(non_strict_report, metrics);
+  oss << ",\"budgets\":" << BuildArtifactBudgetsJson(non_strict_report, metrics);
   oss << ",\"issues\":" << BuildIssueListJson(merged_issues);
+
   oss << ",\"next_action\":\"" << next_action << "\"";
   oss << ",\"strict_ok\":" << (strict_ok ? "true" : "false");
   oss << ",\"non_strict_ok\":" << (non_strict_ok ? "true" : "false");

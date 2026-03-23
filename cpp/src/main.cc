@@ -37,16 +37,22 @@
 
 
 
+#include <algorithm>
+#include <chrono>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <optional>
+#include <set>
 
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 #include <zlib.h>
+
 
 
 namespace {
@@ -644,66 +650,110 @@ static void PrintCompatibilityBoard(bool json) {
 }
 
 
-static void PrintCompatCheck(const std::string& path,
+struct CompatAuditOutcome {
+  std::string path;
+  std::string json;
+  std::string verdict;
+  bool strict_ok = false;
+  bool non_strict_ok = false;
+  std::vector<std::string> issue_codes;
+};
 
-                             const spz_gatekeeper::GateReport& strict_report,
-                             const spz_gatekeeper::GateReport& non_strict_report,
-                             bool json) {
-  const bool strict_ok = !strict_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_report);
-  const bool non_strict_ok = !non_strict_report.HasErrors();
+static std::string ResolveCompatVerdict(const spz_gatekeeper::GateReport& strict_report,
+                                        const spz_gatekeeper::GateReport& non_strict_report,
+                                        bool* strict_ok,
+                                        bool* non_strict_ok) {
+  *strict_ok = !strict_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_report);
+  *non_strict_ok = !non_strict_report.HasErrors();
   const bool validator_coverage_ok = spz_gatekeeper::HasValidatorCoverage(non_strict_report);
   const bool empty_shell_risk = spz_gatekeeper::HasEmptyShellRisk(non_strict_report);
-
-  if (json) {
-    std::cout << spz_gatekeeper::BuildCompatCheckAuditJson(path, strict_report, non_strict_report)
-              << "\n";
-    return;
+  if (!*non_strict_ok) {
+    return "block";
   }
-
-  std::cout << "asset=\"" << path << "\"\n";
-
-  std::cout << "strict_ok=" << (strict_ok ? "true" : "false") << "\n";
-  std::cout << "non_strict_ok=" << (non_strict_ok ? "true" : "false") << "\n";
-  std::cout << "registered_extensions="
-            << spz_gatekeeper::ExtensionSpecRegistry::Instance().SpecCount() << "\n";
-  std::cout << "extension_count=" << non_strict_report.extension_reports.size() << "\n";
-  std::cout << "wasm_validator_coverage_ok=" << (validator_coverage_ok ? "true" : "false") << "\n";
-  std::cout << "wasm_empty_shell_risk=" << (empty_shell_risk ? "true" : "false") << "\n";
-  std::cout << "wasm_release_ready=false\n";
-  for (const auto& issue : strict_report.issues) {
-    std::cout << "strict_issue=" << issue.code << "\n";
+  if (!*strict_ok || !validator_coverage_ok || empty_shell_risk) {
+    return "review_required";
   }
-  for (const auto& issue : non_strict_report.issues) {
-    std::cout << "non_strict_issue=" << issue.code << "\n";
-  }
-  std::cout << "upstream_tools=skipped\n";
+  return "pass";
 }
 
+static bool IsSpzPath(const std::filesystem::path& path) {
+  return path.has_extension() && path.extension() == ".spz";
+}
 
-static int HandleCompatCheckCommand(int argc, char** argv) {
-  if (argc < 3) {
-    PrintUsage();
-    return 2;
+static std::vector<std::string> ParseManifestSpzPaths(const std::string& manifest_path,
+                                                      std::string* err) {
+  std::ifstream in(manifest_path);
+  if (!in.good()) {
+    *err = "failed to read manifest";
+    return {};
   }
+  std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 
-  const std::string path = argv[2];
-  bool json = false;
-  for (int i = 3; i < argc; ++i) {
-    const std::string flag = argv[i];
-    if (flag == "--json") {
-      json = true;
-    } else {
-      PrintUsage();
-      return 2;
+  std::vector<std::string> out;
+  std::set<std::string> seen;
+  std::string current;
+  bool in_string = false;
+  bool escape = false;
+  const auto base_dir = std::filesystem::path(manifest_path).parent_path();
+
+  const auto append_if_spz = [&](const std::string& token) {
+    if (token.size() < 4 || token.substr(token.size() - 4) != ".spz") {
+      return;
     }
+    std::filesystem::path p(token);
+    if (p.is_relative()) {
+      p = base_dir / p;
+    }
+    std::error_code ec;
+    const auto normalized_path = std::filesystem::weakly_canonical(p, ec);
+    const std::string normalized = (ec ? p : normalized_path).string();
+
+    if (seen.insert(normalized).second) {
+      out.push_back(normalized);
+    }
+  };
+
+  for (char ch : text) {
+    if (!in_string) {
+      if (ch == '"') {
+        in_string = true;
+        current.clear();
+        escape = false;
+      }
+      continue;
+    }
+
+    if (escape) {
+      current.push_back(ch);
+      escape = false;
+      continue;
+    }
+    if (ch == '\\') {
+      escape = true;
+      continue;
+    }
+    if (ch == '"') {
+      in_string = false;
+      append_if_spz(current);
+      continue;
+    }
+    current.push_back(ch);
   }
 
+  if (out.empty()) {
+    *err = "manifest does not contain any .spz path";
+  }
+  return out;
+}
+
+static bool RunCompatAuditForPath(const std::string& path, CompatAuditOutcome* out, std::string* err) {
   std::vector<std::uint8_t> bytes;
   if (!ReadAllBytes(path, &bytes)) {
-    std::cerr << "failed to read: " << path << "\n";
-    return 2;
+    *err = "failed to read: " + path;
+    return false;
   }
 
+  const auto started = std::chrono::steady_clock::now();
   spz_gatekeeper::SpzInspectOptions strict_options;
   strict_options.strict = true;
   const auto strict_report = spz_gatekeeper::InspectSpzBlob(bytes, strict_options, path);
@@ -711,13 +761,211 @@ static int HandleCompatCheckCommand(int argc, char** argv) {
   spz_gatekeeper::SpzInspectOptions non_strict_options;
   non_strict_options.strict = false;
   const auto non_strict_report = spz_gatekeeper::InspectSpzBlob(bytes, non_strict_options, path);
+  const auto ended = std::chrono::steady_clock::now();
+  const double elapsed_ms = std::chrono::duration<double, std::milli>(ended - started).count();
 
-  const bool strict_ok = !strict_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_report);
-  const bool non_strict_ok = !non_strict_report.HasErrors();
-  PrintCompatCheck(path, strict_report, non_strict_report, json);
+  spz_gatekeeper::CompatAuditMetrics metrics;
+  metrics.file_size_bytes = static_cast<std::uint64_t>(bytes.size());
+  metrics.has_file_size_bytes = true;
+  metrics.process_time_ms = elapsed_ms;
+  metrics.has_process_time_ms = true;
 
-  return (strict_ok && non_strict_ok) ? 0 : 1;
+  bool strict_ok = false;
+  bool non_strict_ok = false;
+  const std::string verdict = ResolveCompatVerdict(strict_report, non_strict_report, &strict_ok, &non_strict_ok);
+
+  out->path = path;
+  out->json = spz_gatekeeper::BuildCompatCheckAuditJson(path, strict_report, non_strict_report, &metrics);
+  out->verdict = verdict;
+  out->strict_ok = strict_ok;
+  out->non_strict_ok = non_strict_ok;
+  out->issue_codes.clear();
+  for (const auto& issue : strict_report.issues) {
+    out->issue_codes.push_back(issue.code);
+  }
+  for (const auto& issue : non_strict_report.issues) {
+    out->issue_codes.push_back(issue.code);
+  }
+  return true;
 }
+
+static void PrintCompatCheckSingle(const CompatAuditOutcome& outcome, bool json) {
+  if (json) {
+    std::cout << outcome.json << "\n";
+    return;
+  }
+  std::cout << "asset=\"" << outcome.path << "\"\n";
+  std::cout << "verdict=" << outcome.verdict << "\n";
+  std::cout << "strict_ok=" << (outcome.strict_ok ? "true" : "false") << "\n";
+  std::cout << "non_strict_ok=" << (outcome.non_strict_ok ? "true" : "false") << "\n";
+}
+
+static void PrintCompatCheckBatch(const std::vector<CompatAuditOutcome>& outcomes, bool json) {
+  std::size_t pass_count = 0;
+  std::size_t review_count = 0;
+  std::size_t block_count = 0;
+  std::map<std::string, std::size_t> issue_count_by_code;
+
+  for (const auto& outcome : outcomes) {
+    if (outcome.verdict == "pass") {
+      ++pass_count;
+    } else if (outcome.verdict == "review_required") {
+      ++review_count;
+    } else {
+      ++block_count;
+    }
+    for (const auto& code : outcome.issue_codes) {
+      issue_count_by_code[code] += 1;
+    }
+  }
+
+  std::vector<std::pair<std::string, std::size_t>> top_issues(issue_count_by_code.begin(),
+                                                              issue_count_by_code.end());
+  std::sort(top_issues.begin(), top_issues.end(), [](const auto& lhs, const auto& rhs) {
+    if (lhs.second != rhs.second) {
+      return lhs.second > rhs.second;
+    }
+    return lhs.first < rhs.first;
+  });
+
+  if (json) {
+    std::ostringstream oss;
+    oss << "{";
+    oss << "\"audit_profile\":\"" << spz_gatekeeper::kAuditProfileSpz << "\"";
+    oss << ",\"audit_mode\":\"" << spz_gatekeeper::kAuditModeLocalCliSpzArtifactAudit << "\"";
+    oss << ",\"summary\":{";
+    oss << "\"total\":" << outcomes.size();
+    oss << ",\"pass\":" << pass_count;
+    oss << ",\"review_required\":" << review_count;
+    oss << ",\"block\":" << block_count;
+    oss << "}";
+    oss << ",\"top_issues\":[";
+    for (std::size_t i = 0; i < top_issues.size(); ++i) {
+      if (i) {
+        oss << ",";
+      }
+      oss << "{";
+      oss << "\"code\":\"" << spz_gatekeeper::JsonEscape(top_issues[i].first) << "\"";
+      oss << ",\"count\":" << top_issues[i].second;
+      oss << "}";
+    }
+    oss << "]";
+    oss << ",\"items\":[";
+    for (std::size_t i = 0; i < outcomes.size(); ++i) {
+      if (i) {
+        oss << ",";
+      }
+      oss << outcomes[i].json;
+    }
+    oss << "]";
+    oss << "}";
+    std::cout << oss.str() << "\n";
+    return;
+  }
+
+  std::cout << "total=" << outcomes.size() << " pass=" << pass_count << " review_required="
+            << review_count << " block=" << block_count << "\n";
+}
+
+static int HandleCompatCheckCommand(int argc, char** argv) {
+  if (argc < 3) {
+    PrintUsage();
+    return 2;
+  }
+
+  bool json = false;
+  std::string single_path;
+  std::string dir_path;
+  std::string manifest_path;
+
+  for (int i = 2; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--json") {
+      json = true;
+      continue;
+    }
+    if (arg == "--dir" && i + 1 < argc) {
+      dir_path = argv[++i];
+      continue;
+    }
+    if (arg == "--manifest" && i + 1 < argc) {
+      manifest_path = argv[++i];
+      continue;
+    }
+    if (!arg.empty() && arg[0] == '-') {
+      PrintUsage();
+      return 2;
+    }
+    if (!single_path.empty()) {
+      PrintUsage();
+      return 2;
+    }
+    single_path = arg;
+  }
+
+  int mode_count = 0;
+  mode_count += single_path.empty() ? 0 : 1;
+  mode_count += dir_path.empty() ? 0 : 1;
+  mode_count += manifest_path.empty() ? 0 : 1;
+  if (mode_count != 1) {
+    PrintUsage();
+    return 2;
+  }
+
+  std::vector<std::string> targets;
+  if (!single_path.empty()) {
+    targets.push_back(single_path);
+  } else if (!dir_path.empty()) {
+    const std::filesystem::path root(dir_path);
+    if (!std::filesystem::exists(root) || !std::filesystem::is_directory(root)) {
+      std::cerr << "invalid directory: " << dir_path << "\n";
+      return 2;
+    }
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
+      if (entry.is_regular_file() && IsSpzPath(entry.path())) {
+        targets.push_back(entry.path().string());
+      }
+    }
+    std::sort(targets.begin(), targets.end());
+  } else {
+    std::string parse_err;
+    targets = ParseManifestSpzPaths(manifest_path, &parse_err);
+    if (!parse_err.empty() && targets.empty()) {
+      std::cerr << parse_err << "\n";
+      return 2;
+    }
+  }
+
+  if (targets.empty()) {
+    std::cerr << "no .spz targets found\n";
+    return 2;
+  }
+
+  std::vector<CompatAuditOutcome> outcomes;
+  outcomes.reserve(targets.size());
+  bool all_pass = true;
+  for (const auto& target : targets) {
+    CompatAuditOutcome outcome;
+    std::string run_err;
+    if (!RunCompatAuditForPath(target, &outcome, &run_err)) {
+      std::cerr << run_err << "\n";
+      return 2;
+    }
+    if (outcome.verdict != "pass") {
+      all_pass = false;
+    }
+    outcomes.push_back(std::move(outcome));
+  }
+
+  if (outcomes.size() == 1 && !single_path.empty()) {
+    PrintCompatCheckSingle(outcomes.front(), json);
+  } else {
+    PrintCompatCheckBatch(outcomes, json);
+  }
+
+  return all_pass ? 0 : 1;
+}
+
 
 static int HandleCompatBoardCommand(int argc, char** argv) {
   bool json = false;
@@ -752,6 +1000,9 @@ static void PrintUsage() {
   std::cerr << "  spz_gatekeeper registry list [--json]\n";
   std::cerr << "  spz_gatekeeper registry show <type> [--json]\n";
   std::cerr << "  spz_gatekeeper compat-check <file.spz> [--json]\n";
+  std::cerr << "  spz_gatekeeper compat-check --dir <dir> [--json]\n";
+  std::cerr << "  spz_gatekeeper compat-check --manifest <manifest.json> [--json]\n";
+
   std::cerr << "  spz_gatekeeper compat-board [--json]\n";
   std::cerr << "  spz_gatekeeper gen-fixture --type <u32> [--mode valid|invalid-size] --out <file.spz>\n";
   std::cerr << "  spz_gatekeeper guide [--json]\n";
@@ -782,6 +1033,9 @@ static void PrintUsage() {
   std::cerr << "  spz_gatekeeper registry --json\n";
   std::cerr << "  spz_gatekeeper registry show 0xADBE0002 --json\n";
   std::cerr << "  spz_gatekeeper compat-check model.spz --json\n";
+  std::cerr << "  spz_gatekeeper compat-check --dir ./fixtures --json\n";
+  std::cerr << "  spz_gatekeeper compat-check --manifest ./fixtures/manifest.json --json\n";
+
   std::cerr << "  spz_gatekeeper compat-board --json\n";
   std::cerr << "  spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --out fixture.spz\n";
   std::cerr << "  spz_gatekeeper guide\n";
