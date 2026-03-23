@@ -258,8 +258,11 @@ TEST(test_compat_check_manifest_mode_outputs_batch_summary) {
 
   const auto manifest_path = workdir.path() / "manifest.json";
   std::ofstream manifest(manifest_path);
-  manifest << "{\"files\":[\"" << pass_path.string() << "\",\"" << block_path.string() << "\"]}";
+  const auto pass_name = pass_path.filename().generic_string();
+  const auto block_name = block_path.filename().generic_string();
+  manifest << "{\"files\":[\"" << pass_name << "\",\"" << block_name << "\"]}";
   manifest.close();
+
 
   const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check --manifest \"" + manifest_path.string() + "\" --json");
   ASSERT_TRUE(result.exit_code == 1);
