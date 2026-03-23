@@ -35,7 +35,13 @@ emscripten::val ParseJsonObject(const std::string& json) {
   return emscripten::val::global("JSON").call<emscripten::val>("parse", json);
 }
 
+std::string StringifyJsonValue(const emscripten::val& value) {
+  return emscripten::val::global("JSON").call<emscripten::val>("stringify", value)
+      .as<std::string>();
+}
+
 std::vector<std::uint8_t> ToBytes(const emscripten::val& input) {
+
   emscripten::val uint8_array = emscripten::val::global("Uint8Array").new_(input);
   const std::size_t size = uint8_array["length"].as<std::size_t>();
   if (size > kMaxSpzBytes) {
@@ -412,7 +418,39 @@ emscripten::val inspectCompatSummary(const emscripten::val& spz_buffer) {
       spz_gatekeeper::BuildCompatCheckAuditJson("<wasm>", strict_report, non_strict_report));
 }
 
+emscripten::val buildBrowserAuditReport(const emscripten::val& payload) {
+  const emscripten::val summary = payload["summary"];
+
+  spz_gatekeeper::BrowserWasmAuditReport report;
+  report.bundle_id = payload["bundle_id"].as<std::string>();
+  report.verdict = payload["verdict"].as<std::string>();
+  report.next_action = payload["next_action"].as<std::string>();
+  report.audit_duration_ms = payload["audit_duration_ms"].as<double>();
+  report.summary.bundle_name = summary["bundle_name"].as<std::string>();
+  report.summary.file_count = static_cast<std::uint64_t>(summary["file_count"].as<double>());
+  report.summary.issue_count = static_cast<std::uint64_t>(summary["issue_count"].as<double>());
+  report.summary.declared_export_count =
+      static_cast<std::uint64_t>(summary["declared_export_count"].as<double>());
+  report.summary.loader_export_count =
+      static_cast<std::uint64_t>(summary["loader_export_count"].as<double>());
+  report.summary.wasm_export_count =
+      static_cast<std::uint64_t>(summary["wasm_export_count"].as<double>());
+  report.summary.valid_tiny_passed = summary["valid_tiny_passed"].as<bool>();
+  report.summary.invalid_tiny_handled = summary["invalid_tiny_handled"].as<bool>();
+  report.summary.runtime_available = summary["runtime_available"].as<bool>();
+  report.manifest_summary_json = StringifyJsonValue(payload["manifest_summary"]);
+  report.budgets_json = StringifyJsonValue(payload["budgets"]);
+  report.issues_json = StringifyJsonValue(payload["issues"]);
+  report.bundle_entries_json = StringifyJsonValue(payload["bundle_entries"]);
+  report.wasm_export_summary_json = StringifyJsonValue(payload["wasm_export_summary"]);
+  report.empty_shell_risk = payload["empty_shell_risk"].as<bool>();
+  report.memory_budget_wired = payload["memory_budget_wired"].as<bool>();
+  report.performance_budget_wired = payload["performance_budget_wired"].as<bool>();
+  return ParseJsonObject(spz_gatekeeper::BuildBrowserWasmAuditJson(report));
+}
+
 emscripten::val listRegisteredExtensions() {
+
   return ParseJsonObject(BuildRegistryListJson());
 }
 
@@ -439,8 +477,10 @@ EMSCRIPTEN_BINDINGS(spz_gatekeeper_module) {
   emscripten::function("dumpTrailer", &dumpTrailer);
   emscripten::function("inspectSpzText", &inspectSpzText);
   emscripten::function("inspectCompatSummary", &inspectCompatSummary);
+  emscripten::function("buildBrowserAuditReport", &buildBrowserAuditReport);
 
   emscripten::function("listRegisteredExtensions", &listRegisteredExtensions);
+
   emscripten::function("describeExtension", &describeExtension);
   emscripten::function("getCompatibilityBoard", &getCompatibilityBoard);
 }

@@ -186,7 +186,7 @@ jobs:
             fi
             sleep 1
           done
-          node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-wasm/site/synthetic_valid.spz | tee wasm-smoke.log
+          node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-wasm/site/synthetic_valid.spz build-native/spz_gatekeeper | tee wasm-smoke.log
 
       - name: Upload WASM smoke logs on failure
         if: failure()

@@ -1037,14 +1037,13 @@ static void PrintUsage() {
 
   std::cerr << "  spz_gatekeeper --help\n\n";
   std::cerr << "Commands:\n";
-  std::cerr << "  check-spz     Validate SPZ file (L2 validation)\n";
+  std::cerr << "  check-spz     Validate one SPZ file (L2 validation)\n";
   std::cerr << "  dump-trailer  Show trailer TLV records\n";
   std::cerr << "  registry      List registered extensions or inspect one entry\n";
-  std::cerr << "  compat-check  Run strict/non-strict compatibility summary\n";
+  std::cerr << "  compat-check  Run local_cli_spz_artifact_audit for real .spz assets\n";
   std::cerr << "  compat-board  Show compatibility maturity board for registered extensions\n";
   std::cerr << "  gen-fixture   Generate a minimal SPZ fixture with one TLV record\n";
   std::cerr << "  guide         Show vendor extension development guide\n";
-
 
   std::cerr << "  --self-test   Run built-in self-tests\n";
   std::cerr << "  --help        Show this help message\n\n";
@@ -1053,6 +1052,14 @@ static void PrintUsage() {
   std::cerr << "  --strict      Strict mode: warnings become errors\n";
   std::cerr << "  --no-strict   Normal mode: warnings are non-fatal\n";
   std::cerr << "  --json        Output in JSON format\n\n";
+
+  std::cerr << "Task 5 contract:\n";
+  std::cerr << "  browser_lightweight_wasm_audit only gates a standard zip audit bundle in the browser.\n";
+  std::cerr << "  local_cli_spz_artifact_audit audits the real .spz artifact, directory, or manifest locally.\n";
+  std::cerr << "  browser_to_cli_handoff is optional, only merged into compat-check --json output.\n";
+  std::cerr << "  final verdict still comes from the local CLI artifact audit.\n";
+  std::cerr << "  spz_gatekeeper does not audit GLB or spz2glb.\n\n";
+
   std::cerr << "Examples:\n";
   std::cerr << "  spz_gatekeeper check-spz model.spz\n";
   std::cerr << "  spz_gatekeeper dump-trailer extended.spz --json\n";

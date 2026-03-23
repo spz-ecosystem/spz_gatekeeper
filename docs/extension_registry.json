@@ -1,4 +1,24 @@
 {
+  "audit_contract": {
+    "audit_profile": "spz",
+    "browser_audit_mode": "browser_lightweight_wasm_audit",
+    "cli_audit_mode": "local_cli_spz_artifact_audit",
+    "optional_handoff": "browser_to_cli_handoff",
+    "scope": {
+      "audits_spz": true,
+      "audits_glb": false,
+      "audits_spz2glb": false,
+      "browser_input": "standard_zip_audit_bundle",
+      "cli_input": "real_spz_artifact"
+    },
+    "user_flow": [
+      "upload_zip_bundle_in_browser",
+      "optional_export_browser_to_cli_handoff",
+      "run_cli_compat_check_on_real_spz",
+      "optional_merge_handoff_into_json_report",
+      "cli_verdict_is_final"
+    ]
+  },
   "registry": {
     "count": 1,
     "extensions": [
@@ -47,7 +67,6 @@
           "release_ready": false
         }
       }
-
     ]
   }
 }

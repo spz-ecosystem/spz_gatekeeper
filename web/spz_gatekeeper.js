@@ -258,7 +258,47 @@ function createRuntimeStatus(runtime) {
   };
 }
 
+function buildLegacyBrowserAuditReport(data) {
+  return {
+    audit_profile: kAuditProfile,
+    audit_mode: kBrowserAuditMode,
+    bundle_id: data.bundle_id,
+    tool_version: kAuditToolVersion,
+    verdict: data.verdict,
+    summary: data.summary,
+    budgets: data.budgets,
+    issues: data.issues,
+    next_action: data.next_action,
+    manifest_summary: data.manifest_summary,
+    bundle_entries: data.bundle_entries,
+    wasm_export_summary: data.wasm_export_summary,
+    wasm_quality_gate: {
+      coverage_level: 'browser_lightweight',
+      validator_coverage_ok: true,
+      empty_shell_risk: data.empty_shell_risk,
+      api_surface_wired: true,
+      browser_smoke_wired: true,
+      empty_shell_guard_wired: true,
+      warning_budget_wired: true,
+      copy_budget_wired: false,
+      memory_budget_wired: data.memory_budget_wired,
+      performance_budget_wired: data.performance_budget_wired,
+      artifact_audit_wired: false,
+      release_ready: data.verdict === 'pass',
+    },
+    audit_duration_ms: data.audit_duration_ms,
+  };
+}
+
+function buildBrowserAuditReport(data, runtime) {
+  if (runtime && typeof runtime.buildBrowserAuditReport === 'function') {
+    return runtime.buildBrowserAuditReport(data);
+  }
+  return buildLegacyBrowserAuditReport(data);
+}
+
 function buildBrowserToCliHandoff(report) {
+
   return {
     audit_profile: report.audit_profile,
     audit_mode: report.audit_mode,
@@ -512,14 +552,10 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
     runtime_available: runtime !== null,
   };
 
-  return {
-    audit_profile: kAuditProfile,
-    audit_mode: kBrowserAuditMode,
+  return buildBrowserAuditReport({
     bundle_id: bundleId,
-    tool_version: kAuditToolVersion,
     verdict,
     summary,
-
     budgets,
     issues,
     next_action: resolveNextAction(verdict),
@@ -531,23 +567,15 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
       uncompressed_size: entry.uncompressedSize,
     })),
     wasm_export_summary: wasmExports,
-    wasm_quality_gate: {
-      coverage_level: 'browser_lightweight',
-      validator_coverage_ok: true,
-      empty_shell_risk: issues.some((issue) => issue.code === 'BUNDLE_EMPTY_SHELL_RISK'),
-      api_surface_wired: true,
-      browser_smoke_wired: true,
-      empty_shell_guard_wired: true,
-      warning_budget_wired: true,
-      copy_budget_wired: false,
-      memory_budget_wired: budgets.peak_memory_mb.status !== 'not_collected',
-      performance_budget_wired: budgets.cold_start_ms.status !== 'not_collected' || budgets.tiny_case_ms.status !== 'not_collected',
-      artifact_audit_wired: false,
-      release_ready: verdict === 'pass',
-    },
+    empty_shell_risk: issues.some((issue) => issue.code === 'BUNDLE_EMPTY_SHELL_RISK'),
+    memory_budget_wired: budgets.peak_memory_mb.status !== 'not_collected',
+    performance_budget_wired:
+      budgets.cold_start_ms.status !== 'not_collected' ||
+      budgets.tiny_case_ms.status !== 'not_collected',
     audit_duration_ms: nowMs() - auditStartedAt,
-  };
+  }, runtime);
 }
+
 
 function createUnavailableMethod(method) {
   return () => {
@@ -561,8 +589,10 @@ export default async function createSpzGatekeeperModule() {
 
   return {
     auditWasmBundle: (input, fileName) => auditWasmBundle(input, fileName, runtime),
+    buildBrowserAuditReport: runtime?.buildBrowserAuditReport?.bind(runtime),
     buildBrowserToCliHandoff,
     getRuntimeStatus: () => runtimeStatus,
+
     inspectSpz: runtime?.inspectSpz?.bind(runtime) ?? createUnavailableMethod('inspectSpz'),
     dumpTrailer: runtime?.dumpTrailer?.bind(runtime) ?? createUnavailableMethod('dumpTrailer'),
     inspectSpzText: runtime?.inspectSpzText?.bind(runtime) ?? createUnavailableMethod('inspectSpzText'),

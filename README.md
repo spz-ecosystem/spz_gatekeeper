@@ -210,10 +210,19 @@ spz_gatekeeper --self-test
   - `docs/plans/2026-03-20-spz-extension-registry-implementation-plan.md`
 
 ## WASM quality audit modes
-The Web/WASM side is no longer just "build + smoke" in documentation. The current contract distinguishes two local audit modes:
+The Web/WASM side now exposes one stable dual-mode contract:
 
 - `browser_lightweight_wasm_audit`: browser-only gate for a standard zip audit bundle
 - `local_cli_spz_artifact_audit`: local CLI audit for real `.spz` outputs, directories, or manifests
+- `browser_to_cli_handoff`: optional JSON handoff exported by the browser and merged by CLI JSON output
+
+### Fixed boundaries
+- `spz_gatekeeper` audits `SPZ` only.
+- It does not audit `GLB`.
+- It does not audit `spz2glb`.
+- The browser only gates one standard zip audit bundle.
+- The CLI is the only stage that audits the real `.spz` artifact.
+- Final release decisions still come from `local_cli_spz_artifact_audit`.
 
 ### Browser-side audit bundle
 The browser mode expects one standard audit bundle:
@@ -233,7 +242,7 @@ Minimum expectations:
 - `tiny_fixtures/`: optional micro-fixtures for lightweight smoke only
 
 ### Shared verdict schema
-Both modes are being aligned around the same top-level summary fields:
+Both modes align on the same top-level summary fields:
 - `audit_profile`
 - `audit_mode`
 - `verdict`
@@ -247,13 +256,28 @@ Verdict semantics stay intentionally simple:
 - `review_required`: runnable, but with visible engineering risk that should be reviewed
 - `block`: package structure, correctness, or budget problems stop further rollout
 
+### Recommended local user flow
+1. Upload one standard `.zip` audit bundle in the browser.
+2. If the browser gate passes or is reviewable, export the optional `browser_to_cli_handoff`.
+3. Run `compat-check` locally against the real `.spz` artifact.
+4. If a handoff exists, merge it into the CLI JSON report with `--handoff`.
+5. Treat the CLI verdict as the final decision.
+
+### CLI examples
+```bash
+spz_gatekeeper compat-check model.spz --json
+spz_gatekeeper compat-check model.spz --handoff browser_audit.json --json
+spz_gatekeeper compat-check --dir ./fixtures --json
+spz_gatekeeper compat-check --manifest ./fixtures/manifest.json --json
+```
+
 ### Current `wasm_quality_gate` status
 `docs/extension_registry.json` currently exposes a baseline `wasm_quality_gate` snapshot:
 - already wired: `validator_coverage_ok`, `api_surface_wired`, `browser_smoke_wired`, `empty_shell_guard_wired`
 - not fully wired yet: `warning_budget_wired`, `copy_budget_wired`, `memory_budget_wired`, `performance_budget_wired`, `artifact_audit_wired`
 - current release posture: `release_ready=false`
 
-Because both browser and CLI run on the user's local machine, the project already has a local dual-end workflow by default. A browser-to-CLI `handoff` is optional standardization, not a backend service.
+Because both browser and CLI run on the user's local machine, the project already has a local dual-end workflow by default. `browser_to_cli_handoff` is optional standardization, not a backend service, and it never replaces the real CLI artifact audit.
 
 Further reading:
 - `docs/plans/2026-03-22-spz-gatekeeper-wasm-audit-modes-design.md`
@@ -380,7 +404,6 @@ spz_gatekeeper/
 
 ## Related projects
 - [nianticlabs/spz](https://github.com/nianticlabs/spz) - upstream SPZ library
-- [spz2glb](https://github.com/spz-ecosystem/spz2glb) - SPZ to GLB conversion toolchain
 - [KHR_gaussian_splatting](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_gaussian_splatting) - Khronos extension spec
 
 ## License

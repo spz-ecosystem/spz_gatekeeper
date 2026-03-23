@@ -210,10 +210,19 @@ spz_gatekeeper --self-test
   - `docs/plans/2026-03-20-spz-extension-registry-implementation-plan.md`
 
 ## WASM 质量审查模式
-Web/WASM 侧现在不再只是“构建 + smoke”口径，当前自述文档同步为两种本地审查模式：
+Web/WASM 侧现在统一为一套稳定的双模式契约：
 
 - `browser_lightweight_wasm_audit`：浏览器端轻量门禁，输入为标准 zip 审查包
 - `local_cli_spz_artifact_audit`：本地 CLI 深审，输入为真实 `.spz` 产物、目录或 manifest
+- `browser_to_cli_handoff`：浏览器可选导出的 JSON handoff，仅在 CLI 的 JSON 输出中并入证据链
+
+### 固定边界
+- `spz_gatekeeper` 只审 `SPZ`。
+- 不审 `GLB`。
+- 不审 `spz2glb`。
+- 浏览器端只审一个标准 zip 审查包。
+- 只有 CLI 阶段才审真实 `.spz` 成品。
+- 最终发布结论仍以 `local_cli_spz_artifact_audit` 为准。
 
 ### 浏览器端审查包结构
 浏览器端固定接收一个标准审查包：
@@ -233,7 +242,7 @@ Web/WASM 侧现在不再只是“构建 + smoke”口径，当前自述文档同
 - `tiny_fixtures/`：可选微型样本，仅用于轻量 smoke
 
 ### 统一审查摘要字段
-两种模式会逐步对齐到同一套顶层字段：
+两种模式对齐到同一套顶层字段：
 - `audit_profile`
 - `audit_mode`
 - `verdict`
@@ -247,13 +256,28 @@ Web/WASM 侧现在不再只是“构建 + smoke”口径，当前自述文档同
 - `review_required`：可运行，但存在明显工程风险，需要人工复核
 - `block`：包结构、正确性或预算存在阻断问题，不应继续推进
 
+### 推荐本地用户流
+1. 先在浏览器上传标准 `.zip` 审查包。
+2. 若浏览器轻审通过或可复核，则导出可选的 `browser_to_cli_handoff`。
+3. 在本地对真实 `.spz` 运行 `compat-check`。
+4. 若已有 handoff，则通过 `--handoff` 并入 CLI JSON 报告。
+5. 以 CLI 最终结论为准。
+
+### CLI 示例
+```bash
+spz_gatekeeper compat-check model.spz --json
+spz_gatekeeper compat-check model.spz --handoff browser_audit.json --json
+spz_gatekeeper compat-check --dir ./fixtures --json
+spz_gatekeeper compat-check --manifest ./fixtures/manifest.json --json
+```
+
 ### 当前 `wasm_quality_gate` 状态
 `docs/extension_registry.json` 已暴露基线版 `wasm_quality_gate` 快照：
 - 已接线：`validator_coverage_ok`、`api_surface_wired`、`browser_smoke_wired`、`empty_shell_guard_wired`
 - 尚未完整接线：`warning_budget_wired`、`copy_budget_wired`、`memory_budget_wired`、`performance_budget_wired`、`artifact_audit_wired`
 - 当前发布状态：`release_ready=false`
 
-由于浏览器端和 CLI 端都运行在用户本地，所以项目默认就具备“本地双端协同”。浏览器到 CLI 的 `handoff` 只是一个可选的标准化能力，不是后台服务。
+由于浏览器端和 CLI 端都运行在用户本地，所以项目默认就具备“本地双端协同”。`browser_to_cli_handoff` 只是一个可选的标准化能力，不是后台服务，也不能替代真实 CLI 成品审查。
 
 延伸阅读：
 - `docs/plans/2026-03-22-spz-gatekeeper-wasm-audit-modes-design.md`
@@ -380,7 +404,6 @@ spz_gatekeeper/
 
 ## 相关项目
 - [nianticlabs/spz](https://github.com/nianticlabs/spz) - 上游 SPZ 库
-- [spz2glb](https://github.com/spz-ecosystem/spz2glb) - SPZ 到 GLB 的工具链
 - [KHR_gaussian_splatting](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_gaussian_splatting) - Khronos 扩展规范
 
 ## 许可证

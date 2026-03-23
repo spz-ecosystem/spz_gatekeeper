@@ -1,6 +1,13 @@
-import { readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
 
 import { chromium } from '@playwright/test';
+
+const execFileAsync = promisify(execFile);
+
 
 
 function getBaseUrl() {
@@ -9,7 +16,16 @@ function getBaseUrl() {
   return argUrl || envUrl || 'http://127.0.0.1:4173';
 }
 
+function getArtifactPath() {
+  return process.argv[3] || process.env.SPZ_WASM_SMOKE_ARTIFACT || '';
+}
+
+function getCliBinaryPath() {
+  return process.argv[4] || process.env.SPZ_WASM_SMOKE_CLI || 'build-native/spz_gatekeeper';
+}
+
 function createRuntimeWasmBytes() {
+
   return Buffer.from([
     0x00, 0x61, 0x73, 0x6d,
     0x01, 0x00, 0x00, 0x00,
@@ -198,9 +214,48 @@ async function uploadBundleAndAssert(page, { name, buffer, expectedBadge, expect
   }
 }
 
+async function evaluateBundleAudit(page, buffer, fileName) {
+  return page.evaluate(async ({ bytes, name }) => {
+    const moduleFactory = (await import('./spz_gatekeeper.js')).default;
+    const wasm = await moduleFactory();
+    const bundle = new Uint8Array(bytes);
+    const report = await wasm.auditWasmBundle(bundle, name);
+    return {
+      hasSharedBuilder: typeof wasm.buildBrowserAuditReport === 'function',
+      report,
+      handoff: wasm.buildBrowserToCliHandoff(report),
+    };
+  }, { bytes: Array.from(buffer), name: fileName });
+}
+
+async function runCliRoundTrip(cliBinaryPath, artifactPath, handoff) {
+  if (!artifactPath) {
+    throw new Error('缺少 CLI roundtrip 所需的 .spz artifact 路径');
+  }
+
+  const tempDir = await mkdtemp(join(tmpdir(), 'spz-wasm-smoke-'));
+  const handoffPath = join(tempDir, 'browser_handoff.json');
+  try {
+    await writeFile(handoffPath, JSON.stringify(handoff, null, 2), 'utf8');
+    const { stdout } = await execFileAsync(cliBinaryPath, [
+      'compat-check',
+      artifactPath,
+      '--handoff',
+      handoffPath,
+      '--json',
+    ]);
+    return stdout;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 async function runSmoke() {
   const baseUrl = getBaseUrl();
+  const artifactPath = getArtifactPath();
+  const cliBinaryPath = getCliBinaryPath();
   const wrapperUrl = new URL('spz_gatekeeper.js', baseUrl).toString();
+
 
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
@@ -220,6 +275,26 @@ async function runSmoke() {
     }, { timeout: 15000 });
 
     const validBundle = createBundleBuffer();
+    const validAudit = await evaluateBundleAudit(page, validBundle, 'valid_bundle.zip');
+    if (!validAudit.hasSharedBuilder) {
+      throw new Error('WASM runtime 未导出共享 browser schema builder');
+    }
+    if (validAudit.report.audit_profile !== 'spz') {
+      throw new Error('browser report audit_profile 不正确');
+    }
+    if (validAudit.report.audit_mode !== 'browser_lightweight_wasm_audit') {
+      throw new Error('browser report audit_mode 不正确');
+    }
+    if (!validAudit.report.summary || validAudit.report.summary.bundle_name !== 'valid_bundle.zip') {
+      throw new Error('browser report summary.bundle_name 不正确');
+    }
+    if (!validAudit.report.budgets || !validAudit.report.budgets.cold_start_ms) {
+      throw new Error('browser report budgets 缺少 cold_start_ms');
+    }
+    if (!Array.isArray(validAudit.report.issues)) {
+      throw new Error('browser report issues 不是数组');
+    }
+
     await uploadBundleAndAssert(page, {
       name: 'valid_bundle.zip',
       buffer: validBundle,
@@ -227,6 +302,7 @@ async function runSmoke() {
     });
 
     const downloadPromise = page.waitForEvent('download');
+
     await page.click('#exportHandoffButton');
     const handoffDownload = await downloadPromise;
     const handoffPath = await handoffDownload.path();
@@ -247,7 +323,22 @@ async function runSmoke() {
       throw new Error('handoff next_action 不正确');
     }
 
+    const cliRoundTripJson = await runCliRoundTrip(cliBinaryPath, artifactPath, validAudit.handoff);
+    if (!cliRoundTripJson.includes('"audit_mode":"local_cli_spz_artifact_audit"')) {
+      throw new Error('CLI roundtrip 缺少 local_cli_spz_artifact_audit');
+    }
+    if (!cliRoundTripJson.includes('"upstream_audit":{')) {
+      throw new Error('CLI roundtrip 缺少 upstream_audit');
+    }
+    if (!cliRoundTripJson.includes('"evidence_chain":["browser_lightweight_wasm_audit","local_cli_spz_artifact_audit"]')) {
+      throw new Error('CLI roundtrip evidence_chain 不正确');
+    }
+    if (!cliRoundTripJson.includes('"final_verdict":"pass"')) {
+      throw new Error('CLI roundtrip final_verdict 不正确');
+    }
+
     const missingManifestBundle = createBundleBuffer({ includeManifest: false });
+
 
     await uploadBundleAndAssert(page, {
       name: 'missing_manifest_bundle.zip',

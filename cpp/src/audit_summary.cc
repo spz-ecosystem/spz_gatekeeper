@@ -200,7 +200,33 @@ std::string BuildBudgetItemJson(bool has_declared,
   return oss.str();
 }
 
+std::string NormalizeJsonFragment(const std::string& json, const char* fallback) {
+  return json.empty() ? std::string(fallback) : json;
+}
+
+std::string BuildBrowserWasmQualityGateJson(const BrowserWasmAuditReport& report) {
+  const bool release_ready = report.verdict == "pass";
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"coverage_level\":\"browser_lightweight\"";
+  oss << ",\"validator_coverage_ok\":true";
+  oss << ",\"empty_shell_risk\":" << (report.empty_shell_risk ? "true" : "false");
+  oss << ",\"api_surface_wired\":true";
+  oss << ",\"browser_smoke_wired\":true";
+  oss << ",\"empty_shell_guard_wired\":true";
+  oss << ",\"warning_budget_wired\":true";
+  oss << ",\"copy_budget_wired\":false";
+  oss << ",\"memory_budget_wired\":" << (report.memory_budget_wired ? "true" : "false");
+  oss << ",\"performance_budget_wired\":"
+      << (report.performance_budget_wired ? "true" : "false");
+  oss << ",\"artifact_audit_wired\":false";
+  oss << ",\"release_ready\":" << (release_ready ? "true" : "false");
+  oss << "}";
+  return oss.str();
+}
+
 std::string BuildArtifactSummaryJson(const GateReport& non_strict_report,
+
                                      const CompatAuditMetrics* metrics) {
   std::ostringstream oss;
   oss << "{";
@@ -474,10 +500,48 @@ bool ParseBrowserAuditHandoffJson(const std::string& json_text,
   return true;
 }
 
+std::string BuildBrowserWasmAuditJson(const BrowserWasmAuditReport& report) {
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"audit_profile\":\"" << kAuditProfileSpz << "\"";
+  oss << ",\"audit_mode\":\"" << kAuditModeBrowserLightweightWasmAudit << "\"";
+  oss << ",\"bundle_id\":\"" << JsonEscape(report.bundle_id) << "\"";
+  oss << ",\"tool_version\":\"" << kAuditToolVersion << "\"";
+  oss << ",\"verdict\":\"" << JsonEscape(report.verdict) << "\"";
+  oss << ",\"summary\":{";
+  oss << "\"bundle_name\":\"" << JsonEscape(report.summary.bundle_name) << "\"";
+  oss << ",\"file_count\":" << report.summary.file_count;
+  oss << ",\"issue_count\":" << report.summary.issue_count;
+  oss << ",\"declared_export_count\":" << report.summary.declared_export_count;
+  oss << ",\"loader_export_count\":" << report.summary.loader_export_count;
+  oss << ",\"wasm_export_count\":" << report.summary.wasm_export_count;
+  oss << ",\"valid_tiny_passed\":"
+      << (report.summary.valid_tiny_passed ? "true" : "false");
+  oss << ",\"invalid_tiny_handled\":"
+      << (report.summary.invalid_tiny_handled ? "true" : "false");
+  oss << ",\"runtime_available\":"
+      << (report.summary.runtime_available ? "true" : "false");
+  oss << "}";
+  oss << ",\"budgets\":" << NormalizeJsonFragment(report.budgets_json, "{}");
+  oss << ",\"issues\":" << NormalizeJsonFragment(report.issues_json, "[]");
+  oss << ",\"next_action\":\"" << JsonEscape(report.next_action) << "\"";
+  oss << ",\"manifest_summary\":"
+      << NormalizeJsonFragment(report.manifest_summary_json, "{}");
+  oss << ",\"bundle_entries\":"
+      << NormalizeJsonFragment(report.bundle_entries_json, "[]");
+  oss << ",\"wasm_export_summary\":"
+      << NormalizeJsonFragment(report.wasm_export_summary_json, "[]");
+  oss << ",\"wasm_quality_gate\":" << BuildBrowserWasmQualityGateJson(report);
+  oss << ",\"audit_duration_ms\":" << report.audit_duration_ms;
+  oss << "}";
+  return oss.str();
+}
+
 std::string BuildCompatCheckAuditJson(const std::string& path,
                                       const GateReport& strict_report,
                                       const GateReport& non_strict_report,
                                       const CompatAuditMetrics* metrics) {
+
 
   bool strict_ok = false;
   bool non_strict_ok = false;

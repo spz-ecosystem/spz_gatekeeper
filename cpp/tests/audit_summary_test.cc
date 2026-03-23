@@ -51,6 +51,46 @@ TEST(test_audit_summary_freezes_public_mode_constants) {
               "local_cli_spz_artifact_audit");
 }
 
+TEST(test_build_browser_wasm_audit_json_reports_pass_schema) {
+  spz_gatekeeper::BrowserWasmAuditReport report;
+  report.bundle_id = "sha256:test-bundle";
+  report.verdict = "pass";
+  report.next_action = "allow_local_cli_audit";
+  report.audit_duration_ms = 12.5;
+  report.summary.bundle_name = "bundle.zip";
+  report.summary.file_count = 5;
+  report.summary.issue_count = 0;
+  report.summary.declared_export_count = 3;
+  report.summary.loader_export_count = 3;
+  report.summary.wasm_export_count = 1;
+  report.summary.valid_tiny_passed = true;
+  report.summary.invalid_tiny_handled = true;
+  report.summary.runtime_available = true;
+  report.manifest_summary_json = "{\"profile\":\"spz\"}";
+  report.budgets_json = "{\"cold_start_ms\":{\"status\":\"within_budget\"}}";
+  report.issues_json = "[]";
+  report.bundle_entries_json = "[]";
+  report.wasm_export_summary_json = "[{\"name\":\"coreCheck\",\"kind\":\"function\"}]";
+  report.empty_shell_risk = false;
+  report.memory_budget_wired = true;
+  report.performance_budget_wired = true;
+
+  const std::string json = spz_gatekeeper::BuildBrowserWasmAuditJson(report);
+  ASSERT_TRUE(json.find("\"audit_profile\":\"spz\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"audit_mode\":\"browser_lightweight_wasm_audit\"") !=
+              std::string::npos);
+  ASSERT_TRUE(json.find("\"bundle_id\":\"sha256:test-bundle\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"summary\":{") != std::string::npos);
+  ASSERT_TRUE(json.find("\"manifest_summary\":{\"profile\":\"spz\"}") !=
+              std::string::npos);
+  ASSERT_TRUE(json.find("\"bundle_entries\":[]") != std::string::npos);
+  ASSERT_TRUE(json.find("\"wasm_quality_gate\":{") != std::string::npos);
+  ASSERT_TRUE(json.find("\"warning_budget_wired\":true") != std::string::npos);
+  ASSERT_TRUE(json.find("\"memory_budget_wired\":true") != std::string::npos);
+  ASSERT_TRUE(json.find("\"performance_budget_wired\":true") != std::string::npos);
+  ASSERT_TRUE(json.find("\"release_ready\":true") != std::string::npos);
+}
+
 TEST(test_build_compat_check_audit_json_reports_pass_schema) {
   spz_gatekeeper::GateReport strict_report;
   strict_report.asset_path = "fixture_valid.spz";
@@ -138,9 +178,11 @@ int main() {
   std::cout << std::endl;
 
   RUN_TEST(test_audit_summary_freezes_public_mode_constants);
+  RUN_TEST(test_build_browser_wasm_audit_json_reports_pass_schema);
   RUN_TEST(test_build_compat_check_audit_json_reports_pass_schema);
   RUN_TEST(test_build_compat_check_audit_json_reports_review_required_for_unknown_extension);
   RUN_TEST(test_parse_browser_handoff_and_merge_into_compat_audit_json);
+
 
 
   std::cout << std::endl;

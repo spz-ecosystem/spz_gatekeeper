@@ -300,8 +300,18 @@ TEST(test_compat_check_merges_browser_handoff_without_skipping_artifact_audit) {
   ASSERT_TRUE(result.output.find("\"evidence_chain\":[\"browser_lightweight_wasm_audit\",\"local_cli_spz_artifact_audit\"]") != std::string::npos);
 }
 
+TEST(test_help_describes_task5_boundaries_and_handoff_contract) {
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " --help");
+  ASSERT_TRUE(result.exit_code == 0);
+  ASSERT_TRUE(result.output.find("local_cli_spz_artifact_audit") != std::string::npos);
+  ASSERT_TRUE(result.output.find("browser_to_cli_handoff") != std::string::npos);
+  ASSERT_TRUE(result.output.find("does not audit GLB or spz2glb") != std::string::npos);
+  ASSERT_TRUE(result.output.find("final verdict still comes from the local CLI artifact audit") != std::string::npos);
+}
+
 
 }  // namespace
+
 
 
 int main() {
@@ -313,10 +323,10 @@ int main() {
   RUN_TEST(test_compat_check_dir_mode_outputs_batch_summary);
   RUN_TEST(test_compat_check_manifest_mode_outputs_batch_summary);
   RUN_TEST(test_compat_check_merges_browser_handoff_without_skipping_artifact_audit);
-
-
+  RUN_TEST(test_help_describes_task5_boundaries_and_handoff_contract);
 
   std::cout << std::endl;
+
   std::cout << "=== Test Summary ===" << std::endl;
   std::cout << "Tests run: " << g_tests_run << std::endl;
   std::cout << "Tests passed: " << g_tests_passed << std::endl;

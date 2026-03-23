@@ -54,14 +54,44 @@ struct BrowserAuditHandoff {
   std::string tool_version;
 };
 
+struct BrowserWasmAuditSummary {
+  std::string bundle_name;
+  std::uint64_t file_count = 0;
+  std::uint64_t issue_count = 0;
+  std::uint64_t declared_export_count = 0;
+  std::uint64_t loader_export_count = 0;
+  std::uint64_t wasm_export_count = 0;
+  bool valid_tiny_passed = false;
+  bool invalid_tiny_handled = false;
+  bool runtime_available = false;
+};
+
+struct BrowserWasmAuditReport {
+  std::string bundle_id;
+  std::string verdict;
+  std::string next_action;
+  double audit_duration_ms = 0.0;
+  BrowserWasmAuditSummary summary;
+  std::string manifest_summary_json = "{}";
+  std::string budgets_json = "{}";
+  std::string issues_json = "[]";
+  std::string bundle_entries_json = "[]";
+  std::string wasm_export_summary_json = "[]";
+  bool empty_shell_risk = false;
+  bool memory_budget_wired = false;
+  bool performance_budget_wired = false;
+};
+
 bool ParseBrowserAuditHandoffJson(const std::string& json_text,
                                   BrowserAuditHandoff* handoff,
                                   std::string* err);
+std::string BuildBrowserWasmAuditJson(const BrowserWasmAuditReport& report);
 
 std::string BuildCompatCheckAuditJson(const std::string& path,
                                       const GateReport& strict_report,
                                       const GateReport& non_strict_report,
                                       const CompatAuditMetrics* metrics = nullptr);
+
 std::string BuildCompatCheckAuditWithHandoffJson(const std::string& compat_json,
                                                  const std::string& artifact_verdict,
                                                  const BrowserAuditHandoff& handoff);

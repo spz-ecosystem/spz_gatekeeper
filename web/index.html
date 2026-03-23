@@ -465,7 +465,7 @@
           </svg>
         </div>
         <div class="upload-main-text">点击或拖拽标准 WASM 审查包 `.zip` 至此</div>
-        <div class="upload-sub-text">浏览器端只做 `browser_lightweight_wasm_audit`：校验 bundle 结构、manifest/loader 导出一致性、tiny fixture 与轻量预算，不直接审查真实 `.spz` 成品。</div>
+        <div class="upload-sub-text">浏览器端只做 `browser_lightweight_wasm_audit`：只审标准 zip 审查包，不审 `GLB`、不审 `spz2glb`，也不直接替代真实 `.spz` 成品的本地 CLI 深审。</div>
         <div class="loading-status" id="loadingStatus">
           <div class="loading-spinner"></div>
           <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -507,7 +507,8 @@
       <div class="panel-grid">
         <section class="panel">
           <h2>Bundle Audit Result</h2>
-          <div class="panel-subtitle">上传后这里会展示审查包 verdict、结构化 issues、manifest 摘要以及轻量预算状态。若轻审完成，可导出可选的 `browser_to_cli_handoff` JSON，供本地 CLI 附带浏览器证据链。</div>
+          <div class="panel-subtitle">上传后这里会展示审查包 verdict、结构化 issues、manifest 摘要以及轻量预算状态。若轻审完成，可导出可选的 `browser_to_cli_handoff` JSON，供本地 CLI 附带浏览器证据链；最终结论仍以 `local_cli_spz_artifact_audit` 为准。</div>
+
 
           <div id="resultEmpty" class="empty-state">等待轻审引擎就绪后上传标准 `.zip` 审查包。</div>
           <div id="resultContent" class="hidden">
@@ -517,7 +518,8 @@
                 <div class="summary-meta" id="summaryMeta"></div>
               </div>
               <div class="summary-actions">
-                <button type="button" class="action-button hidden" id="exportHandoffButton">导出 handoff</button>
+                <button type="button" class="action-button hidden" id="exportHandoffButton">导出 browser_to_cli_handoff</button>
+
                 <span class="badge pass" id="summaryBadge">PASS</span>
               </div>
             </div>
@@ -745,7 +747,8 @@
       registryCountBadge.textContent = runtimeStatus.available ? 'WASM+JS' : 'JS ONLY';
       setStackList(registryList, [
         `<div class="stack-item"><div class="stack-item-title">WASM Gate: ${escapeHtml(runtimeStatus.mode)}</div><div class="stack-item-body"><strong>Runtime Available:</strong> ${escapeHtml(String(runtimeStatus.available))}<br><strong>Engine:</strong> ${escapeHtml(runtimeStatus.runtime_engine)}</div></div>`,
-        '<div class="stack-item"><div class="stack-item-title">Policy</div><div class="stack-item-body">浏览器端只做标准 zip 审查包轻量门禁；真实 `.spz` 成品仍需进入本地 CLI 深审。</div></div>'
+        '<div class="stack-item"><div class="stack-item-title">Policy</div><div class="stack-item-body">浏览器端只做标准 zip 审查包轻量门禁，不审 `GLB`、不审 `spz2glb`；真实 `.spz` 成品仍需进入本地 CLI 深审，最终以 CLI 结论为准。</div></div>'
+
       ]);
       registryEmpty.classList.add('hidden');
       registryContent.classList.remove('hidden');
