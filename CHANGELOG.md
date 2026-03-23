@@ -2,6 +2,21 @@
 
 本文件仅记录当前主线的重要变更，不保留已废弃路线的细节。
 
+## [v1.1.2] - 2026-03-23
+
+### WASM 双模式落地
+- 浏览器侧稳定开放 `browser_lightweight_wasm_audit`，用于标准 zip 审查包的轻量门禁。
+- CLI 侧 `compat-check` 支持单文件、`--dir`、`--manifest` 三种入口，统一到 `local_cli_spz_artifact_audit` 结论口径。
+- 支持 `--handoff` 合并浏览器导出的 `browser_to_cli_handoff`，在 JSON 报告中保留上游证据链。
+
+### 共享报告契约
+- Browser/CLI 对齐共享报告字段与结论语义（`pass` / `review_required` / `block`）。
+- 浏览器 JS 优先走 wasm 导出的共享 C++ builder，保留 legacy fallback 作为兼容路径。
+
+### CI 与回归
+- CI 增加 browser smoke 与本地 CLI 回归串联，确保浏览器轻审到 CLI 深审链路可复现。
+- 默认继续使用仓库内合成 fixture，不将真实 `.spz` 资产作为发布门禁输入。
+
 ## [v1.1.0] - 2026-03-21
 
 ### 新增能力

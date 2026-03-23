@@ -107,6 +107,11 @@ node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-pages/site/synthetic_
 
 策略说明：CI/Web smoke 默认只依赖合成 fixture；真实本地样例仅可选，不作为发布门禁必需输入。
 
+### v1.1.2 WASM 审查模式状态
+- Web UI 已启用浏览器门禁 `browser_lightweight_wasm_audit`。
+- 浏览器报告可导出 `browser_to_cli_handoff`，并在 CLI `compat-check --handoff ... --json` 中并入证据链。
+- 最终发布结论仍以本地 CLI 成品审查（`local_cli_spz_artifact_audit`）为准。
+
 ## 快速开始
 
 ### 在 WSL/Linux/macOS 构建
