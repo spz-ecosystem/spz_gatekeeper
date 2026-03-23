@@ -1,4 +1,7 @@
+import { readFile } from 'node:fs/promises';
+
 import { chromium } from '@playwright/test';
+
 
 function getBaseUrl() {
   const argUrl = process.argv[2];
@@ -223,7 +226,29 @@ async function runSmoke() {
       expectedBadge: 'PASS',
     });
 
+    const downloadPromise = page.waitForEvent('download');
+    await page.click('#exportHandoffButton');
+    const handoffDownload = await downloadPromise;
+    const handoffPath = await handoffDownload.path();
+    if (!handoffPath) {
+      throw new Error('handoff 下载文件路径为空');
+    }
+    const handoffText = await readFile(handoffPath, 'utf8');
+    if (!handoffText.includes('"audit_mode": "browser_lightweight_wasm_audit"')) {
+      throw new Error('handoff 缺少 browser audit mode');
+    }
+    if (!handoffText.includes('"bundle_id": "sha256:')) {
+      throw new Error('handoff 缺少 bundle_id');
+    }
+    if (!handoffText.includes('"tool_version": "1.0.0"')) {
+      throw new Error('handoff 缺少 tool_version');
+    }
+    if (!handoffText.includes('"next_action": "allow_local_cli_audit"')) {
+      throw new Error('handoff next_action 不正确');
+    }
+
     const missingManifestBundle = createBundleBuffer({ includeManifest: false });
+
     await uploadBundleAndAssert(page, {
       name: 'missing_manifest_bundle.zip',
       buffer: missingManifestBundle,

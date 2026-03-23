@@ -101,6 +101,36 @@ TEST(test_build_compat_check_audit_json_reports_review_required_for_unknown_exte
 
 }
 
+TEST(test_parse_browser_handoff_and_merge_into_compat_audit_json) {
+  spz_gatekeeper::GateReport strict_report;
+  strict_report.asset_path = "fixture_valid.spz";
+  strict_report.extension_reports.push_back(MakeKnownExtension());
+
+  spz_gatekeeper::GateReport non_strict_report = strict_report;
+  const std::string compat_json =
+      spz_gatekeeper::BuildCompatCheckAuditJson("fixture_valid.spz", strict_report, non_strict_report);
+
+  const std::string handoff_json =
+      "{\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\"," 
+      "\"bundle_id\":\"sha256:test-bundle\",\"tool_version\":\"1.0.0\"," 
+      "\"verdict\":\"review_required\",\"summary\":{},\"budgets\":{},\"issues\":[],"
+      "\"next_action\":\"review_bundle_before_cli\"}";
+
+  spz_gatekeeper::BrowserAuditHandoff handoff;
+  std::string err;
+  ASSERT_TRUE(spz_gatekeeper::ParseBrowserAuditHandoffJson(handoff_json, &handoff, &err));
+
+  const std::string merged =
+      spz_gatekeeper::BuildCompatCheckAuditWithHandoffJson(compat_json, "pass", handoff);
+  ASSERT_TRUE(merged.find("\"handoff\":{") != std::string::npos);
+  ASSERT_TRUE(merged.find("\"upstream_audit\":{") != std::string::npos);
+  ASSERT_TRUE(merged.find("\"bundle_id\":\"sha256:test-bundle\"") != std::string::npos);
+  ASSERT_TRUE(merged.find("\"tool_version\":\"1.0.0\"") != std::string::npos);
+  ASSERT_TRUE(merged.find("\"evidence_chain\":[\"browser_lightweight_wasm_audit\",\"local_cli_spz_artifact_audit\"]") != std::string::npos);
+  ASSERT_TRUE(merged.find("\"final_verdict\":\"pass\"") != std::string::npos);
+}
+
+
 }  // namespace
 
 int main() {
@@ -110,6 +140,8 @@ int main() {
   RUN_TEST(test_audit_summary_freezes_public_mode_constants);
   RUN_TEST(test_build_compat_check_audit_json_reports_pass_schema);
   RUN_TEST(test_build_compat_check_audit_json_reports_review_required_for_unknown_extension);
+  RUN_TEST(test_parse_browser_handoff_and_merge_into_compat_audit_json);
+
 
   std::cout << std::endl;
   std::cout << "=== Test Summary ===" << std::endl;

@@ -273,6 +273,34 @@ TEST(test_compat_check_manifest_mode_outputs_batch_summary) {
   ASSERT_TRUE(result.output.find("\"top_issues\":[") != std::string::npos);
 }
 
+TEST(test_compat_check_merges_browser_handoff_without_skipping_artifact_audit) {
+  TempDirGuard workdir(MakeTempDirPath("compat_check_handoff_mode"));
+  const auto trailer = spz_gatekeeper_test::CreateTrailer(
+      {{0xADBE0002u, spz_gatekeeper_test::CreateAdobeSafeOrbitPayload()}});
+
+  const auto input_path = workdir.path() / "artifact_pass.spz";
+  WriteBinaryFile(input_path,
+                  spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &trailer));
+
+  const auto handoff_path = workdir.path() / "browser_handoff.json";
+  std::ofstream handoff(handoff_path);
+  handoff << "{\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\"," 
+             "\"bundle_id\":\"sha256:test-bundle\",\"tool_version\":\"1.0.0\"," 
+             "\"verdict\":\"block\",\"summary\":{},\"budgets\":{},\"issues\":[],"
+             "\"next_action\":\"block_bundle\"}";
+  handoff.close();
+
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check \"" + input_path.string() + "\" --handoff \"" + handoff_path.string() + "\" --json");
+  ASSERT_TRUE(result.exit_code == 0);
+  ASSERT_TRUE(result.output.find("\"verdict\":\"pass\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"handoff\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"upstream_audit\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"bundle_id\":\"sha256:test-bundle\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"final_verdict\":\"pass\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"evidence_chain\":[\"browser_lightweight_wasm_audit\",\"local_cli_spz_artifact_audit\"]") != std::string::npos);
+}
+
+
 }  // namespace
 
 
@@ -284,6 +312,8 @@ int main() {
   RUN_TEST(test_compat_check_surfaces_unknown_extension_issue_summary);
   RUN_TEST(test_compat_check_dir_mode_outputs_batch_summary);
   RUN_TEST(test_compat_check_manifest_mode_outputs_batch_summary);
+  RUN_TEST(test_compat_check_merges_browser_handoff_without_skipping_artifact_audit);
+
 
 
   std::cout << std::endl;

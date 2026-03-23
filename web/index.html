@@ -287,7 +287,37 @@
       gap: 6px;
     }
 
+    .summary-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .action-button {
+      border: 1px solid rgba(102, 102, 255, 0.22);
+      background: rgba(102, 102, 255, 0.08);
+      color: var(--brand-purple);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .action-button:hover {
+      background: rgba(102, 102, 255, 0.14);
+    }
+
+    .action-button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
     .summary-title {
+
       font-size: 15px;
       font-weight: 600;
     }
@@ -477,7 +507,8 @@
       <div class="panel-grid">
         <section class="panel">
           <h2>Bundle Audit Result</h2>
-          <div class="panel-subtitle">上传后这里会展示审查包 verdict、结构化 issues、manifest 摘要以及轻量预算状态。</div>
+          <div class="panel-subtitle">上传后这里会展示审查包 verdict、结构化 issues、manifest 摘要以及轻量预算状态。若轻审完成，可导出可选的 `browser_to_cli_handoff` JSON，供本地 CLI 附带浏览器证据链。</div>
+
           <div id="resultEmpty" class="empty-state">等待轻审引擎就绪后上传标准 `.zip` 审查包。</div>
           <div id="resultContent" class="hidden">
             <div class="summary-card">
@@ -485,8 +516,12 @@
                 <div class="summary-title" id="summaryTitle">等待文件</div>
                 <div class="summary-meta" id="summaryMeta"></div>
               </div>
-              <span class="badge pass" id="summaryBadge">PASS</span>
+              <div class="summary-actions">
+                <button type="button" class="action-button hidden" id="exportHandoffButton">导出 handoff</button>
+                <span class="badge pass" id="summaryBadge">PASS</span>
+              </div>
             </div>
+
             <div class="stack-list" id="issuesList"></div>
             <div class="stack-list" id="extensionsList"></div>
             <div class="stack-list" id="trailerList"></div>
@@ -526,7 +561,9 @@
     const summaryTitle = document.getElementById('summaryTitle');
     const summaryMeta = document.getElementById('summaryMeta');
     const summaryBadge = document.getElementById('summaryBadge');
+    const exportHandoffButton = document.getElementById('exportHandoffButton');
     const issuesList = document.getElementById('issuesList');
+
     const extensionsList = document.getElementById('extensionsList');
     const trailerList = document.getElementById('trailerList');
     const registryEmpty = document.getElementById('registryEmpty');
@@ -536,8 +573,11 @@
     const registryList = document.getElementById('registryList');
 
     let wasmModule = null;
+    let lastAuditReport = null;
+    let lastAuditFileName = 'bundle.zip';
 
     async function withTimeout(promise, ms, timeoutMessage) {
+
       let timer = null;
       try {
         return await Promise.race([
@@ -583,7 +623,32 @@
         : '<div class="empty-state">当前无可展示数据。</div>';
     }
 
+    function sanitizeDownloadName(fileName) {
+      return String(fileName || 'bundle')
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-zA-Z0-9._-]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'bundle';
+    }
+
+    function setHandoffButtonState(enabled) {
+      exportHandoffButton.disabled = !enabled;
+      exportHandoffButton.classList.toggle('hidden', !enabled);
+    }
+
+    function downloadJsonFile(content, fileName) {
+      const blob = new Blob([JSON.stringify(content, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
     function formatVerdict(report) {
+
       const verdict = String(report?.verdict || 'block').toLowerCase();
       if (verdict === 'pass') {
         return { state: 'pass', label: 'PASS' };
@@ -654,10 +719,13 @@
           <div class="stack-item-title">Next Action</div>
           <div class="stack-item-body">
             <strong>Next:</strong> ${escapeHtml(report.next_action || 'n/a')}<br>
+            <strong>Bundle ID:</strong> ${escapeHtml(report.bundle_id || 'n/a')}<br>
+            <strong>Tool Version:</strong> ${escapeHtml(report.tool_version || 'n/a')}<br>
             <strong>Duration:</strong> ${escapeHtml(String(report.audit_duration_ms?.toFixed?.(2) ?? report.audit_duration_ms ?? 'n/a'))} ms
           </div>
         </div>
       `;
+
       setStackList(trailerList, [actionCard, ...budgetItems]);
     }
 
@@ -693,6 +761,9 @@
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
         const report = await wasmModule.auditWasmBundle(bytes, file.name);
+        lastAuditReport = report;
+        lastAuditFileName = file.name;
+        setHandoffButtonState(typeof wasmModule.buildBrowserToCliHandoff === 'function');
         renderSummary(file, report);
         renderIssues(report);
         renderManifest(report);
@@ -700,12 +771,16 @@
         resultEmpty.classList.add('hidden');
         resultContent.classList.remove('hidden');
         setEngineStatus('ready', `WASM 引擎就绪 · 最近审查 ${file.name}`);
+
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        lastAuditReport = null;
+        setHandoffButtonState(false);
         setEngineStatus('error', `审查失败：${message}`);
         resultEmpty.classList.add('hidden');
         resultContent.classList.remove('hidden');
         const fallback = {
+
           verdict: 'block',
           next_action: 'block_bundle',
           summary: { file_count: 0, issue_count: 1 },
@@ -760,7 +835,16 @@
       dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'));
     });
 
+    exportHandoffButton.addEventListener('click', () => {
+      if (!lastAuditReport || !wasmModule || typeof wasmModule.buildBrowserToCliHandoff !== 'function') {
+        return;
+      }
+      const handoff = wasmModule.buildBrowserToCliHandoff(lastAuditReport);
+      downloadJsonFile(handoff, `${sanitizeDownloadName(lastAuditFileName)}.browser_audit.json`);
+    });
+
     dropZone.addEventListener('click', () => fileInput.click());
+
     fileInput.addEventListener('change', event => {
       const file = event.target.files?.[0];
       if (file) {
@@ -774,7 +858,9 @@
       }
     });
 
+    setHandoffButtonState(false);
     initializeWasm();
+
   </script>
 </body>
 </html>

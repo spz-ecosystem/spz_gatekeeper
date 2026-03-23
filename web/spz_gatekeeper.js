@@ -1,5 +1,7 @@
 const kAuditProfile = 'spz';
+const kAuditToolVersion = '1.0.0';
 const kBrowserAuditMode = 'browser_lightweight_wasm_audit';
+
 const kSupportedZipCompressionStored = 0;
 const kSupportedZipCompressionDeflate = 8;
 const kLocalFileHeaderSignature = 0x04034b50;
@@ -216,7 +218,17 @@ function currentMemoryMb() {
   return performance.memory.usedJSHeapSize / (1024 * 1024);
 }
 
+async function buildBundleId(bytes) {
+  if (!globalThis.crypto || !globalThis.crypto.subtle || typeof globalThis.crypto.subtle.digest !== 'function') {
+    return 'sha256:unavailable';
+  }
+  const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', toUint8Array(bytes));
+  const hashHex = Array.from(new Uint8Array(hashBuffer), (value) => value.toString(16).padStart(2, '0')).join('');
+  return `sha256:${hashHex}`;
+}
+
 async function importLoaderModule(sourceText) {
+
   const blob = new Blob([sourceText], { type: 'text/javascript' });
   const url = URL.createObjectURL(blob);
   try {
@@ -246,11 +258,28 @@ function createRuntimeStatus(runtime) {
   };
 }
 
+function buildBrowserToCliHandoff(report) {
+  return {
+    audit_profile: report.audit_profile,
+    audit_mode: report.audit_mode,
+    bundle_id: report.bundle_id,
+    tool_version: report.tool_version,
+    verdict: report.verdict,
+    summary: report.summary || {},
+    budgets: report.budgets || {},
+    issues: report.issues || [],
+    next_action: report.next_action,
+  };
+}
+
 async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
+
   const issues = [];
   const auditStartedAt = nowMs();
   const bundleBytes = toUint8Array(input);
+  const bundleId = await buildBundleId(bundleBytes);
   let manifest = null;
+
   let entries = new Map();
   let loaderModule = null;
   let wasmExports = [];
@@ -486,8 +515,11 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
   return {
     audit_profile: kAuditProfile,
     audit_mode: kBrowserAuditMode,
+    bundle_id: bundleId,
+    tool_version: kAuditToolVersion,
     verdict,
     summary,
+
     budgets,
     issues,
     next_action: resolveNextAction(verdict),
@@ -529,6 +561,7 @@ export default async function createSpzGatekeeperModule() {
 
   return {
     auditWasmBundle: (input, fileName) => auditWasmBundle(input, fileName, runtime),
+    buildBrowserToCliHandoff,
     getRuntimeStatus: () => runtimeStatus,
     inspectSpz: runtime?.inspectSpz?.bind(runtime) ?? createUnavailableMethod('inspectSpz'),
     dumpTrailer: runtime?.dumpTrailer?.bind(runtime) ?? createUnavailableMethod('dumpTrailer'),

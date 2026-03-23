@@ -6,10 +6,12 @@
 #include "spz_gatekeeper/extension_spec_registry.h"
 #include "spz_gatekeeper/json_min.h"
 
+#include <cctype>
 #include <set>
 #include <sstream>
 #include <string>
 #include <vector>
+
 
 namespace spz_gatekeeper {
 namespace {
@@ -70,28 +72,103 @@ std::string BuildIssueListJson(const std::vector<Issue>& issues) {
   return oss.str();
 }
 
-std::string ResolveCompatVerdict(bool strict_ok,
-                                 bool non_strict_ok,
-                                 bool validator_coverage_ok,
-                                 bool empty_shell_risk) {
-  if (!non_strict_ok) {
-    return "block";
-  }
-  if (!strict_ok || !validator_coverage_ok || empty_shell_risk) {
-    return "review_required";
-  }
-  return "pass";
+bool IsSupportedAuditVerdict(const std::string& verdict) {
+  return verdict == "pass" || verdict == "review_required" || verdict == "block";
 }
 
-std::string ResolveCompatNextAction(const std::string& verdict) {
-  if (verdict == "pass") {
-    return "artifact_ready";
+std::string TrimAsciiWhitespace(const std::string& text) {
+  std::size_t start = 0;
+  while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start])) != 0) {
+    ++start;
   }
-  if (verdict == "review_required") {
-    return "review_artifact";
+
+  std::size_t end = text.size();
+  while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1])) != 0) {
+    --end;
   }
-  return "block_artifact";
+  return text.substr(start, end - start);
 }
+
+bool ExtractJsonStringField(const std::string& json_text,
+                            const std::string& field,
+                            std::string* value,
+                            std::string* err) {
+  const std::string key = "\"" + field + "\"";
+  const std::size_t key_pos = json_text.find(key);
+  if (key_pos == std::string::npos) {
+    if (err != nullptr) {
+      *err = "missing field: " + field;
+    }
+    return false;
+  }
+
+  const std::size_t colon_pos = json_text.find(':', key_pos + key.size());
+  if (colon_pos == std::string::npos) {
+    if (err != nullptr) {
+      *err = "invalid field separator: " + field;
+    }
+    return false;
+  }
+
+  std::size_t quote_pos = json_text.find('"', colon_pos + 1);
+  if (quote_pos == std::string::npos) {
+    if (err != nullptr) {
+      *err = "missing string value: " + field;
+    }
+    return false;
+  }
+
+  std::string parsed;
+  bool escape = false;
+  for (std::size_t i = quote_pos + 1; i < json_text.size(); ++i) {
+    const char ch = json_text[i];
+    if (escape) {
+      switch (ch) {
+        case '"':
+        case '\\':
+        case '/':
+          parsed.push_back(ch);
+          break;
+        case 'b':
+          parsed.push_back('\b');
+          break;
+        case 'f':
+          parsed.push_back('\f');
+          break;
+        case 'n':
+          parsed.push_back('\n');
+          break;
+        case 'r':
+          parsed.push_back('\r');
+          break;
+        case 't':
+          parsed.push_back('\t');
+          break;
+        default:
+          parsed.push_back(ch);
+          break;
+      }
+      escape = false;
+      continue;
+    }
+
+    if (ch == '\\') {
+      escape = true;
+      continue;
+    }
+    if (ch == '"') {
+      *value = parsed;
+      return true;
+    }
+    parsed.push_back(ch);
+  }
+
+  if (err != nullptr) {
+    *err = "unterminated string field: " + field;
+  }
+  return false;
+}
+
 
 std::string BuildBudgetItemJson(bool has_declared,
                                 double declared,
@@ -206,7 +283,42 @@ bool HasWarnings(const GateReport& report) {
   return false;
 }
 
+std::string ResolveCompatVerdict(const GateReport& strict_report,
+                                 const GateReport& non_strict_report,
+                                 bool* strict_ok,
+                                 bool* non_strict_ok) {
+  const bool strict_pass = !strict_report.HasErrors() && !HasWarnings(strict_report);
+  const bool non_strict_pass = !non_strict_report.HasErrors();
+  if (strict_ok != nullptr) {
+    *strict_ok = strict_pass;
+  }
+  if (non_strict_ok != nullptr) {
+    *non_strict_ok = non_strict_pass;
+  }
+
+  const bool validator_coverage_ok = HasValidatorCoverage(non_strict_report);
+  const bool empty_shell_risk = HasEmptyShellRisk(non_strict_report);
+  if (!non_strict_pass) {
+    return "block";
+  }
+  if (!strict_pass || !validator_coverage_ok || empty_shell_risk) {
+    return "review_required";
+  }
+  return "pass";
+}
+
+std::string ResolveCompatNextAction(const std::string& verdict) {
+  if (verdict == "pass") {
+    return "artifact_ready";
+  }
+  if (verdict == "review_required") {
+    return "review_artifact";
+  }
+  return "block_artifact";
+}
+
 bool HasValidatorCoverage(const GateReport& report) {
+
   for (const auto& ext : report.extension_reports) {
     if (!ext.has_validator) {
       return false;
@@ -293,19 +405,89 @@ std::string BuildWasmQualityGateJson(bool validator_coverage_ok, bool empty_shel
   return oss.str();
 }
 
+bool ParseBrowserAuditHandoffJson(const std::string& json_text,
+                                  BrowserAuditHandoff* handoff,
+                                  std::string* err) {
+  if (handoff == nullptr) {
+    if (err != nullptr) {
+      *err = "handoff output is null";
+    }
+    return false;
+  }
+
+  BrowserAuditHandoff parsed;
+  parsed.raw_json = TrimAsciiWhitespace(json_text);
+  if (parsed.raw_json.empty()) {
+    if (err != nullptr) {
+      *err = "handoff json is empty";
+    }
+    return false;
+  }
+  if (parsed.raw_json.front() != '{' || parsed.raw_json.back() != '}') {
+    if (err != nullptr) {
+      *err = "handoff json must be an object";
+    }
+    return false;
+  }
+
+  if (!ExtractJsonStringField(parsed.raw_json, "audit_profile", &parsed.audit_profile, err) ||
+      !ExtractJsonStringField(parsed.raw_json, "audit_mode", &parsed.audit_mode, err) ||
+      !ExtractJsonStringField(parsed.raw_json, "verdict", &parsed.verdict, err) ||
+      !ExtractJsonStringField(parsed.raw_json, "next_action", &parsed.next_action, err) ||
+      !ExtractJsonStringField(parsed.raw_json, "bundle_id", &parsed.bundle_id, err) ||
+      !ExtractJsonStringField(parsed.raw_json, "tool_version", &parsed.tool_version, err)) {
+    return false;
+  }
+
+  if (parsed.audit_profile != kAuditProfileSpz) {
+    if (err != nullptr) {
+      *err = "unsupported handoff audit_profile: " + parsed.audit_profile;
+    }
+    return false;
+  }
+  if (parsed.audit_mode != kAuditModeBrowserLightweightWasmAudit) {
+    if (err != nullptr) {
+      *err = "unsupported handoff audit_mode: " + parsed.audit_mode;
+    }
+    return false;
+  }
+  if (!IsSupportedAuditVerdict(parsed.verdict)) {
+    if (err != nullptr) {
+      *err = "unsupported handoff verdict: " + parsed.verdict;
+    }
+    return false;
+  }
+  if (parsed.bundle_id.empty()) {
+    if (err != nullptr) {
+      *err = "handoff bundle_id is empty";
+    }
+    return false;
+  }
+  if (parsed.tool_version.empty()) {
+    if (err != nullptr) {
+      *err = "handoff tool_version is empty";
+    }
+    return false;
+  }
+
+  *handoff = std::move(parsed);
+  return true;
+}
+
 std::string BuildCompatCheckAuditJson(const std::string& path,
                                       const GateReport& strict_report,
                                       const GateReport& non_strict_report,
                                       const CompatAuditMetrics* metrics) {
 
-  const bool strict_ok = !strict_report.HasErrors() && !HasWarnings(strict_report);
-  const bool non_strict_ok = !non_strict_report.HasErrors();
+  bool strict_ok = false;
+  bool non_strict_ok = false;
   const bool validator_coverage_ok = HasValidatorCoverage(non_strict_report);
   const bool empty_shell_risk = HasEmptyShellRisk(non_strict_report);
   const std::vector<Issue> merged_issues = MergeIssues(strict_report, non_strict_report);
   const std::string verdict = ResolveCompatVerdict(
-      strict_ok, non_strict_ok, validator_coverage_ok, empty_shell_risk);
+      strict_report, non_strict_report, &strict_ok, &non_strict_ok);
   const std::string next_action = ResolveCompatNextAction(verdict);
+
 
   std::ostringstream oss;
   oss << "{";
@@ -339,4 +521,33 @@ std::string BuildCompatCheckAuditJson(const std::string& path,
   return oss.str();
 }
 
+std::string BuildCompatCheckAuditWithHandoffJson(const std::string& compat_json,
+                                                 const std::string& artifact_verdict,
+                                                 const BrowserAuditHandoff& handoff) {
+  const std::string trimmed = TrimAsciiWhitespace(compat_json);
+  if (trimmed.empty() || trimmed.back() != '}') {
+    return compat_json;
+  }
+
+  std::ostringstream oss;
+  oss << trimmed.substr(0, trimmed.size() - 1);
+  oss << ",\"handoff\":" << handoff.raw_json;
+  oss << ",\"upstream_audit\":{";
+  oss << "\"audit_profile\":\"" << JsonEscape(handoff.audit_profile) << "\"";
+  oss << ",\"audit_mode\":\"" << JsonEscape(handoff.audit_mode) << "\"";
+  oss << ",\"verdict\":\"" << JsonEscape(handoff.verdict) << "\"";
+  oss << ",\"next_action\":\"" << JsonEscape(handoff.next_action) << "\"";
+  oss << ",\"bundle_id\":\"" << JsonEscape(handoff.bundle_id) << "\"";
+  oss << ",\"tool_version\":\"" << JsonEscape(handoff.tool_version) << "\"";
+  oss << "}";
+  oss << ",\"evidence_chain\":[";
+  oss << "\"" << kAuditModeBrowserLightweightWasmAudit << "\",";
+  oss << "\"" << kAuditModeLocalCliSpzArtifactAudit << "\"]";
+
+  oss << ",\"final_verdict\":\"" << JsonEscape(artifact_verdict) << "\"";
+  oss << "}";
+  return oss.str();
+}
+
 }  // namespace spz_gatekeeper
+
