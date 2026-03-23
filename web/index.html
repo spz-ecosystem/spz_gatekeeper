@@ -426,7 +426,7 @@
 
     <div class="content-area">
       <div class="upload-card" id="dropZone">
-        <input type="file" id="fileInput" accept=".spz">
+        <input type="file" id="fileInput" accept=".zip,application/zip">
         <div class="upload-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
@@ -434,8 +434,8 @@
             <path d="M9 14h6"/>
           </svg>
         </div>
-        <div class="upload-main-text">点击或拖拽 .spz 文件至此</div>
-        <div class="upload-sub-text">加载真实 WASM 校验引擎后，在浏览器本地展示 Summary、Issues、Extensions 与 Trailer TLV。</div>
+        <div class="upload-main-text">点击或拖拽标准 WASM 审查包 `.zip` 至此</div>
+        <div class="upload-sub-text">浏览器端只做 `browser_lightweight_wasm_audit`：校验 bundle 结构、manifest/loader 导出一致性、tiny fixture 与轻量预算，不直接审查真实 `.spz` 成品。</div>
         <div class="loading-status" id="loadingStatus">
           <div class="loading-spinner"></div>
           <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -445,7 +445,7 @@
             <path d="M18 6 6 18"/>
             <path d="m6 6 12 12"/>
           </svg>
-          <span id="statusText">正在加载 WASM 引擎...</span>
+          <span id="statusText">正在加载浏览器轻审引擎...</span>
         </div>
       </div>
 
@@ -453,32 +453,32 @@
         <div class="feature-card">
           <div class="feature-header">
             <span style="color: var(--success-green); font-size: 20px;">✅</span>
-            <span class="feature-title">真实 L2 校验</span>
+            <span class="feature-title">标准 Bundle 结构校验</span>
           </div>
-          <div class="feature-desc">直接调用 <code>inspectSpz()</code>，展示 header、flags、TLV trailer 与扩展验证结果，而不是占位提示。</div>
+          <div class="feature-desc">检查 `manifest.json`、`loader.mjs`、`module.wasm` 与 `tiny_fixtures/` 是否齐全，先挡住结构损坏或声明不完整的审查包。</div>
         </div>
         <div class="feature-card">
           <div class="feature-header">
             <span style="color: var(--brand-purple); font-size: 20px;">📋</span>
-            <span class="feature-title">扩展登记查看</span>
+            <span class="feature-title">导出与 Loader 协同检查</span>
           </div>
-          <div class="feature-desc">通过 <code>listRegisteredExtensions()</code> 与 <code>describeExtension()</code> 查看当前内置 registry，并对齐 CLI JSON 字段。</div>
+          <div class="feature-desc">对比 `manifest.exports` 与 `loader.mjs` 实际导出，并编译 `module.wasm` 检查空壳风险与最小可执行主路径。</div>
         </div>
         <div class="feature-card">
           <div class="feature-header">
             <span style="color: var(--text-secondary); font-size: 20px;">📈</span>
-            <span class="feature-title">兼容性成熟度</span>
+            <span class="feature-title">Tiny Fixture 与预算门禁</span>
           </div>
-          <div class="feature-desc">展示 Compatibility Board，强调接入成熟度而非算法排名，避免把不同扩展混成排行榜。</div>
+          <div class="feature-desc">执行 valid / invalid tiny fixture，并汇总冷启动、tiny case、内存与 copy 预算状态，输出 `pass / review_required / block`。</div>
         </div>
       </div>
 
 
       <div class="panel-grid">
         <section class="panel">
-          <h2>Validation Result</h2>
-          <div class="panel-subtitle">上传后这里会展示本次校验的 Summary、Issues、Extensions 与 Trailer TLV。</div>
-          <div id="resultEmpty" class="empty-state">等待加载完成后上传 `.spz` 文件进行本地校验。</div>
+          <h2>Bundle Audit Result</h2>
+          <div class="panel-subtitle">上传后这里会展示审查包 verdict、结构化 issues、manifest 摘要以及轻量预算状态。</div>
+          <div id="resultEmpty" class="empty-state">等待轻审引擎就绪后上传标准 `.zip` 审查包。</div>
           <div id="resultContent" class="hidden">
             <div class="summary-card">
               <div class="summary-main">
@@ -494,16 +494,16 @@
         </section>
 
         <section class="panel">
-          <h2>Registry Viewer</h2>
-          <div class="panel-subtitle">WASM 就绪后自动读取已登记扩展，并叠加 Compatibility Board 的成熟度字段。</div>
-          <div id="registryEmpty" class="empty-state">正在等待 WASM 初始化。</div>
+          <h2>Audit Capability</h2>
+          <div class="panel-subtitle">展示当前浏览器轻审模式、运行时接线状态，以及后续是否允许进入本地 CLI 深审。</div>
+          <div id="registryEmpty" class="empty-state">正在等待轻审引擎初始化。</div>
           <div id="registryContent" class="hidden">
             <div class="summary-card">
               <div class="summary-main">
-                <div class="summary-title">已登记扩展</div>
+                <div class="summary-title">当前模式</div>
                 <div class="summary-meta" id="registryMeta"></div>
               </div>
-              <span class="badge pass" id="registryCountBadge">0 项</span>
+              <span class="badge pass" id="registryCountBadge">就绪</span>
             </div>
             <div class="stack-list" id="registryList"></div>
           </div>
@@ -568,13 +568,6 @@
       return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 2)} ${units[index]}`;
     }
 
-    function formatType(type) {
-      const number = Number(type >>> 0);
-      return `0x${number.toString(16).toUpperCase().padStart(8, '0')}`;
-    }
-
-
-
     function escapeHtml(value) {
       return String(value)
         .replaceAll('&', '&amp;')
@@ -590,130 +583,142 @@
         : '<div class="empty-state">当前无可展示数据。</div>';
     }
 
-    function renderIssues(report) {
-      if (report.error) {
-        setStackList(issuesList, [
-          `<div class="stack-item"><div class="stack-item-title">Engine Error</div><div class="stack-item-body">${escapeHtml(report.error)}</div></div>`
-        ]);
-        return;
+    function formatVerdict(report) {
+      const verdict = String(report?.verdict || 'block').toLowerCase();
+      if (verdict === 'pass') {
+        return { state: 'pass', label: 'PASS' };
       }
+      if (verdict === 'review_required') {
+        return { state: 'warning', label: 'REVIEW_REQUIRED' };
+      }
+      return { state: 'error', label: 'BLOCK' };
+    }
 
+    function formatCompressionMethod(method) {
+      if (method === 0) return 'stored';
+      if (method === 8) return 'deflate';
+      return `method=${method}`;
+    }
+
+    function renderIssues(report) {
       const items = (report.issues || []).map(issue => `
         <div class="stack-item">
           <div class="stack-item-title">Issue · ${escapeHtml(issue.code || 'UNKNOWN')}</div>
           <div class="stack-item-meta">Severity: ${escapeHtml(issue.severity || 'note')}</div>
-          <div class="stack-item-body">${escapeHtml(issue.message || '')}${issue.where ? `<br><strong>Where:</strong> ${escapeHtml(issue.where)}` : ''}</div>
+          <div class="stack-item-body">${escapeHtml(issue.message || '')}</div>
         </div>
       `);
       setStackList(issuesList, items.length ? items : [
-        '<div class="stack-item"><div class="stack-item-title">Issues</div><div class="stack-item-body">未发现 error / warning。</div></div>'
+        '<div class="stack-item"><div class="stack-item-title">Issues</div><div class="stack-item-body">当前 bundle 未发现阻断或复核项。</div></div>'
       ]);
     }
 
-    function renderExtensions(report) {
-      const items = (report.extension_reports || []).map(ext => `
+    function renderManifest(report) {
+      const manifest = report.manifest_summary || {};
+      const entryItems = (report.bundle_entries || []).map(entry => `
         <div class="stack-item">
-          <div class="stack-item-title">Extension · ${escapeHtml(ext.extension_name || 'Unknown')}</div>
-          <div class="stack-item-meta">${escapeHtml(formatType(Number(ext.type || 0)))} · status=${escapeHtml(ext.status || 'unknown')} · validator=${escapeHtml(String(Boolean(ext.has_validator)))}</div>
+          <div class="stack-item-title">Bundle Entry · ${escapeHtml(entry.name || 'unknown')}</div>
+          <div class="stack-item-meta">${escapeHtml(formatCompressionMethod(Number(entry.compression_method ?? -1)))} · compressed=${escapeHtml(formatBytes(Number(entry.compressed_size || 0)))} · raw=${escapeHtml(formatBytes(Number(entry.uncompressed_size || 0)))}</div>
+        </div>
+      `);
+      const wasmExports = (report.wasm_export_summary || []).map(item => `${item.name}:${item.kind}`).join(', ');
+      const manifestCard = `
+        <div class="stack-item">
+          <div class="stack-item-title">Manifest Summary</div>
           <div class="stack-item-body">
-            <strong>Vendor:</strong> ${escapeHtml(ext.vendor_name || 'Unknown')}<br>
-            <strong>Known:</strong> ${escapeHtml(String(Boolean(ext.known_extension)))}<br>
-            <strong>Validation:</strong> ${escapeHtml(String(Boolean(ext.validation_result)))}${ext.error_message ? `<br><strong>Error:</strong> ${escapeHtml(ext.error_message)}` : ''}
+            <strong>Profile:</strong> ${escapeHtml(manifest.profile || 'n/a')}<br>
+            <strong>Package Type:</strong> ${escapeHtml(manifest.package_type || 'n/a')}<br>
+            <strong>Entry:</strong> ${escapeHtml(manifest.entry || 'n/a')}<br>
+            <strong>Module:</strong> ${escapeHtml(manifest.module || 'n/a')}<br>
+            <strong>Declared Exports:</strong> ${escapeHtml((manifest.declared_exports || []).join(', ') || 'n/a')}<br>
+            <strong>WASM Exports:</strong> ${escapeHtml(wasmExports || 'n/a')}
+          </div>
+        </div>
+      `;
+      setStackList(extensionsList, [manifestCard, ...entryItems]);
+    }
+
+    function renderBudgets(report) {
+      const budgetItems = Object.entries(report.budgets || {}).map(([name, budget]) => `
+        <div class="stack-item">
+          <div class="stack-item-title">Budget · ${escapeHtml(name)}</div>
+          <div class="stack-item-meta">status=${escapeHtml(budget?.status || 'unknown')} · within_budget=${escapeHtml(String(budget?.within_budget))}</div>
+          <div class="stack-item-body">
+            <strong>Declared:</strong> ${escapeHtml(String(budget?.declared ?? 'n/a'))}<br>
+            <strong>Observed:</strong> ${escapeHtml(String(budget?.observed ?? 'n/a'))}
           </div>
         </div>
       `);
-      setStackList(extensionsList, items.length ? items : [
-        '<div class="stack-item"><div class="stack-item-title">Extensions</div><div class="stack-item-body">当前文件不包含已解析的 TLV 扩展记录。</div></div>'
-      ]);
-    }
-
-    function renderTrailer(report) {
-      const records = report?.spz_l2?.tlv_records || [];
-      const items = records.map(record => `
+      const actionCard = `
         <div class="stack-item">
-          <div class="stack-item-title">TLV · ${escapeHtml(formatType(Number(record.type || 0)))}</div>
-          <div class="stack-item-body"><strong>Length:</strong> ${escapeHtml(String(record.length || 0))} bytes<br><strong>Offset:</strong> ${escapeHtml(String(record.offset || 0))}</div>
+          <div class="stack-item-title">Next Action</div>
+          <div class="stack-item-body">
+            <strong>Next:</strong> ${escapeHtml(report.next_action || 'n/a')}<br>
+            <strong>Duration:</strong> ${escapeHtml(String(report.audit_duration_ms?.toFixed?.(2) ?? report.audit_duration_ms ?? 'n/a'))} ms
+          </div>
         </div>
-      `);
-      setStackList(trailerList, items.length ? items : [
-        '<div class="stack-item"><div class="stack-item-title">Trailer TLV</div><div class="stack-item-body">当前文件没有 trailer TLV 记录。</div></div>'
-      ]);
+      `;
+      setStackList(trailerList, [actionCard, ...budgetItems]);
     }
 
     function renderSummary(file, report) {
-      const issues = report.issues || [];
-      const hasError = Boolean(report.error) || issues.some(issue => issue.severity === 'error') || report.ok === false;
-      const hasWarning = !hasError && issues.some(issue => issue.severity === 'warning');
-      const state = hasError ? 'error' : (hasWarning ? 'warning' : 'pass');
-      const label = hasError ? 'ERROR' : (hasWarning ? 'WARNING' : 'PASS');
-      const extensionCount = (report.extension_reports || []).length;
-      const trailerCount = report?.spz_l2?.tlv_records?.length || 0;
-
+      const verdict = formatVerdict(report);
+      const summary = report.summary || {};
       summaryTitle.textContent = file.name;
-      summaryMeta.textContent = `${formatBytes(file.size)} · 扩展 ${extensionCount} 项 · TLV ${trailerCount} 条`;
-      summaryBadge.textContent = label;
-      summaryBadge.className = `badge ${state}`;
+      summaryMeta.textContent = `${formatBytes(file.size)} · entries ${summary.file_count ?? 0} · issues ${summary.issue_count ?? 0} · next ${report.next_action || 'n/a'}`;
+      summaryBadge.textContent = verdict.label;
+      summaryBadge.className = `badge ${verdict.state}`;
     }
 
-    async function renderRegistryViewer() {
+    function renderRuntimeViewer() {
       if (!wasmModule) return;
-      const registry = wasmModule.listRegisteredExtensions();
-      const board = wasmModule.getCompatibilityBoard();
-      const boardByType = new Map((board.extensions || []).map(item => [Number(item.type), item]));
-      const items = [];
-
-      for (const entry of registry.extensions || []) {
-        const detail = wasmModule.describeExtension(Number(entry.type));
-        const maturity = boardByType.get(Number(entry.type));
-        items.push(`
-          <div class="stack-item">
-            <div class="stack-item-title">${escapeHtml(detail.extension_name || 'Unknown Extension')}</div>
-            <div class="stack-item-meta">${escapeHtml(formatType(Number(detail.type || 0)))} · ${escapeHtml(detail.vendor_name || 'Unknown')} · status=${escapeHtml(detail.status || 'unknown')}</div>
-            <div class="stack-item-body">
-              <strong>Category:</strong> ${escapeHtml(detail.category || 'n/a')}<br>
-              <strong>Validator:</strong> ${escapeHtml(String(Boolean(detail.has_validator)))}<br>
-              <strong>Spec:</strong> ${escapeHtml(detail.spec_url || 'n/a')}<br>
-              <strong>Board:</strong> valid=${escapeHtml(String(Boolean(maturity?.fixture_valid_pass)))} / invalid=${escapeHtml(String(Boolean(maturity?.fixture_invalid_pass)))} / strict=${escapeHtml(String(Boolean(maturity?.strict_check_pass)))} / non_strict=${escapeHtml(String(Boolean(maturity?.non_strict_check_pass)))}<br>
-              <strong>WASM Gate:</strong> release=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.release_ready)))} / validator=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.validator_coverage_ok)))} / shell_risk=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.empty_shell_risk)))} / api=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.api_surface_wired)))} / smoke=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.browser_smoke_wired)))} / copy=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.copy_budget_wired)))} / memory=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.memory_budget_wired)))} / perf=${escapeHtml(String(Boolean(maturity?.wasm_quality_gate?.performance_budget_wired)))}
-
-            </div>
-          </div>
-        `);
-      }
-
-      registryMeta.textContent = `registry=${registry.count || 0}，compatibility_board=${board.count || 0}`;
-      registryCountBadge.textContent = `${registry.count || 0} 项`;
-      setStackList(registryList, items);
+      const runtimeStatus = wasmModule.getRuntimeStatus();
+      registryMeta.textContent = `${runtimeStatus.mode} · runtime=${runtimeStatus.runtime_engine}`;
+      registryCountBadge.textContent = runtimeStatus.available ? 'WASM+JS' : 'JS ONLY';
+      setStackList(registryList, [
+        `<div class="stack-item"><div class="stack-item-title">WASM Gate: ${escapeHtml(runtimeStatus.mode)}</div><div class="stack-item-body"><strong>Runtime Available:</strong> ${escapeHtml(String(runtimeStatus.available))}<br><strong>Engine:</strong> ${escapeHtml(runtimeStatus.runtime_engine)}</div></div>`,
+        '<div class="stack-item"><div class="stack-item-title">Policy</div><div class="stack-item-body">浏览器端只做标准 zip 审查包轻量门禁；真实 `.spz` 成品仍需进入本地 CLI 深审。</div></div>'
+      ]);
       registryEmpty.classList.add('hidden');
       registryContent.classList.remove('hidden');
     }
 
     async function handleFile(file) {
       if (!wasmModule) {
-        setEngineStatus('error', 'WASM 仍未就绪，无法执行校验');
+        setEngineStatus('error', '轻审引擎仍未就绪，无法执行 bundle 审查');
         return;
       }
 
-      setEngineStatus('ready', `正在校验 ${file.name} ...`);
+      setEngineStatus('ready', `正在审查 ${file.name} ...`);
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const report = wasmModule.inspectSpz(bytes, true);
+        const report = await wasmModule.auditWasmBundle(bytes, file.name);
         renderSummary(file, report);
         renderIssues(report);
-        renderExtensions(report);
-        renderTrailer(report);
+        renderManifest(report);
+        renderBudgets(report);
         resultEmpty.classList.add('hidden');
         resultContent.classList.remove('hidden');
-        setEngineStatus('ready', `WASM 引擎就绪 · 最近校验 ${file.name}`);
+        setEngineStatus('ready', `WASM 引擎就绪 · 最近审查 ${file.name}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        setEngineStatus('error', `校验失败：${message}`);
+        setEngineStatus('error', `审查失败：${message}`);
         resultEmpty.classList.add('hidden');
         resultContent.classList.remove('hidden');
-        renderSummary(file, { ok: false, error: message, issues: [] });
-        renderIssues({ ok: false, error: message, issues: [] });
-        renderExtensions({ extension_reports: [] });
-        renderTrailer({ spz_l2: { tlv_records: [] } });
+        const fallback = {
+          verdict: 'block',
+          next_action: 'block_bundle',
+          summary: { file_count: 0, issue_count: 1 },
+          issues: [{ severity: 'error', code: 'BROWSER_AUDIT_RUNTIME_ERROR', message }],
+          budgets: {},
+          manifest_summary: {},
+          bundle_entries: [],
+          wasm_export_summary: [],
+        };
+        renderSummary(file, fallback);
+        renderIssues(fallback);
+        renderManifest(fallback);
+        renderBudgets(fallback);
       }
     }
 
@@ -722,22 +727,17 @@
         const wasmEntry = './spz_gatekeeper.js';
         const probe = await fetch(wasmEntry, { cache: 'no-store' });
         if (!probe.ok) {
-          throw new Error('未检测到 WASM 构建产物。请先执行 Emscripten 构建，再打开 build-pages/site/index.html。');
+          throw new Error('未检测到浏览器轻审入口 spz_gatekeeper.js');
         }
 
-        const source = await probe.text();
-        if (source.includes('__SPZ_PLACEHOLDER__')) {
-          throw new Error('当前是 web/ 模板入口，不是运行入口。请打开 build-pages/site/index.html。');
-        }
-
-        const moduleFactory = (await withTimeout(import(wasmEntry), 8000, '加载 WASM 入口脚本超时')).default;
-        wasmModule = await withTimeout(moduleFactory(), 15000, 'WASM 引擎初始化超时，请检查浏览器扩展拦截或网络缓存');
-        setEngineStatus('ready', 'WASM 引擎就绪');
-        await renderRegistryViewer();
+        const moduleFactory = (await withTimeout(import(wasmEntry), 8000, '加载浏览器轻审入口超时')).default;
+        wasmModule = await withTimeout(moduleFactory(), 15000, '浏览器轻审引擎初始化超时');
+        setEngineStatus('ready', 'WASM 引擎就绪 · 浏览器轻审模式已启用');
+        renderRuntimeViewer();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        setEngineStatus('error', `WASM 加载失败：${message}`);
-        registryEmpty.textContent = `WASM 未就绪：${message}`;
+        setEngineStatus('error', `轻审引擎加载失败：${message}`);
+        registryEmpty.textContent = `轻审模式未就绪：${message}`;
       }
     }
 

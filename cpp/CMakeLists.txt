@@ -112,23 +112,30 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
     "-sFILESYSTEM=0"
   )
   set_target_properties(spz_gatekeeper-wasm PROPERTIES
-    OUTPUT_NAME "spz_gatekeeper"
+    OUTPUT_NAME "spz_gatekeeper_wasm"
     RUNTIME_OUTPUT_DIRECTORY "${SPZ_GATEKEEPER_WASM_SITE_DIR}"
   )
 
   add_custom_command(
     OUTPUT "${SPZ_GATEKEEPER_WASM_SITE_DIR}/index.html"
+           "${SPZ_GATEKEEPER_WASM_SITE_DIR}/spz_gatekeeper.js"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${SPZ_GATEKEEPER_WASM_SITE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/../web/index.html"
             "${SPZ_GATEKEEPER_WASM_SITE_DIR}/index.html"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/../web/spz_gatekeeper.js"
+            "${SPZ_GATEKEEPER_WASM_SITE_DIR}/spz_gatekeeper.js"
     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../web/index.html"
-    COMMENT "Copy web entrypoint into WASM site directory"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../web/spz_gatekeeper.js"
+    COMMENT "Copy web entrypoint and browser audit wrapper into WASM site directory"
     VERBATIM
   )
 
   add_custom_target(spz_gatekeeper_wasm_site ALL
-    DEPENDS spz_gatekeeper-wasm "${SPZ_GATEKEEPER_WASM_SITE_DIR}/index.html"
+    DEPENDS spz_gatekeeper-wasm
+            "${SPZ_GATEKEEPER_WASM_SITE_DIR}/index.html"
+            "${SPZ_GATEKEEPER_WASM_SITE_DIR}/spz_gatekeeper.js"
   )
 endif()
 
