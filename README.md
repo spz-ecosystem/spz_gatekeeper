@@ -64,7 +64,16 @@ Inclusion in, or validation by, this gatekeeper project does not constitute endo
 
 SPZ Validator provides a web interface that runs entirely in your browser:
 
-🔗 **Live Demo**: https://spz-ecosystem.github.io/spz_gatekeeper/
+🔗 **Live Demo (GitHub Pages)**: https://spz-ecosystem.github.io/spz_gatekeeper/
+🔗 **Live Demo (Tencent CloudBase)**: https://openclaw-spz-3gt7x2sya7c10ef2-1355411679.tcloudbaseapp.com/
+
+### Cloud Deployment
+
+This project is deployed to **Tencent CloudBase** static hosting for demonstration purposes:
+- **Environment**: `openclaw-spz` (EnvId: `openclaw-spz-3gt7x2sya7c10ef2`)
+- **Region**: `ap-shanghai`
+- **Type**: Static website hosting (HTML + WASM, no backend server required)
+- **Data Privacy**: All validation runs locally in browser; no file upload to servers
 
 Features:
 - Pure browser-side execution via WebAssembly

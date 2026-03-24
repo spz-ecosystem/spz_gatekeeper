@@ -64,7 +64,16 @@
 
 SPZ Validator 提供在线 Web 界面，无需安装即可使用：
 
-🔗 **在线访问**: https://spz-ecosystem.github.io/spz_gatekeeper/
+🔗 **在线访问 (GitHub Pages)**: https://spz-ecosystem.github.io/spz_gatekeeper/
+🔗 **在线访问 (腾讯云 CloudBase)**: https://openclaw-spz-3gt7x2sya7c10ef2-1355411679.tcloudbaseapp.com/
+
+### 云端部署
+
+本项目已部署至 **腾讯云 CloudBase** 静态托管，用于演示：
+- **环境**: `openclaw-spz` (EnvId: `openclaw-spz-3gt7x2sya7c10ef2`)
+- **区域**: `ap-shanghai`
+- **类型**: 静态网站托管 (HTML + WASM，无需后端服务器)
+- **数据隐私**: 所有验证均在浏览器本地运行，文件不上传服务器
 
 功能特点：
 - 纯浏览器端运行，WASM 本地执行
