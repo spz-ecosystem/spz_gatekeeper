@@ -53,6 +53,11 @@
 #include <vector>
 #include <zlib.h>
 
+#if defined(__linux__) || defined(__APPLE__)
+#include <sys/resource.h>
+#endif
+
+
 
 
 namespace {
@@ -77,8 +82,24 @@ static bool ReadAllText(const std::string& path, std::string* out) {
   return true;
 }
 
+static std::optional<double> ReadPeakMemoryMb() {
+#if defined(__linux__) || defined(__APPLE__)
+  rusage usage{};
+  if (getrusage(RUSAGE_SELF, &usage) != 0) {
+    return std::nullopt;
+  }
+#if defined(__APPLE__)
+  return static_cast<double>(usage.ru_maxrss) / (1024.0 * 1024.0);
+#else
+  return static_cast<double>(usage.ru_maxrss) / 1024.0;
+#endif
+#else
+  return std::nullopt;
+#endif
+}
 
 static bool GzipCompress(const std::vector<std::uint8_t>& in, std::vector<std::uint8_t>* out,
+
                          std::string* err) {
   out->clear();
 
@@ -580,8 +601,12 @@ static std::string BuildCompatibilityBoardJson() {
     const bool strict_check_pass =
         !strict_valid_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_valid_report);
     const bool non_strict_check_pass = !non_strict_valid_report.HasErrors();
+    const bool release_ready = has_validator && fixture_valid_pass && fixture_invalid_pass &&
+                               strict_check_pass && non_strict_check_pass;
+    const char* final_verdict = release_ready ? "pass" : "review_required";
 
     oss << "{";
+
 
     oss << "\"type\":" << spec.type;
     oss << ",\"vendor_name\":\"" << spz_gatekeeper::JsonEscape(spec.vendor_name) << "\"";
@@ -593,8 +618,12 @@ static std::string BuildCompatibilityBoardJson() {
     oss << ",\"fixture_invalid_pass\":" << (fixture_invalid_pass ? "true" : "false");
     oss << ",\"strict_check_pass\":" << (strict_check_pass ? "true" : "false");
     oss << ",\"non_strict_check_pass\":" << (non_strict_check_pass ? "true" : "false");
+    oss << ",\"final_verdict\":\"" << final_verdict << "\"";
+    oss << ",\"release_ready\":" << (release_ready ? "true" : "false");
     oss << ",\"wasm_quality_gate\":"
-        << spz_gatekeeper::BuildWasmQualityGateJson(has_validator, !has_validator);
+        << spz_gatekeeper::BuildWasmQualityGateJson(
+               has_validator, !has_validator, false, release_ready);
+
 
     oss << "}";
 
@@ -637,8 +666,12 @@ static void PrintCompatibilityBoard(bool json) {
     const bool strict_check_pass =
         !strict_valid_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_valid_report);
     const bool non_strict_check_pass = !non_strict_valid_report.HasErrors();
+    const bool release_ready = has_validator && fixture_valid_pass && fixture_invalid_pass &&
+                               strict_check_pass && non_strict_check_pass;
+    const char* final_verdict = release_ready ? "pass" : "review_required";
 
     std::cout << "- type=" << spec.type
+
 
               << " vendor=\"" << spec.vendor_name << "\""
               << " name=\"" << spec.extension_name << "\""
@@ -649,10 +682,12 @@ static void PrintCompatibilityBoard(bool json) {
               << " fixture_invalid_pass=" << (fixture_invalid_pass ? "true" : "false")
               << " strict_check_pass=" << (strict_check_pass ? "true" : "false")
               << " non_strict_check_pass=" << (non_strict_check_pass ? "true" : "false")
+              << " final_verdict=" << final_verdict
+              << " release_ready=" << (release_ready ? "true" : "false")
               << " wasm_validator_coverage_ok=" << (has_validator ? "true" : "false")
               << " wasm_empty_shell_risk=" << (!has_validator ? "true" : "false")
-              << " wasm_release_ready=false"
               << "\n";
+
 
   }
 }
@@ -746,8 +781,10 @@ static bool RunCompatAuditForPath(const std::string& path, CompatAuditOutcome* o
     return false;
   }
 
+  const auto peak_memory_before_mb = ReadPeakMemoryMb();
   const auto started = std::chrono::steady_clock::now();
   spz_gatekeeper::SpzInspectOptions strict_options;
+
   strict_options.strict = true;
   const auto strict_report = spz_gatekeeper::InspectSpzBlob(bytes, strict_options, path);
 
@@ -755,15 +792,27 @@ static bool RunCompatAuditForPath(const std::string& path, CompatAuditOutcome* o
   non_strict_options.strict = false;
   const auto non_strict_report = spz_gatekeeper::InspectSpzBlob(bytes, non_strict_options, path);
   const auto ended = std::chrono::steady_clock::now();
+  const auto peak_memory_after_mb = ReadPeakMemoryMb();
   const double elapsed_ms = std::chrono::duration<double, std::milli>(ended - started).count();
+
 
   spz_gatekeeper::CompatAuditMetrics metrics;
   metrics.file_size_bytes = static_cast<std::uint64_t>(bytes.size());
   metrics.has_file_size_bytes = true;
   metrics.process_time_ms = elapsed_ms;
   metrics.has_process_time_ms = true;
+  if (peak_memory_after_mb.has_value()) {
+    metrics.peak_memory_mb = *peak_memory_after_mb;
+    metrics.has_peak_memory_mb = true;
+  }
+  if (peak_memory_before_mb.has_value() && peak_memory_after_mb.has_value()) {
+    metrics.memory_growth_count =
+        *peak_memory_after_mb > *peak_memory_before_mb ? 1u : 0u;
+    metrics.has_memory_growth_count = true;
+  }
 
   bool strict_ok = false;
+
   bool non_strict_ok = false;
   const std::string verdict =
       spz_gatekeeper::ResolveCompatVerdict(strict_report, non_strict_report, &strict_ok, &non_strict_ok);

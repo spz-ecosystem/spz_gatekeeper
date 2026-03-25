@@ -444,10 +444,12 @@ emscripten::val buildBrowserAuditReport(const emscripten::val& payload) {
   report.bundle_entries_json = StringifyJsonValue(payload["bundle_entries"]);
   report.wasm_export_summary_json = StringifyJsonValue(payload["wasm_export_summary"]);
   report.empty_shell_risk = payload["empty_shell_risk"].as<bool>();
+  report.copy_budget_wired = payload["copy_budget_wired"].as<bool>();
   report.memory_budget_wired = payload["memory_budget_wired"].as<bool>();
   report.performance_budget_wired = payload["performance_budget_wired"].as<bool>();
   return ParseJsonObject(spz_gatekeeper::BuildBrowserWasmAuditJson(report));
 }
+
 
 emscripten::val listRegisteredExtensions() {
 

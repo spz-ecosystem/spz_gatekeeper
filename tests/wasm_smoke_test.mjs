@@ -367,7 +367,18 @@ async function runSmoke() {
       expectedIssueCode: 'BUNDLE_TINY_INVALID_EXPECTED_FAIL',
     });
 
+    const copyOverBudgetBundle = createBundleBuffer({
+      manifest: makeManifest({ budgets: { cold_start_ms: 1500, tiny_case_ms: 500, peak_memory_mb: 256, copy_pass_limit: 0 } }),
+    });
+    await uploadBundleAndAssert(page, {
+      name: 'copy_over_budget_bundle.zip',
+      buffer: copyOverBudgetBundle,
+      expectedBadge: 'REVIEW_REQUIRED',
+      expectedIssueCode: 'BUNDLE_COPY_OVER_BUDGET',
+    });
+
     const statusClasses = await page.$eval('#loadingStatus', (el) => el.className);
+
     if (statusClasses.includes('error')) {
       throw new Error(`页面状态异常: ${statusClasses}`);
     }

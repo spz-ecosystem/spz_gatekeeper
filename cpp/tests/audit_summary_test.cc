@@ -45,11 +45,15 @@ spz_gatekeeper::ExtensionReport MakeKnownExtension() {
 
 TEST(test_audit_summary_freezes_public_mode_constants) {
   ASSERT_TRUE(std::string(spz_gatekeeper::kAuditProfileSpz) == "spz");
+  ASSERT_TRUE(std::string(spz_gatekeeper::kAuditPolicyName) == "spz_gatekeeper_policy");
+  ASSERT_TRUE(std::string(spz_gatekeeper::kAuditPolicyVersion) == "2.0.0");
+  ASSERT_TRUE(std::string(spz_gatekeeper::kAuditPolicyModeRelease) == "release");
   ASSERT_TRUE(std::string(spz_gatekeeper::kAuditModeBrowserLightweightWasmAudit) ==
               "browser_lightweight_wasm_audit");
   ASSERT_TRUE(std::string(spz_gatekeeper::kAuditModeLocalCliSpzArtifactAudit) ==
               "local_cli_spz_artifact_audit");
 }
+
 
 TEST(test_build_browser_wasm_audit_json_reports_pass_schema) {
   spz_gatekeeper::BrowserWasmAuditReport report;
@@ -72,13 +76,19 @@ TEST(test_build_browser_wasm_audit_json_reports_pass_schema) {
   report.bundle_entries_json = "[]";
   report.wasm_export_summary_json = "[{\"name\":\"coreCheck\",\"kind\":\"function\"}]";
   report.empty_shell_risk = false;
+  report.copy_budget_wired = true;
   report.memory_budget_wired = true;
   report.performance_budget_wired = true;
 
+
   const std::string json = spz_gatekeeper::BuildBrowserWasmAuditJson(report);
   ASSERT_TRUE(json.find("\"audit_profile\":\"spz\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"policy_name\":\"spz_gatekeeper_policy\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"policy_version\":\"2.0.0\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"policy_mode\":\"release\"") != std::string::npos);
   ASSERT_TRUE(json.find("\"audit_mode\":\"browser_lightweight_wasm_audit\"") !=
               std::string::npos);
+
   ASSERT_TRUE(json.find("\"bundle_id\":\"sha256:test-bundle\"") != std::string::npos);
   ASSERT_TRUE(json.find("\"summary\":{") != std::string::npos);
   ASSERT_TRUE(json.find("\"manifest_summary\":{\"profile\":\"spz\"}") !=
@@ -86,10 +96,14 @@ TEST(test_build_browser_wasm_audit_json_reports_pass_schema) {
   ASSERT_TRUE(json.find("\"bundle_entries\":[]") != std::string::npos);
   ASSERT_TRUE(json.find("\"wasm_quality_gate\":{") != std::string::npos);
   ASSERT_TRUE(json.find("\"warning_budget_wired\":true") != std::string::npos);
+  ASSERT_TRUE(json.find("\"copy_budget_wired\":true") != std::string::npos);
   ASSERT_TRUE(json.find("\"memory_budget_wired\":true") != std::string::npos);
+
   ASSERT_TRUE(json.find("\"performance_budget_wired\":true") != std::string::npos);
+  ASSERT_TRUE(json.find("\"final_verdict\":\"pass\"") != std::string::npos);
   ASSERT_TRUE(json.find("\"release_ready\":true") != std::string::npos);
 }
+
 
 TEST(test_build_compat_check_audit_json_reports_pass_schema) {
   spz_gatekeeper::GateReport strict_report;
@@ -97,19 +111,38 @@ TEST(test_build_compat_check_audit_json_reports_pass_schema) {
   strict_report.extension_reports.push_back(MakeKnownExtension());
 
   spz_gatekeeper::GateReport non_strict_report = strict_report;
+  spz_gatekeeper::CompatAuditMetrics metrics;
+  metrics.peak_memory_mb = 42.0;
+  metrics.has_peak_memory_mb = true;
+  metrics.memory_growth_count = 1;
+  metrics.has_memory_growth_count = true;
 
-  const std::string json =
-      spz_gatekeeper::BuildCompatCheckAuditJson("fixture_valid.spz", strict_report, non_strict_report);
+  const std::string json = spz_gatekeeper::BuildCompatCheckAuditJson(
+      "fixture_valid.spz", strict_report, non_strict_report, &metrics);
+
   ASSERT_TRUE(json.find("\"audit_profile\":\"spz\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"policy_name\":\"spz_gatekeeper_policy\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"policy_version\":\"2.0.0\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"policy_mode\":\"release\"") != std::string::npos);
   ASSERT_TRUE(json.find("\"audit_mode\":\"local_cli_spz_artifact_audit\"") != std::string::npos);
   ASSERT_TRUE(json.find("\"verdict\":\"pass\"") != std::string::npos);
+
   ASSERT_TRUE(json.find("\"summary\":{") != std::string::npos);
   ASSERT_TRUE(json.find("\"artifact_summary\":{") != std::string::npos);
   ASSERT_TRUE(json.find("\"budgets\":{") != std::string::npos);
+  ASSERT_TRUE(json.find("\"peak_memory_mb\":{\"declared\":null,\"observed\":42,\"status\":\"observed_without_budget\",\"within_budget\":null}") != std::string::npos);
+  ASSERT_TRUE(json.find("\"memory_growth_count\":{\"declared\":null,\"observed\":1,\"status\":\"observed_without_budget\",\"within_budget\":null}") != std::string::npos);
   ASSERT_TRUE(json.find("\"issues\":[") != std::string::npos);
 
   ASSERT_TRUE(json.find("\"next_action\":\"artifact_ready\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"memory_budget_wired\":true") != std::string::npos);
+  ASSERT_TRUE(json.find("\"wasm_quality_gate\":{\"coverage_level\":\"baseline\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"final_verdict\":\"pass\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"release_ready\":true") != std::string::npos);
 }
+
+
+
 
 TEST(test_build_compat_check_audit_json_reports_review_required_for_unknown_extension) {
   spz_gatekeeper::GateReport strict_report;
@@ -151,8 +184,8 @@ TEST(test_parse_browser_handoff_and_merge_into_compat_audit_json) {
       spz_gatekeeper::BuildCompatCheckAuditJson("fixture_valid.spz", strict_report, non_strict_report);
 
   const std::string handoff_json =
-      "{\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\"," 
-      "\"bundle_id\":\"sha256:test-bundle\",\"tool_version\":\"1.0.0\"," 
+      "{\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\","
+      "\"bundle_id\":\"sha256:test-bundle\",\"tool_version\":\"1.0.0\","
       "\"verdict\":\"review_required\",\"summary\":{},\"budgets\":{},\"issues\":[],"
       "\"next_action\":\"review_bundle_before_cli\"}";
 
@@ -164,11 +197,16 @@ TEST(test_parse_browser_handoff_and_merge_into_compat_audit_json) {
       spz_gatekeeper::BuildCompatCheckAuditWithHandoffJson(compat_json, "pass", handoff);
   ASSERT_TRUE(merged.find("\"handoff\":{") != std::string::npos);
   ASSERT_TRUE(merged.find("\"upstream_audit\":{") != std::string::npos);
+  ASSERT_TRUE(merged.find("\"policy_name\":\"spz_gatekeeper_policy\"") != std::string::npos);
+  ASSERT_TRUE(merged.find("\"policy_version\":\"2.0.0\"") != std::string::npos);
+  ASSERT_TRUE(merged.find("\"policy_mode\":\"release\"") != std::string::npos);
   ASSERT_TRUE(merged.find("\"bundle_id\":\"sha256:test-bundle\"") != std::string::npos);
   ASSERT_TRUE(merged.find("\"tool_version\":\"1.0.0\"") != std::string::npos);
   ASSERT_TRUE(merged.find("\"evidence_chain\":[\"browser_lightweight_wasm_audit\",\"local_cli_spz_artifact_audit\"]") != std::string::npos);
   ASSERT_TRUE(merged.find("\"final_verdict\":\"pass\"") != std::string::npos);
+  ASSERT_TRUE(merged.find("\"release_ready\":true") != std::string::npos);
 }
+
 
 
 }  // namespace

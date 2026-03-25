@@ -204,7 +204,16 @@ std::string NormalizeJsonFragment(const std::string& json, const char* fallback)
   return json.empty() ? std::string(fallback) : json;
 }
 
+const char* ResolvePolicyMode(const std::string& policy_mode) {
+  return policy_mode.empty() ? kAuditPolicyModeRelease : policy_mode.c_str();
+}
+
+bool IsReleaseReadyVerdict(const std::string& verdict) {
+  return verdict == "pass";
+}
+
 std::string BuildBrowserWasmQualityGateJson(const BrowserWasmAuditReport& report) {
+
   const bool release_ready = report.verdict == "pass";
   std::ostringstream oss;
   oss << "{";
@@ -215,8 +224,9 @@ std::string BuildBrowserWasmQualityGateJson(const BrowserWasmAuditReport& report
   oss << ",\"browser_smoke_wired\":true";
   oss << ",\"empty_shell_guard_wired\":true";
   oss << ",\"warning_budget_wired\":true";
-  oss << ",\"copy_budget_wired\":false";
+  oss << ",\"copy_budget_wired\":" << (report.copy_budget_wired ? "true" : "false");
   oss << ",\"memory_budget_wired\":" << (report.memory_budget_wired ? "true" : "false");
+
   oss << ",\"performance_budget_wired\":"
       << (report.performance_budget_wired ? "true" : "false");
   oss << ",\"artifact_audit_wired\":false";
@@ -412,7 +422,11 @@ std::string BuildRegistrySummaryJson(const GateReport& report) {
   return oss.str();
 }
 
-std::string BuildWasmQualityGateJson(bool validator_coverage_ok, bool empty_shell_risk) {
+std::string BuildWasmQualityGateJson(bool validator_coverage_ok,
+                                 bool empty_shell_risk,
+                                 bool memory_budget_wired,
+                                 bool release_ready) {
+
   std::ostringstream oss;
   oss << "{";
   oss << "\"coverage_level\":\"baseline\"";
@@ -423,13 +437,15 @@ std::string BuildWasmQualityGateJson(bool validator_coverage_ok, bool empty_shel
   oss << ",\"empty_shell_guard_wired\":true";
   oss << ",\"warning_budget_wired\":false";
   oss << ",\"copy_budget_wired\":false";
-  oss << ",\"memory_budget_wired\":false";
+  oss << ",\"memory_budget_wired\":" << (memory_budget_wired ? "true" : "false");
   oss << ",\"performance_budget_wired\":false";
   oss << ",\"artifact_audit_wired\":false";
-  oss << ",\"release_ready\":false";
+  oss << ",\"release_ready\":" << (release_ready ? "true" : "false");
+
   oss << "}";
   return oss.str();
 }
+
 
 bool ParseBrowserAuditHandoffJson(const std::string& json_text,
                                   BrowserAuditHandoff* handoff,
@@ -501,13 +517,20 @@ bool ParseBrowserAuditHandoffJson(const std::string& json_text,
 }
 
 std::string BuildBrowserWasmAuditJson(const BrowserWasmAuditReport& report) {
+  const bool release_ready = IsReleaseReadyVerdict(report.verdict);
   std::ostringstream oss;
   oss << "{";
   oss << "\"audit_profile\":\"" << kAuditProfileSpz << "\"";
+  oss << ",\"policy_name\":\"" << kAuditPolicyName << "\"";
+  oss << ",\"policy_version\":\"" << kAuditPolicyVersion << "\"";
+  oss << ",\"policy_mode\":\"" << ResolvePolicyMode(report.policy_mode) << "\"";
   oss << ",\"audit_mode\":\"" << kAuditModeBrowserLightweightWasmAudit << "\"";
   oss << ",\"bundle_id\":\"" << JsonEscape(report.bundle_id) << "\"";
   oss << ",\"tool_version\":\"" << kAuditToolVersion << "\"";
+  oss << ",\"bundle_verdict\":\"" << JsonEscape(report.verdict) << "\"";
   oss << ",\"verdict\":\"" << JsonEscape(report.verdict) << "\"";
+  oss << ",\"final_verdict\":\"" << JsonEscape(report.verdict) << "\"";
+  oss << ",\"release_ready\":" << (release_ready ? "true" : "false");
   oss << ",\"summary\":{";
   oss << "\"bundle_name\":\"" << JsonEscape(report.summary.bundle_name) << "\"";
   oss << ",\"file_count\":" << report.summary.file_count;
@@ -537,6 +560,7 @@ std::string BuildBrowserWasmAuditJson(const BrowserWasmAuditReport& report) {
   return oss.str();
 }
 
+
 std::string BuildCompatCheckAuditJson(const std::string& path,
                                       const GateReport& strict_report,
                                       const GateReport& non_strict_report,
@@ -547,18 +571,29 @@ std::string BuildCompatCheckAuditJson(const std::string& path,
   bool non_strict_ok = false;
   const bool validator_coverage_ok = HasValidatorCoverage(non_strict_report);
   const bool empty_shell_risk = HasEmptyShellRisk(non_strict_report);
+  const bool memory_budget_wired =
+      metrics != nullptr && (metrics->has_peak_memory_mb || metrics->has_memory_growth_count);
   const std::vector<Issue> merged_issues = MergeIssues(strict_report, non_strict_report);
+
   const std::string verdict = ResolveCompatVerdict(
       strict_report, non_strict_report, &strict_ok, &non_strict_ok);
   const std::string next_action = ResolveCompatNextAction(verdict);
 
 
+  const bool release_ready = IsReleaseReadyVerdict(verdict);
   std::ostringstream oss;
   oss << "{";
   oss << "\"asset_path\":\"" << JsonEscape(path) << "\"";
   oss << ",\"audit_profile\":\"" << kAuditProfileSpz << "\"";
+  oss << ",\"policy_name\":\"" << kAuditPolicyName << "\"";
+  oss << ",\"policy_version\":\"" << kAuditPolicyVersion << "\"";
+  oss << ",\"policy_mode\":\"" << kAuditPolicyModeRelease << "\"";
   oss << ",\"audit_mode\":\"" << kAuditModeLocalCliSpzArtifactAudit << "\"";
+  oss << ",\"artifact_verdict\":\"" << verdict << "\"";
   oss << ",\"verdict\":\"" << verdict << "\"";
+  oss << ",\"final_verdict\":\"" << verdict << "\"";
+  oss << ",\"release_ready\":" << (release_ready ? "true" : "false");
+
   oss << ",\"summary\":{";
   oss << "\"strict_ok\":" << (strict_ok ? "true" : "false");
   oss << ",\"non_strict_ok\":" << (non_strict_ok ? "true" : "false");
@@ -575,7 +610,10 @@ std::string BuildCompatCheckAuditJson(const std::string& path,
   oss << ",\"registry_summary\":" << BuildRegistrySummaryJson(non_strict_report);
   oss << ",\"extension_summary\":" << BuildExtensionSummaryJson(non_strict_report);
   oss << ",\"wasm_quality_gate\":"
-      << BuildWasmQualityGateJson(validator_coverage_ok, empty_shell_risk);
+      << BuildWasmQualityGateJson(
+             validator_coverage_ok, empty_shell_risk, memory_budget_wired, release_ready);
+
+
   oss << ",\"issue_summary\":{";
   oss << "\"strict\":" << BuildIssueListJson(strict_report);
   oss << ",\"non_strict\":" << BuildIssueListJson(non_strict_report);
@@ -598,18 +636,26 @@ std::string BuildCompatCheckAuditWithHandoffJson(const std::string& compat_json,
   oss << ",\"handoff\":" << handoff.raw_json;
   oss << ",\"upstream_audit\":{";
   oss << "\"audit_profile\":\"" << JsonEscape(handoff.audit_profile) << "\"";
+  oss << ",\"policy_name\":\"" << kAuditPolicyName << "\"";
+  oss << ",\"policy_version\":\"" << kAuditPolicyVersion << "\"";
+  oss << ",\"policy_mode\":\"" << ResolvePolicyMode(handoff.policy_mode) << "\"";
   oss << ",\"audit_mode\":\"" << JsonEscape(handoff.audit_mode) << "\"";
+  oss << ",\"bundle_verdict\":\"" << JsonEscape(handoff.verdict) << "\"";
   oss << ",\"verdict\":\"" << JsonEscape(handoff.verdict) << "\"";
   oss << ",\"next_action\":\"" << JsonEscape(handoff.next_action) << "\"";
   oss << ",\"bundle_id\":\"" << JsonEscape(handoff.bundle_id) << "\"";
   oss << ",\"tool_version\":\"" << JsonEscape(handoff.tool_version) << "\"";
   oss << "}";
+
   oss << ",\"evidence_chain\":[";
   oss << "\"" << kAuditModeBrowserLightweightWasmAudit << "\",";
   oss << "\"" << kAuditModeLocalCliSpzArtifactAudit << "\"]";
 
   oss << ",\"final_verdict\":\"" << JsonEscape(artifact_verdict) << "\"";
+  oss << ",\"release_ready\":"
+      << (IsReleaseReadyVerdict(artifact_verdict) ? "true" : "false");
   oss << "}";
+
   return oss.str();
 }
 

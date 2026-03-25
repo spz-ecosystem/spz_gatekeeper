@@ -1,6 +1,10 @@
 const kAuditProfile = 'spz';
+const kAuditPolicyName = 'spz_gatekeeper_policy';
+const kAuditPolicyVersion = '2.0.0';
+const kAuditPolicyModeRelease = 'release';
 const kAuditToolVersion = '1.0.0';
 const kBrowserAuditMode = 'browser_lightweight_wasm_audit';
+
 
 const kSupportedZipCompressionStored = 0;
 const kSupportedZipCompressionDeflate = 8;
@@ -61,15 +65,24 @@ function findEndOfCentralDirectory(bytes) {
   throw new Error('zip end of central directory not found');
 }
 
-async function inflateRaw(bytes) {
+function markCopyPass(counter) {
+  if (counter) {
+    counter.pass_count += 1;
+  }
+}
+
+async function inflateRaw(bytes, copyBudget) {
   if (typeof DecompressionStream !== 'function') {
     throw new Error('DecompressionStream(deflate-raw) not available in this browser');
   }
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const arrayBuffer = await new Response(stream).arrayBuffer();
+  markCopyPass(copyBudget);
+  return new Uint8Array(arrayBuffer);
 }
 
-async function readZipEntries(input) {
+async function readZipEntries(input, copyBudget) {
+
   const bytes = toUint8Array(input);
   const eocdOffset = findEndOfCentralDirectory(bytes);
   const entryCount = readU16(bytes, eocdOffset + 10);
@@ -96,7 +109,8 @@ async function readZipEntries(input) {
     const commentLength = readU16(bytes, offset + 32);
     const localHeaderOffset = readU32(bytes, offset + 42);
     const nameOffset = offset + 46;
-    const rawName = decodeText(bytes.slice(nameOffset, nameOffset + nameLength));
+    const rawName = decodeText(bytes.subarray(nameOffset, nameOffset + nameLength));
+
     const name = normalizeEntryName(rawName);
 
     if ((generalPurpose & 0x08) !== 0) {
@@ -114,12 +128,13 @@ async function readZipEntries(input) {
       throw new Error(`zip entry payload is truncated: ${name}`);
     }
 
-    const compressedBytes = bytes.slice(dataOffset, dataEnd);
+    const compressedBytes = bytes.subarray(dataOffset, dataEnd);
     let payloadBytes;
     if (compressionMethod === kSupportedZipCompressionStored) {
       payloadBytes = compressedBytes;
     } else if (compressionMethod === kSupportedZipCompressionDeflate) {
-      payloadBytes = await inflateRaw(compressedBytes);
+      payloadBytes = await inflateRaw(compressedBytes, copyBudget);
+
     } else {
       throw new Error(`unsupported zip compression method ${compressionMethod}: ${name}`);
     }
@@ -280,8 +295,9 @@ function buildLegacyBrowserAuditReport(data) {
       browser_smoke_wired: true,
       empty_shell_guard_wired: true,
       warning_budget_wired: true,
-      copy_budget_wired: false,
+      copy_budget_wired: data.copy_budget_wired,
       memory_budget_wired: data.memory_budget_wired,
+
       performance_budget_wired: data.performance_budget_wired,
       artifact_audit_wired: false,
       release_ready: data.verdict === 'pass',
@@ -327,6 +343,8 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
   let validTinyMs = null;
   let invalidTinyHandled = false;
   let memoryObservedMb = currentMemoryMb();
+  const copyBudget = { pass_count: 0 };
+
 
   try {
     entries = await readZipEntries(bundleBytes);
@@ -461,10 +479,16 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
   const context = {
     fileName,
     manifest,
-    moduleBytes: moduleEntry != null ? new Uint8Array(moduleEntry.bytes) : new Uint8Array(),
+    moduleBytes: moduleEntry != null
+      ? (() => {
+          markCopyPass(copyBudget);
+          return new Uint8Array(moduleEntry.bytes);
+        })()
+      : new Uint8Array(),
     runtime,
     wasmExports,
   };
+
 
   if (issues.filter((issue) => issue.severity === 'error').length === 0 && typeof loaderModule.init === 'function') {
     const initStartedAt = nowMs();
@@ -526,8 +550,9 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
     cold_start_ms: describeBudget(declaredBudgets.cold_start_ms, coldStartMs, coldStartMs !== null),
     tiny_case_ms: describeBudget(declaredBudgets.tiny_case_ms, validTinyMs, validTinyMs !== null),
     peak_memory_mb: describeBudget(declaredBudgets.peak_memory_mb, memoryObservedMb, memoryObservedMb !== null),
-    copy_pass_limit: describeBudget(declaredBudgets.copy_pass_limit, null, false),
+    copy_pass_limit: describeBudget(declaredBudgets.copy_pass_limit, copyBudget.pass_count, true),
   };
+
 
   if (budgets.cold_start_ms.status === 'over_budget') {
     pushIssue(issues, 'warning', 'BUNDLE_COLD_START_OVER_BUDGET', '冷启动耗时超出 manifest 预算');
@@ -568,7 +593,9 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
     })),
     wasm_export_summary: wasmExports,
     empty_shell_risk: issues.some((issue) => issue.code === 'BUNDLE_EMPTY_SHELL_RISK'),
+    copy_budget_wired: budgets.copy_pass_limit.status !== 'not_collected',
     memory_budget_wired: budgets.peak_memory_mb.status !== 'not_collected',
+
     performance_budget_wired:
       budgets.cold_start_ms.status !== 'not_collected' ||
       budgets.tiny_case_ms.status !== 'not_collected',
@@ -599,6 +626,3 @@ export default async function createSpzGatekeeperModule() {
     inspectCompatSummary: runtime?.inspectCompatSummary?.bind(runtime) ?? createUnavailableMethod('inspectCompatSummary'),
     listRegisteredExtensions: runtime?.listRegisteredExtensions?.bind(runtime) ?? (() => ({ count: 0, extensions: [] })),
     describeExtension: runtime?.describeExtension?.bind(runtime) ?? ((type) => ({ error: 'runtime unavailable', type })),
-    getCompatibilityBoard: runtime?.getCompatibilityBoard?.bind(runtime) ?? (() => ({ count: 0, extensions: [] })),
-  };
-}

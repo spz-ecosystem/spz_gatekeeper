@@ -12,11 +12,17 @@
 namespace spz_gatekeeper {
 
 inline constexpr const char* kAuditProfileSpz = "spz";
+inline constexpr const char* kAuditPolicyName = "spz_gatekeeper_policy";
+inline constexpr const char* kAuditPolicyVersion = "2.0.0";
+inline constexpr const char* kAuditPolicyModeDev = "dev";
+inline constexpr const char* kAuditPolicyModeRelease = "release";
+inline constexpr const char* kAuditPolicyModeChallenge = "challenge";
 inline constexpr const char* kAuditToolVersion = "1.0.0";
 inline constexpr const char* kAuditModeBrowserLightweightWasmAudit =
     "browser_lightweight_wasm_audit";
 inline constexpr const char* kAuditModeLocalCliSpzArtifactAudit =
     "local_cli_spz_artifact_audit";
+
 
 bool HasWarnings(const GateReport& report);
 bool HasValidatorCoverage(const GateReport& report);
@@ -31,7 +37,12 @@ std::string ResolveCompatNextAction(const std::string& verdict);
 std::string BuildIssueListJson(const GateReport& report);
 std::string BuildExtensionSummaryJson(const GateReport& report);
 std::string BuildRegistrySummaryJson(const GateReport& report);
-std::string BuildWasmQualityGateJson(bool validator_coverage_ok, bool empty_shell_risk);
+std::string BuildWasmQualityGateJson(bool validator_coverage_ok,
+                                     bool empty_shell_risk,
+                                     bool memory_budget_wired = false,
+                                     bool release_ready = false);
+
+
 
 struct CompatAuditMetrics {
   std::uint64_t file_size_bytes = 0;
@@ -48,11 +59,13 @@ struct BrowserAuditHandoff {
   std::string raw_json;
   std::string audit_profile;
   std::string audit_mode;
+  std::string policy_mode = kAuditPolicyModeRelease;
   std::string verdict;
   std::string next_action;
   std::string bundle_id;
   std::string tool_version;
 };
+
 
 struct BrowserWasmAuditSummary {
   std::string bundle_name;
@@ -68,19 +81,23 @@ struct BrowserWasmAuditSummary {
 
 struct BrowserWasmAuditReport {
   std::string bundle_id;
+  std::string policy_mode = kAuditPolicyModeRelease;
   std::string verdict;
   std::string next_action;
   double audit_duration_ms = 0.0;
   BrowserWasmAuditSummary summary;
+
   std::string manifest_summary_json = "{}";
   std::string budgets_json = "{}";
   std::string issues_json = "[]";
   std::string bundle_entries_json = "[]";
   std::string wasm_export_summary_json = "[]";
   bool empty_shell_risk = false;
+  bool copy_budget_wired = false;
   bool memory_budget_wired = false;
   bool performance_budget_wired = false;
 };
+
 
 bool ParseBrowserAuditHandoffJson(const std::string& json_text,
                                   BrowserAuditHandoff* handoff,
