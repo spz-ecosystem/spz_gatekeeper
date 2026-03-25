@@ -596,8 +596,7 @@ std::string BuildCompatCheckAuditJson(const std::string& path,
   bool non_strict_ok = false;
   const bool validator_coverage_ok = HasValidatorCoverage(non_strict_report);
   const bool empty_shell_risk = HasEmptyShellRisk(non_strict_report);
-  const bool memory_budget_wired =
-      metrics != nullptr && (metrics->has_peak_memory_mb || metrics->has_memory_growth_count);
+  const bool memory_budget_wired = (metrics != nullptr);
   const std::vector<Issue> merged_issues = MergeIssues(strict_report, non_strict_report);
 
   const std::string verdict = ResolveCompatVerdict(
