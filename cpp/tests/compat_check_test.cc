@@ -12,6 +12,7 @@
 #endif
 
 
+#include "spz_gatekeeper/json_min.h"
 #include "test_fixtures.h"
 
 namespace {
@@ -146,6 +147,19 @@ std::filesystem::path MakeTempDirPath(const std::string& stem) {
          (stem + "_" + std::to_string(std::rand()));
 }
 
+std::string NormalizePathForExpectedJson(const std::filesystem::path& path, bool canonicalize) {
+  if (!canonicalize) {
+    return path.string();
+  }
+  std::error_code ec;
+  const auto normalized = std::filesystem::weakly_canonical(path, ec);
+  return (ec ? path : normalized).string();
+}
+
+std::string BuildAssetPathJsonFragment(const std::filesystem::path& path, bool canonicalize = false) {
+  return "\"asset_path\":\"" +
+         spz_gatekeeper::JsonEscape(NormalizePathForExpectedJson(path, canonicalize)) + "\"";
+}
 
 void WriteBinaryFile(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes) {
   std::ofstream out(path, std::ios::binary);
@@ -259,8 +273,8 @@ TEST(test_compat_check_dir_mode_outputs_batch_summary) {
   ASSERT_TRUE(result.output.find("\"pass\":1") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"review_required\":1") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"items\":[") != std::string::npos);
-  ASSERT_TRUE(result.output.find("\"asset_path\":\"" + pass_path.string() + "\",\"audit_profile\":\"spz\",\"policy_name\":\"spz_gatekeeper_policy\",\"policy_version\":\"2.0.0\",\"policy_mode\":\"release\"") != std::string::npos);
-  ASSERT_TRUE(result.output.find("\"asset_path\":\"" + review_path.string() + "\",\"audit_profile\":\"spz\",\"policy_name\":\"spz_gatekeeper_policy\",\"policy_version\":\"2.0.0\",\"policy_mode\":\"release\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find(BuildAssetPathJsonFragment(pass_path) + ",\"audit_profile\":\"spz\",\"policy_name\":\"spz_gatekeeper_policy\",\"policy_version\":\"2.0.0\",\"policy_mode\":\"release\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find(BuildAssetPathJsonFragment(review_path) + ",\"audit_profile\":\"spz\",\"policy_name\":\"spz_gatekeeper_policy\",\"policy_version\":\"2.0.0\",\"policy_mode\":\"release\"") != std::string::npos);
 }
 
 TEST(test_compat_check_manifest_mode_outputs_batch_summary) {
@@ -336,16 +350,16 @@ TEST(test_compat_check_manifest_mode_supports_structured_items_and_grouped_summa
   ASSERT_TRUE(result.output.find("\"review_required\":1") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"block\":1") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"grouped_summary\":{") != std::string::npos);
-  ASSERT_TRUE(result.output.find("\"asset_path\":\"" + review_path.string() + "\",\"audit_profile\":\"spz\",\"policy_name\":\"spz_gatekeeper_policy\",\"policy_version\":\"2.0.0\",\"policy_mode\":\"challenge\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find(BuildAssetPathJsonFragment(review_path, true) + ",\"audit_profile\":\"spz\",\"policy_name\":\"spz_gatekeeper_policy\",\"policy_version\":\"2.0.0\",\"policy_mode\":\"challenge\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"manifest_labels\":{\"scene_id\":\"scene-b\",\"group\":\"community\",\"split\":\"dev\",\"difficulty\":\"medium\"}") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"value\":\"community\",\"summary\":{\"total\":1,\"pass\":0,\"review_required\":1,\"block\":0}") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"value\":\"official\",\"summary\":{\"total\":2,\"pass\":1,\"review_required\":0,\"block\":1}") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"value\":\"challenge\",\"summary\":{\"total\":2,\"pass\":1,\"review_required\":0,\"block\":1}") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"value\":\"scene-b\",\"summary\":{\"total\":1,\"pass\":0,\"review_required\":1,\"block\":0}") != std::string::npos);
 
-  const auto review_pos = result.output.find("\"asset_path\":\"" + review_path.string() + "\"");
-  const auto pass_pos = result.output.find("\"asset_path\":\"" + pass_path.string() + "\"");
-  const auto block_pos = result.output.find("\"asset_path\":\"" + block_path.string() + "\"");
+  const auto review_pos = result.output.find(BuildAssetPathJsonFragment(review_path, true));
+  const auto pass_pos = result.output.find(BuildAssetPathJsonFragment(pass_path, true));
+  const auto block_pos = result.output.find(BuildAssetPathJsonFragment(block_path, true));
   ASSERT_TRUE(review_pos != std::string::npos);
   ASSERT_TRUE(pass_pos != std::string::npos);
   ASSERT_TRUE(block_pos != std::string::npos);
