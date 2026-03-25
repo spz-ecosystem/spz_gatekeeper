@@ -205,16 +205,30 @@ std::string NormalizeJsonFragment(const std::string& json, const char* fallback)
 }
 
 const char* ResolvePolicyMode(const std::string& policy_mode) {
-  return policy_mode.empty() ? kAuditPolicyModeRelease : policy_mode.c_str();
+  if (policy_mode == kAuditPolicyModeDev || policy_mode == kAuditPolicyModeRelease ||
+      policy_mode == kAuditPolicyModeChallenge) {
+    return policy_mode.c_str();
+  }
+  return kAuditPolicyModeRelease;
 }
 
 bool IsReleaseReadyVerdict(const std::string& verdict) {
   return verdict == "pass";
 }
 
-std::string BuildBrowserWasmQualityGateJson(const BrowserWasmAuditReport& report) {
+std::string ResolveEffectiveFinalVerdict(const std::string& verdict,
+                                        const std::string& final_verdict) {
+  return IsSupportedAuditVerdict(final_verdict) ? final_verdict : verdict;
+}
 
-  const bool release_ready = report.verdict == "pass";
+bool ResolveEffectiveReleaseReady(const std::string& final_verdict,
+                                  bool has_release_ready,
+                                  bool release_ready) {
+  return has_release_ready ? release_ready : IsReleaseReadyVerdict(final_verdict);
+}
+
+std::string BuildBrowserWasmQualityGateJson(const BrowserWasmAuditReport& report,
+                                            bool release_ready) {
   std::ostringstream oss;
   oss << "{";
   oss << "\"coverage_level\":\"browser_lightweight\"";
@@ -480,6 +494,13 @@ bool ParseBrowserAuditHandoffJson(const std::string& json_text,
       !ExtractJsonStringField(parsed.raw_json, "tool_version", &parsed.tool_version, err)) {
     return false;
   }
+  if (parsed.raw_json.find("\"policy_mode\"") != std::string::npos) {
+    std::string policy_mode;
+    if (!ExtractJsonStringField(parsed.raw_json, "policy_mode", &policy_mode, err)) {
+      return false;
+    }
+    parsed.policy_mode = ResolvePolicyMode(policy_mode);
+  }
 
   if (parsed.audit_profile != kAuditProfileSpz) {
     if (err != nullptr) {
@@ -517,7 +538,9 @@ bool ParseBrowserAuditHandoffJson(const std::string& json_text,
 }
 
 std::string BuildBrowserWasmAuditJson(const BrowserWasmAuditReport& report) {
-  const bool release_ready = IsReleaseReadyVerdict(report.verdict);
+  const std::string final_verdict = ResolveEffectiveFinalVerdict(report.verdict, report.final_verdict);
+  const bool release_ready =
+      ResolveEffectiveReleaseReady(final_verdict, report.has_release_ready, report.release_ready);
   std::ostringstream oss;
   oss << "{";
   oss << "\"audit_profile\":\"" << kAuditProfileSpz << "\"";
@@ -529,7 +552,7 @@ std::string BuildBrowserWasmAuditJson(const BrowserWasmAuditReport& report) {
   oss << ",\"tool_version\":\"" << kAuditToolVersion << "\"";
   oss << ",\"bundle_verdict\":\"" << JsonEscape(report.verdict) << "\"";
   oss << ",\"verdict\":\"" << JsonEscape(report.verdict) << "\"";
-  oss << ",\"final_verdict\":\"" << JsonEscape(report.verdict) << "\"";
+  oss << ",\"final_verdict\":\"" << JsonEscape(final_verdict) << "\"";
   oss << ",\"release_ready\":" << (release_ready ? "true" : "false");
   oss << ",\"summary\":{";
   oss << "\"bundle_name\":\"" << JsonEscape(report.summary.bundle_name) << "\"";
@@ -554,7 +577,8 @@ std::string BuildBrowserWasmAuditJson(const BrowserWasmAuditReport& report) {
       << NormalizeJsonFragment(report.bundle_entries_json, "[]");
   oss << ",\"wasm_export_summary\":"
       << NormalizeJsonFragment(report.wasm_export_summary_json, "[]");
-  oss << ",\"wasm_quality_gate\":" << BuildBrowserWasmQualityGateJson(report);
+  oss << ",\"wasm_quality_gate\":"
+      << BuildBrowserWasmQualityGateJson(report, release_ready);
   oss << ",\"audit_duration_ms\":" << report.audit_duration_ms;
   oss << "}";
   return oss.str();
@@ -564,7 +588,8 @@ std::string BuildBrowserWasmAuditJson(const BrowserWasmAuditReport& report) {
 std::string BuildCompatCheckAuditJson(const std::string& path,
                                       const GateReport& strict_report,
                                       const GateReport& non_strict_report,
-                                      const CompatAuditMetrics* metrics) {
+                                      const CompatAuditMetrics* metrics,
+                                      const char* policy_mode) {
 
 
   bool strict_ok = false;
@@ -587,7 +612,7 @@ std::string BuildCompatCheckAuditJson(const std::string& path,
   oss << ",\"audit_profile\":\"" << kAuditProfileSpz << "\"";
   oss << ",\"policy_name\":\"" << kAuditPolicyName << "\"";
   oss << ",\"policy_version\":\"" << kAuditPolicyVersion << "\"";
-  oss << ",\"policy_mode\":\"" << kAuditPolicyModeRelease << "\"";
+  oss << ",\"policy_mode\":\"" << ResolvePolicyMode(policy_mode == nullptr ? "" : policy_mode) << "\"";
   oss << ",\"audit_mode\":\"" << kAuditModeLocalCliSpzArtifactAudit << "\"";
   oss << ",\"artifact_verdict\":\"" << verdict << "\"";
   oss << ",\"verdict\":\"" << verdict << "\"";

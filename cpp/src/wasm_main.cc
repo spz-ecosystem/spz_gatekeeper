@@ -407,8 +407,13 @@ emscripten::val inspectCompatSummary(const emscripten::val& spz_buffer) {
   if (!TryInspect(spz_buffer, false, &non_strict_report, &non_strict_err)) {
     emscripten::val out = emscripten::val::object();
     out.set("audit_profile", std::string(spz_gatekeeper::kAuditProfileSpz));
+    out.set("policy_name", std::string(spz_gatekeeper::kAuditPolicyName));
+    out.set("policy_version", std::string(spz_gatekeeper::kAuditPolicyVersion));
+    out.set("policy_mode", std::string(spz_gatekeeper::kAuditPolicyModeRelease));
     out.set("audit_mode", std::string(spz_gatekeeper::kAuditModeLocalCliSpzArtifactAudit));
     out.set("verdict", std::string("block"));
+    out.set("final_verdict", std::string("block"));
+    out.set("release_ready", false);
     out.set("next_action", std::string("block_artifact"));
     out.set("error", non_strict_err);
     return out;
@@ -423,7 +428,11 @@ emscripten::val buildBrowserAuditReport(const emscripten::val& payload) {
 
   spz_gatekeeper::BrowserWasmAuditReport report;
   report.bundle_id = payload["bundle_id"].as<std::string>();
+  report.policy_mode = payload["policy_mode"].as<std::string>();
   report.verdict = payload["verdict"].as<std::string>();
+  report.final_verdict = payload["final_verdict"].as<std::string>();
+  report.release_ready = payload["release_ready"].as<bool>();
+  report.has_release_ready = true;
   report.next_action = payload["next_action"].as<std::string>();
   report.audit_duration_ms = payload["audit_duration_ms"].as<double>();
   report.summary.bundle_name = summary["bundle_name"].as<std::string>();

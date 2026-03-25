@@ -83,6 +83,9 @@ struct BrowserWasmAuditReport {
   std::string bundle_id;
   std::string policy_mode = kAuditPolicyModeRelease;
   std::string verdict;
+  std::string final_verdict;
+  bool release_ready = false;
+  bool has_release_ready = false;
   std::string next_action;
   double audit_duration_ms = 0.0;
   BrowserWasmAuditSummary summary;
@@ -107,7 +110,8 @@ std::string BuildBrowserWasmAuditJson(const BrowserWasmAuditReport& report);
 std::string BuildCompatCheckAuditJson(const std::string& path,
                                       const GateReport& strict_report,
                                       const GateReport& non_strict_report,
-                                      const CompatAuditMetrics* metrics = nullptr);
+                                      const CompatAuditMetrics* metrics = nullptr,
+                                      const char* policy_mode = kAuditPolicyModeRelease);
 
 std::string BuildCompatCheckAuditWithHandoffJson(const std::string& compat_json,
                                                  const std::string& artifact_verdict,

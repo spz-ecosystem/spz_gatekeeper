@@ -1,9 +1,26 @@
 const kAuditProfile = 'spz';
 const kAuditPolicyName = 'spz_gatekeeper_policy';
 const kAuditPolicyVersion = '2.0.0';
+const kAuditPolicyModeDev = 'dev';
 const kAuditPolicyModeRelease = 'release';
+const kAuditPolicyModeChallenge = 'challenge';
 const kAuditToolVersion = '1.0.0';
 const kBrowserAuditMode = 'browser_lightweight_wasm_audit';
+const kBrowserPolicyDefaultBudgets = Object.freeze({
+  dev: Object.freeze({}),
+  release: Object.freeze({
+    cold_start_ms: 1500,
+    tiny_case_ms: 500,
+    peak_memory_mb: 256,
+    copy_pass_limit: 2,
+  }),
+  challenge: Object.freeze({
+    cold_start_ms: 1500,
+    tiny_case_ms: 500,
+    peak_memory_mb: 256,
+    copy_pass_limit: 2,
+  }),
+});
 
 
 const kSupportedZipCompressionStored = 0;
@@ -181,6 +198,45 @@ function resolveNextAction(verdict) {
   return 'block_bundle';
 }
 
+function resolvePolicyMode(policyMode) {
+  return policyMode === kAuditPolicyModeDev ||
+    policyMode === kAuditPolicyModeRelease ||
+    policyMode === kAuditPolicyModeChallenge
+    ? policyMode
+    : kAuditPolicyModeRelease;
+}
+
+function isReleaseReadyVerdict(verdict) {
+  return verdict === 'pass';
+}
+
+function resolveFinalVerdict(data) {
+  return typeof data.final_verdict === 'string' && data.final_verdict.length > 0
+    ? data.final_verdict
+    : data.verdict;
+}
+
+function resolveReleaseReady(data, finalVerdict) {
+  return typeof data.release_ready === 'boolean'
+    ? data.release_ready
+    : isReleaseReadyVerdict(finalVerdict);
+}
+
+function getBrowserPolicyDefaultBudgets(policyMode) {
+  return kBrowserPolicyDefaultBudgets[resolvePolicyMode(policyMode)] || kBrowserPolicyDefaultBudgets.release;
+}
+
+function resolveDeclaredBudget(manifestBudgets, policyBudgets, key) {
+  const declared = manifestBudgets?.[key];
+  if (typeof declared === 'number' && Number.isFinite(declared)) {
+    return declared;
+  }
+  const policyDeclared = policyBudgets?.[key];
+  return typeof policyDeclared === 'number' && Number.isFinite(policyDeclared)
+    ? policyDeclared
+    : undefined;
+}
+
 function isTruthyResult(value) {
   if (typeof value === 'object' && value !== null) {
     const maybeOk = value.ok;
@@ -274,12 +330,21 @@ function createRuntimeStatus(runtime) {
 }
 
 function buildLegacyBrowserAuditReport(data) {
+  const policyMode = resolvePolicyMode(data.policy_mode);
+  const finalVerdict = resolveFinalVerdict(data);
+  const releaseReady = resolveReleaseReady(data, finalVerdict);
   return {
     audit_profile: kAuditProfile,
+    policy_name: kAuditPolicyName,
+    policy_version: kAuditPolicyVersion,
+    policy_mode: policyMode,
     audit_mode: kBrowserAuditMode,
     bundle_id: data.bundle_id,
     tool_version: kAuditToolVersion,
+    bundle_verdict: data.verdict,
     verdict: data.verdict,
+    final_verdict: finalVerdict,
+    release_ready: releaseReady,
     summary: data.summary,
     budgets: data.budgets,
     issues: data.issues,
@@ -300,7 +365,7 @@ function buildLegacyBrowserAuditReport(data) {
 
       performance_budget_wired: data.performance_budget_wired,
       artifact_audit_wired: false,
-      release_ready: data.verdict === 'pass',
+      release_ready: releaseReady,
     },
     audit_duration_ms: data.audit_duration_ms,
   };
@@ -318,9 +383,12 @@ function buildBrowserToCliHandoff(report) {
   return {
     audit_profile: report.audit_profile,
     audit_mode: report.audit_mode,
+    policy_mode: resolvePolicyMode(report.policy_mode),
     bundle_id: report.bundle_id,
     tool_version: report.tool_version,
     verdict: report.verdict,
+    final_verdict: report.final_verdict,
+    release_ready: report.release_ready,
     summary: report.summary || {},
     budgets: report.budgets || {},
     issues: report.issues || [],
@@ -334,6 +402,8 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
   const auditStartedAt = nowMs();
   const bundleBytes = toUint8Array(input);
   const bundleId = await buildBundleId(bundleBytes);
+  const policyMode = resolvePolicyMode(options.policy_mode);
+  const disableCopyBudgetCollection = options.disable_copy_budget_collection === true;
   let manifest = null;
 
   let entries = new Map();
@@ -546,11 +616,28 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
 
   memoryObservedMb = currentMemoryMb() ?? memoryObservedMb;
   const declaredBudgets = manifest?.budgets ?? {};
+  const policyBudgets = getBrowserPolicyDefaultBudgets(policyMode);
   const budgets = {
-    cold_start_ms: describeBudget(declaredBudgets.cold_start_ms, coldStartMs, coldStartMs !== null),
-    tiny_case_ms: describeBudget(declaredBudgets.tiny_case_ms, validTinyMs, validTinyMs !== null),
-    peak_memory_mb: describeBudget(declaredBudgets.peak_memory_mb, memoryObservedMb, memoryObservedMb !== null),
-    copy_pass_limit: describeBudget(declaredBudgets.copy_pass_limit, copyBudget.pass_count, true),
+    cold_start_ms: describeBudget(
+      resolveDeclaredBudget(declaredBudgets, policyBudgets, 'cold_start_ms'),
+      coldStartMs,
+      coldStartMs !== null,
+    ),
+    tiny_case_ms: describeBudget(
+      resolveDeclaredBudget(declaredBudgets, policyBudgets, 'tiny_case_ms'),
+      validTinyMs,
+      validTinyMs !== null,
+    ),
+    peak_memory_mb: describeBudget(
+      resolveDeclaredBudget(declaredBudgets, policyBudgets, 'peak_memory_mb'),
+      memoryObservedMb,
+      memoryObservedMb !== null,
+    ),
+    copy_pass_limit: describeBudget(
+      resolveDeclaredBudget(declaredBudgets, policyBudgets, 'copy_pass_limit'),
+      copyBudget.pass_count,
+      !disableCopyBudgetCollection,
+    ),
   };
 
 
@@ -562,6 +649,16 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
   }
   if (budgets.peak_memory_mb.status === 'over_budget') {
     pushIssue(issues, 'warning', 'BUNDLE_MEMORY_OVER_BUDGET', '内存占用超出 manifest 预算');
+  }
+  if (budgets.copy_pass_limit.status === 'over_budget') {
+    pushIssue(issues, 'warning', 'BUNDLE_COPY_OVER_BUDGET', 'copy 路径超出 policy/manifest 预算');
+  }
+  if (
+    budgets.copy_pass_limit.status === 'not_collected' &&
+    budgets.copy_pass_limit.declared !== null &&
+    policyMode !== kAuditPolicyModeDev
+  ) {
+    pushIssue(issues, 'warning', 'BUNDLE_COPY_BUDGET_NOT_COLLECTED', 'copy 预算未完成采集，不能作为 release/challenge 通过依据');
   }
 
   const verdict = resolveVerdict(issues);
@@ -579,7 +676,10 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
 
   return buildBrowserAuditReport({
     bundle_id: bundleId,
+    policy_mode: kAuditPolicyModeRelease,
     verdict,
+    final_verdict: verdict,
+    release_ready: isReleaseReadyVerdict(verdict),
     summary,
     budgets,
     issues,
@@ -615,14 +715,10 @@ export default async function createSpzGatekeeperModule() {
   const runtimeStatus = createRuntimeStatus(runtime);
 
   return {
-    auditWasmBundle: (input, fileName) => auditWasmBundle(input, fileName, runtime),
+    auditWasmBundle: (input, fileName, options) => auditWasmBundle(input, fileName, runtime, options),
     buildBrowserAuditReport: runtime?.buildBrowserAuditReport?.bind(runtime),
     buildBrowserToCliHandoff,
     getRuntimeStatus: () => runtimeStatus,
 
     inspectSpz: runtime?.inspectSpz?.bind(runtime) ?? createUnavailableMethod('inspectSpz'),
-    dumpTrailer: runtime?.dumpTrailer?.bind(runtime) ?? createUnavailableMethod('dumpTrailer'),
-    inspectSpzText: runtime?.inspectSpzText?.bind(runtime) ?? createUnavailableMethod('inspectSpzText'),
-    inspectCompatSummary: runtime?.inspectCompatSummary?.bind(runtime) ?? createUnavailableMethod('inspectCompatSummary'),
-    listRegisteredExtensions: runtime?.listRegisteredExtensions?.bind(runtime) ?? (() => ({ count: 0, extensions: [] })),
-    describeExtension: runtime?.describeExtension?.bind(runtime) ?? ((type) => ({ error: 'runtime unavailable', type })),
+    dumpTrailer: runtime?.dumpTrailer?.bind(runtime) ?? createUnavailableMethod(

@@ -47,7 +47,9 @@ TEST(test_audit_summary_freezes_public_mode_constants) {
   ASSERT_TRUE(std::string(spz_gatekeeper::kAuditProfileSpz) == "spz");
   ASSERT_TRUE(std::string(spz_gatekeeper::kAuditPolicyName) == "spz_gatekeeper_policy");
   ASSERT_TRUE(std::string(spz_gatekeeper::kAuditPolicyVersion) == "2.0.0");
+  ASSERT_TRUE(std::string(spz_gatekeeper::kAuditPolicyModeDev) == "dev");
   ASSERT_TRUE(std::string(spz_gatekeeper::kAuditPolicyModeRelease) == "release");
+  ASSERT_TRUE(std::string(spz_gatekeeper::kAuditPolicyModeChallenge) == "challenge");
   ASSERT_TRUE(std::string(spz_gatekeeper::kAuditModeBrowserLightweightWasmAudit) ==
               "browser_lightweight_wasm_audit");
   ASSERT_TRUE(std::string(spz_gatekeeper::kAuditModeLocalCliSpzArtifactAudit) ==
@@ -104,6 +106,44 @@ TEST(test_build_browser_wasm_audit_json_reports_pass_schema) {
   ASSERT_TRUE(json.find("\"release_ready\":true") != std::string::npos);
 }
 
+
+TEST(test_build_browser_wasm_audit_json_respects_explicit_final_verdict_and_release_ready) {
+  spz_gatekeeper::BrowserWasmAuditReport report;
+  report.bundle_id = "sha256:test-bundle";
+  report.policy_mode = spz_gatekeeper::kAuditPolicyModeDev;
+  report.verdict = "pass";
+  report.final_verdict = "review_required";
+  report.has_release_ready = true;
+  report.release_ready = false;
+  report.next_action = "review_bundle_before_cli";
+  report.audit_duration_ms = 8.0;
+  report.summary.bundle_name = "bundle.zip";
+  report.summary.file_count = 5;
+  report.summary.issue_count = 1;
+  report.summary.declared_export_count = 3;
+  report.summary.loader_export_count = 3;
+  report.summary.wasm_export_count = 1;
+  report.summary.valid_tiny_passed = true;
+  report.summary.invalid_tiny_handled = true;
+  report.summary.runtime_available = true;
+  report.manifest_summary_json = "{\"profile\":\"spz\"}";
+  report.budgets_json = "{\"cold_start_ms\":{\"status\":\"within_budget\"}}";
+  report.issues_json = "[{\"severity\":\"warning\",\"code\":\"BUNDLE_REVIEW\"}]";
+  report.bundle_entries_json = "[]";
+  report.wasm_export_summary_json = "[]";
+  report.empty_shell_risk = false;
+  report.copy_budget_wired = true;
+  report.memory_budget_wired = true;
+  report.performance_budget_wired = true;
+
+  const std::string json = spz_gatekeeper::BuildBrowserWasmAuditJson(report);
+  ASSERT_TRUE(json.find("\"policy_mode\":\"dev\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"bundle_verdict\":\"pass\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"final_verdict\":\"review_required\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"release_ready\":false") != std::string::npos);
+  ASSERT_TRUE(json.find("\"artifact_audit_wired\":false,\"release_ready\":false") !=
+              std::string::npos);
+}
 
 TEST(test_build_compat_check_audit_json_reports_pass_schema) {
   spz_gatekeeper::GateReport strict_report;
@@ -207,6 +247,20 @@ TEST(test_parse_browser_handoff_and_merge_into_compat_audit_json) {
   ASSERT_TRUE(merged.find("\"release_ready\":true") != std::string::npos);
 }
 
+TEST(test_parse_browser_handoff_preserves_explicit_policy_mode) {
+  const std::string handoff_json =
+      "{\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\","
+      "\"policy_mode\":\"dev\",\"bundle_id\":\"sha256:test-bundle\","
+      "\"tool_version\":\"1.0.0\",\"verdict\":\"review_required\","
+      "\"summary\":{},\"budgets\":{},\"issues\":[],"
+      "\"next_action\":\"review_bundle_before_cli\"}";
+
+  spz_gatekeeper::BrowserAuditHandoff handoff;
+  std::string err;
+  ASSERT_TRUE(spz_gatekeeper::ParseBrowserAuditHandoffJson(handoff_json, &handoff, &err));
+  ASSERT_TRUE(handoff.policy_mode == spz_gatekeeper::kAuditPolicyModeDev);
+}
+
 
 
 }  // namespace
@@ -217,9 +271,11 @@ int main() {
 
   RUN_TEST(test_audit_summary_freezes_public_mode_constants);
   RUN_TEST(test_build_browser_wasm_audit_json_reports_pass_schema);
+  RUN_TEST(test_build_browser_wasm_audit_json_respects_explicit_final_verdict_and_release_ready);
   RUN_TEST(test_build_compat_check_audit_json_reports_pass_schema);
   RUN_TEST(test_build_compat_check_audit_json_reports_review_required_for_unknown_extension);
   RUN_TEST(test_parse_browser_handoff_and_merge_into_compat_audit_json);
+  RUN_TEST(test_parse_browser_handoff_preserves_explicit_policy_mode);
 
 
 
