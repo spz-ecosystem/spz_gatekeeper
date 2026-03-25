@@ -22,7 +22,16 @@ inline constexpr const char* kAuditModeBrowserLightweightWasmAudit =
     "browser_lightweight_wasm_audit";
 inline constexpr const char* kAuditModeLocalCliSpzArtifactAudit =
     "local_cli_spz_artifact_audit";
+inline constexpr const char* kAuditBudgetColdStartMs = "cold_start_ms";
+inline constexpr const char* kAuditBudgetTinyCaseMs = "tiny_case_ms";
+inline constexpr const char* kAuditBudgetPeakMemoryMb = "peak_memory_mb";
+inline constexpr const char* kAuditBudgetCopyPassLimit = "copy_pass_limit";
+inline constexpr const char* kAuditBudgetFileSizeBytes = "file_size_bytes";
+inline constexpr const char* kAuditBudgetDecompressedSizeBytes = "decompressed_size_bytes";
+inline constexpr const char* kAuditBudgetProcessTimeMs = "process_time_ms";
+inline constexpr const char* kAuditBudgetMemoryGrowthCount = "memory_growth_count";
 
+struct CompatAuditMetrics;
 
 bool HasWarnings(const GateReport& report);
 bool HasValidatorCoverage(const GateReport& report);
@@ -31,6 +40,12 @@ std::string ResolveCompatVerdict(const GateReport& strict_report,
                                  const GateReport& non_strict_report,
                                  bool* strict_ok = nullptr,
                                  bool* non_strict_ok = nullptr);
+std::string ResolveCompatAuditVerdict(const GateReport& strict_report,
+                                      const GateReport& non_strict_report,
+                                      const CompatAuditMetrics* metrics,
+                                      const char* policy_mode = kAuditPolicyModeRelease,
+                                      bool* strict_ok = nullptr,
+                                      bool* non_strict_ok = nullptr);
 std::string ResolveCompatNextAction(const std::string& verdict);
 
 

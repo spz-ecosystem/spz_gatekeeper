@@ -179,8 +179,8 @@ TEST(test_compat_check_reports_dual_path_for_valid_adobe_fixture) {
   ASSERT_TRUE(result.output.find("\"budgets\":{") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"file_size_bytes\":{") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"decompressed_size_bytes\":{") != std::string::npos);
-  ASSERT_TRUE(result.output.find("\"peak_memory_mb\":{\"declared\":null,\"observed\":") != std::string::npos);
-  ASSERT_TRUE(result.output.find("\"memory_growth_count\":{\"declared\":null,\"observed\":") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"peak_memory_mb\":{\"declared\":256,\"observed\":") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"memory_growth_count\":{\"declared\":1,\"observed\":") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"issues\":[") != std::string::npos);
 
   ASSERT_TRUE(result.output.find("\"next_action\":\"artifact_ready\"") != std::string::npos);
@@ -253,11 +253,14 @@ TEST(test_compat_check_dir_mode_outputs_batch_summary) {
   const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check --dir \"" + workdir.path().string() + "\" --json");
   ASSERT_TRUE(result.exit_code == 1);
   ASSERT_TRUE(result.output.find("\"audit_mode\":\"local_cli_spz_artifact_audit\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"policy_mode\":\"release\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"summary\":{") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"total\":2") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"pass\":1") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"review_required\":1") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"items\":[") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"asset_path\":\"" + pass_path.string() + "\",\"audit_profile\":\"spz\",\"policy_name\":\"spz_gatekeeper_policy\",\"policy_version\":\"2.0.0\",\"policy_mode\":\"release\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"asset_path\":\"" + review_path.string() + "\",\"audit_profile\":\"spz\",\"policy_name\":\"spz_gatekeeper_policy\",\"policy_version\":\"2.0.0\",\"policy_mode\":\"release\"") != std::string::npos);
 }
 
 TEST(test_compat_check_manifest_mode_outputs_batch_summary) {
@@ -291,6 +294,65 @@ TEST(test_compat_check_manifest_mode_outputs_batch_summary) {
   ASSERT_TRUE(result.output.find("\"top_issues\":[") != std::string::npos);
 }
 
+TEST(test_compat_check_manifest_mode_supports_structured_items_and_grouped_summary) {
+  TempDirGuard workdir(MakeTempDirPath("compat_check_manifest_structured"));
+  const auto pass_trailer = spz_gatekeeper_test::CreateTrailer(
+      {{0xADBE0002u, spz_gatekeeper_test::CreateAdobeSafeOrbitPayload()}});
+  const auto review_trailer = spz_gatekeeper_test::CreateTrailer(
+      {{0xCAFE0001u, std::vector<std::uint8_t>{0x01, 0x02, 0x03, 0x04}}});
+  const auto block_trailer = spz_gatekeeper_test::CreateTrailer(
+      {{0xADBE0002u, std::vector<std::uint8_t>{0x00, 0x00, 0x00, 0x00}}});
+
+  const auto review_path = workdir.path() / "scene_review.spz";
+  const auto pass_path = workdir.path() / "scene_pass.spz";
+  const auto block_path = workdir.path() / "scene_block.spz";
+  WriteBinaryFile(review_path,
+                  spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &review_trailer));
+  WriteBinaryFile(pass_path,
+                  spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &pass_trailer));
+  WriteBinaryFile(block_path,
+                  spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &block_trailer));
+
+  const auto manifest_path = workdir.path() / "challenge_manifest.json";
+  std::ofstream manifest(manifest_path);
+  manifest << "{\"items\":["
+           << "{\"path\":\"" << review_path.filename().generic_string()
+           << "\",\"scene_id\":\"scene-b\",\"group\":\"community\",\"split\":\"dev\",\"difficulty\":\"medium\"},"
+           << "{\"path\":\"" << pass_path.filename().generic_string()
+           << "\",\"scene_id\":\"scene-a\",\"group\":\"official\",\"split\":\"challenge\",\"difficulty\":\"easy\"},"
+           << "{\"path\":\"" << block_path.filename().generic_string()
+           << "\",\"scene_id\":\"scene-c\",\"group\":\"official\",\"split\":\"challenge\",\"difficulty\":\"hard\"}"
+           << "]}";
+  manifest.close();
+
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check --manifest \"" + manifest_path.string() + "\" --json");
+  ASSERT_TRUE(result.exit_code == 1);
+  ASSERT_TRUE(result.output.find("\"policy_name\":\"spz_gatekeeper_policy\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"policy_version\":\"2.0.0\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"policy_mode\":\"challenge\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"summary\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"total\":3") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"pass\":1") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"review_required\":1") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"block\":1") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"grouped_summary\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"asset_path\":\"" + review_path.string() + "\",\"audit_profile\":\"spz\",\"policy_name\":\"spz_gatekeeper_policy\",\"policy_version\":\"2.0.0\",\"policy_mode\":\"challenge\"") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"manifest_labels\":{\"scene_id\":\"scene-b\",\"group\":\"community\",\"split\":\"dev\",\"difficulty\":\"medium\"}") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"value\":\"community\",\"summary\":{\"total\":1,\"pass\":0,\"review_required\":1,\"block\":0}") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"value\":\"official\",\"summary\":{\"total\":2,\"pass\":1,\"review_required\":0,\"block\":1}") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"value\":\"challenge\",\"summary\":{\"total\":2,\"pass\":1,\"review_required\":0,\"block\":1}") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"value\":\"scene-b\",\"summary\":{\"total\":1,\"pass\":0,\"review_required\":1,\"block\":0}") != std::string::npos);
+
+  const auto review_pos = result.output.find("\"asset_path\":\"" + review_path.string() + "\"");
+  const auto pass_pos = result.output.find("\"asset_path\":\"" + pass_path.string() + "\"");
+  const auto block_pos = result.output.find("\"asset_path\":\"" + block_path.string() + "\"");
+  ASSERT_TRUE(review_pos != std::string::npos);
+  ASSERT_TRUE(pass_pos != std::string::npos);
+  ASSERT_TRUE(block_pos != std::string::npos);
+  ASSERT_TRUE(review_pos < pass_pos);
+  ASSERT_TRUE(pass_pos < block_pos);
+}
+
 TEST(test_compat_check_merges_browser_handoff_without_skipping_artifact_audit) {
   TempDirGuard workdir(MakeTempDirPath("compat_check_handoff_mode"));
   const auto trailer = spz_gatekeeper_test::CreateTrailer(
@@ -303,7 +365,7 @@ TEST(test_compat_check_merges_browser_handoff_without_skipping_artifact_audit) {
   const auto handoff_path = workdir.path() / "browser_handoff.json";
   std::ofstream handoff(handoff_path);
   handoff << "{\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\","
-             "\"bundle_id\":\"sha256:test-bundle\",\"tool_version\":\"1.0.0\","
+             "\"policy_mode\":\"dev\",\"bundle_id\":\"sha256:test-bundle\",\"tool_version\":\"1.0.0\","
              "\"verdict\":\"block\",\"summary\":{},\"budgets\":{},\"issues\":[],"
              "\"next_action\":\"block_bundle\"}";
   handoff.close();
@@ -313,6 +375,7 @@ TEST(test_compat_check_merges_browser_handoff_without_skipping_artifact_audit) {
   ASSERT_TRUE(result.output.find("\"verdict\":\"pass\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"handoff\":{") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"upstream_audit\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"policy_mode\":\"dev\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"bundle_id\":\"sha256:test-bundle\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"final_verdict\":\"pass\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"evidence_chain\":[\"browser_lightweight_wasm_audit\",\"local_cli_spz_artifact_audit\"]") != std::string::npos);
@@ -340,6 +403,7 @@ int main() {
   RUN_TEST(test_compat_check_surfaces_unknown_extension_issue_summary);
   RUN_TEST(test_compat_check_dir_mode_outputs_batch_summary);
   RUN_TEST(test_compat_check_manifest_mode_outputs_batch_summary);
+  RUN_TEST(test_compat_check_manifest_mode_supports_structured_items_and_grouped_summary);
   RUN_TEST(test_compat_check_merges_browser_handoff_without_skipping_artifact_audit);
   RUN_TEST(test_help_describes_task5_boundaries_and_handoff_contract);
 

@@ -6,19 +6,38 @@ const kAuditPolicyModeRelease = 'release';
 const kAuditPolicyModeChallenge = 'challenge';
 const kAuditToolVersion = '1.0.0';
 const kBrowserAuditMode = 'browser_lightweight_wasm_audit';
-const kBrowserPolicyDefaultBudgets = Object.freeze({
-  dev: Object.freeze({}),
-  release: Object.freeze({
-    cold_start_ms: 1500,
-    tiny_case_ms: 500,
-    peak_memory_mb: 256,
-    copy_pass_limit: 2,
+const kUnifiedBudgetPolicyTable = Object.freeze({
+  cold_start_ms: Object.freeze({
+    domain: 'perf',
+    thresholds: Object.freeze({ dev: null, release: 1500, challenge: 1500 }),
   }),
-  challenge: Object.freeze({
-    cold_start_ms: 1500,
-    tiny_case_ms: 500,
-    peak_memory_mb: 256,
-    copy_pass_limit: 2,
+  tiny_case_ms: Object.freeze({
+    domain: 'perf',
+    thresholds: Object.freeze({ dev: null, release: 500, challenge: 500 }),
+  }),
+  peak_memory_mb: Object.freeze({
+    domain: 'memory',
+    thresholds: Object.freeze({ dev: null, release: 256, challenge: 256 }),
+  }),
+  copy_pass_limit: Object.freeze({
+    domain: 'copy',
+    thresholds: Object.freeze({ dev: null, release: 2, challenge: 2 }),
+  }),
+  file_size_bytes: Object.freeze({
+    domain: 'artifact',
+    thresholds: Object.freeze({ dev: null, release: null, challenge: null }),
+  }),
+  decompressed_size_bytes: Object.freeze({
+    domain: 'artifact',
+    thresholds: Object.freeze({ dev: null, release: null, challenge: null }),
+  }),
+  process_time_ms: Object.freeze({
+    domain: 'artifact',
+    thresholds: Object.freeze({ dev: null, release: null, challenge: null }),
+  }),
+  memory_growth_count: Object.freeze({
+    domain: 'memory',
+    thresholds: Object.freeze({ dev: null, release: 1, challenge: 1 }),
   }),
 });
 
@@ -210,31 +229,43 @@ function isReleaseReadyVerdict(verdict) {
   return verdict === 'pass';
 }
 
-function resolveFinalVerdict(data) {
-  return typeof data.final_verdict === 'string' && data.final_verdict.length > 0
-    ? data.final_verdict
+function resolveBundleVerdict(data) {
+  return typeof data.bundle_verdict === 'string' && data.bundle_verdict.length > 0
+    ? data.bundle_verdict
     : data.verdict;
 }
 
-function resolveReleaseReady(data, finalVerdict) {
-  return typeof data.release_ready === 'boolean'
-    ? data.release_ready
-    : isReleaseReadyVerdict(finalVerdict);
+function resolveFinalVerdict(data) {
+  return typeof data.final_verdict === 'string' && data.final_verdict.length > 0
+    ? data.final_verdict
+    : resolveBundleVerdict(data);
 }
 
-function getBrowserPolicyDefaultBudgets(policyMode) {
-  return kBrowserPolicyDefaultBudgets[resolvePolicyMode(policyMode)] || kBrowserPolicyDefaultBudgets.release;
+function resolveReleaseReady(_data, finalVerdict) {
+  return isReleaseReadyVerdict(finalVerdict);
 }
 
-function resolveDeclaredBudget(manifestBudgets, policyBudgets, key) {
+function resolvePolicyDeclaredBudget(policyMode, key) {
+  const spec = kUnifiedBudgetPolicyTable[key];
+  if (!spec) {
+    return undefined;
+  }
+  const declared = spec.thresholds[resolvePolicyMode(policyMode)];
+  return typeof declared === 'number' && Number.isFinite(declared)
+    ? declared
+    : undefined;
+}
+
+function resolveDeclaredBudget(manifestBudgets, policyMode, key) {
   const declared = manifestBudgets?.[key];
   if (typeof declared === 'number' && Number.isFinite(declared)) {
     return declared;
   }
-  const policyDeclared = policyBudgets?.[key];
-  return typeof policyDeclared === 'number' && Number.isFinite(policyDeclared)
-    ? policyDeclared
-    : undefined;
+  return resolvePolicyDeclaredBudget(policyMode, key);
+}
+
+function describeBudgetFromPolicy(manifestBudgets, policyMode, key, observed, collected = true) {
+  return describeBudget(resolveDeclaredBudget(manifestBudgets, policyMode, key), observed, collected);
 }
 
 function isTruthyResult(value) {
@@ -331,6 +362,7 @@ function createRuntimeStatus(runtime) {
 
 function buildLegacyBrowserAuditReport(data) {
   const policyMode = resolvePolicyMode(data.policy_mode);
+  const bundleVerdict = resolveBundleVerdict(data);
   const finalVerdict = resolveFinalVerdict(data);
   const releaseReady = resolveReleaseReady(data, finalVerdict);
   return {
@@ -341,8 +373,8 @@ function buildLegacyBrowserAuditReport(data) {
     audit_mode: kBrowserAuditMode,
     bundle_id: data.bundle_id,
     tool_version: kAuditToolVersion,
-    bundle_verdict: data.verdict,
-    verdict: data.verdict,
+    bundle_verdict: bundleVerdict,
+    verdict: bundleVerdict,
     final_verdict: finalVerdict,
     release_ready: releaseReady,
     summary: data.summary,
@@ -379,16 +411,18 @@ function buildBrowserAuditReport(data, runtime) {
 }
 
 function buildBrowserToCliHandoff(report) {
-
+  const bundleVerdict = resolveBundleVerdict(report);
+  const finalVerdict = resolveFinalVerdict(report);
   return {
     audit_profile: report.audit_profile,
     audit_mode: report.audit_mode,
     policy_mode: resolvePolicyMode(report.policy_mode),
     bundle_id: report.bundle_id,
     tool_version: report.tool_version,
-    verdict: report.verdict,
-    final_verdict: report.final_verdict,
-    release_ready: report.release_ready,
+    bundle_verdict: bundleVerdict,
+    verdict: bundleVerdict,
+    final_verdict: finalVerdict,
+    release_ready: resolveReleaseReady(report, finalVerdict),
     summary: report.summary || {},
     budgets: report.budgets || {},
     issues: report.issues || [],
@@ -396,7 +430,7 @@ function buildBrowserToCliHandoff(report) {
   };
 }
 
-async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
+async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null, options = {}) {
 
   const issues = [];
   const auditStartedAt = nowMs();
@@ -616,25 +650,32 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
 
   memoryObservedMb = currentMemoryMb() ?? memoryObservedMb;
   const declaredBudgets = manifest?.budgets ?? {};
-  const policyBudgets = getBrowserPolicyDefaultBudgets(policyMode);
   const budgets = {
-    cold_start_ms: describeBudget(
-      resolveDeclaredBudget(declaredBudgets, policyBudgets, 'cold_start_ms'),
+    cold_start_ms: describeBudgetFromPolicy(
+      declaredBudgets,
+      policyMode,
+      'cold_start_ms',
       coldStartMs,
       coldStartMs !== null,
     ),
-    tiny_case_ms: describeBudget(
-      resolveDeclaredBudget(declaredBudgets, policyBudgets, 'tiny_case_ms'),
+    tiny_case_ms: describeBudgetFromPolicy(
+      declaredBudgets,
+      policyMode,
+      'tiny_case_ms',
       validTinyMs,
       validTinyMs !== null,
     ),
-    peak_memory_mb: describeBudget(
-      resolveDeclaredBudget(declaredBudgets, policyBudgets, 'peak_memory_mb'),
+    peak_memory_mb: describeBudgetFromPolicy(
+      declaredBudgets,
+      policyMode,
+      'peak_memory_mb',
       memoryObservedMb,
       memoryObservedMb !== null,
     ),
-    copy_pass_limit: describeBudget(
-      resolveDeclaredBudget(declaredBudgets, policyBudgets, 'copy_pass_limit'),
+    copy_pass_limit: describeBudgetFromPolicy(
+      declaredBudgets,
+      policyMode,
+      'copy_pass_limit',
       copyBudget.pass_count,
       !disableCopyBudgetCollection,
     ),
@@ -676,10 +717,9 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
 
   return buildBrowserAuditReport({
     bundle_id: bundleId,
-    policy_mode: kAuditPolicyModeRelease,
+    policy_mode: policyMode,
     verdict,
     final_verdict: verdict,
-    release_ready: isReleaseReadyVerdict(verdict),
     summary,
     budgets,
     issues,

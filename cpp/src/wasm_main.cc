@@ -431,8 +431,6 @@ emscripten::val buildBrowserAuditReport(const emscripten::val& payload) {
   report.policy_mode = payload["policy_mode"].as<std::string>();
   report.verdict = payload["verdict"].as<std::string>();
   report.final_verdict = payload["final_verdict"].as<std::string>();
-  report.release_ready = payload["release_ready"].as<bool>();
-  report.has_release_ready = true;
   report.next_action = payload["next_action"].as<std::string>();
   report.audit_duration_ms = payload["audit_duration_ms"].as<double>();
   report.summary.bundle_name = summary["bundle_name"].as<std::string>();

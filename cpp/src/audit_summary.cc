@@ -6,10 +6,12 @@
 #include "spz_gatekeeper/extension_spec_registry.h"
 #include "spz_gatekeeper/json_min.h"
 
+#include <array>
 #include <cctype>
 #include <set>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 
@@ -205,11 +207,112 @@ std::string NormalizeJsonFragment(const std::string& json, const char* fallback)
 }
 
 const char* ResolvePolicyMode(const std::string& policy_mode) {
-  if (policy_mode == kAuditPolicyModeDev || policy_mode == kAuditPolicyModeRelease ||
-      policy_mode == kAuditPolicyModeChallenge) {
-    return policy_mode.c_str();
+  if (policy_mode == kAuditPolicyModeDev) {
+    return kAuditPolicyModeDev;
+  }
+  if (policy_mode == kAuditPolicyModeChallenge) {
+    return kAuditPolicyModeChallenge;
   }
   return kAuditPolicyModeRelease;
+}
+
+struct BudgetThreshold {
+  bool has_declared = false;
+  double declared = 0.0;
+};
+
+struct BudgetPolicyEntry {
+  std::string_view metric_name;
+  BudgetThreshold dev;
+  BudgetThreshold release;
+  BudgetThreshold challenge;
+};
+
+constexpr BudgetThreshold NoDeclaredBudget() {
+  return {false, 0.0};
+}
+
+constexpr BudgetThreshold DeclaredBudget(double declared) {
+  return {true, declared};
+}
+
+constexpr std::array<BudgetPolicyEntry, 8> kUnifiedBudgetPolicyTable = {{
+    {kAuditBudgetColdStartMs, NoDeclaredBudget(), DeclaredBudget(1500.0), DeclaredBudget(1500.0)},
+    {kAuditBudgetTinyCaseMs, NoDeclaredBudget(), DeclaredBudget(500.0), DeclaredBudget(500.0)},
+    {kAuditBudgetPeakMemoryMb, NoDeclaredBudget(), DeclaredBudget(256.0), DeclaredBudget(256.0)},
+    {kAuditBudgetCopyPassLimit, NoDeclaredBudget(), DeclaredBudget(2.0), DeclaredBudget(2.0)},
+    {kAuditBudgetFileSizeBytes, NoDeclaredBudget(), NoDeclaredBudget(), NoDeclaredBudget()},
+    {kAuditBudgetDecompressedSizeBytes, NoDeclaredBudget(), NoDeclaredBudget(), NoDeclaredBudget()},
+    {kAuditBudgetProcessTimeMs, NoDeclaredBudget(), NoDeclaredBudget(), NoDeclaredBudget()},
+    {kAuditBudgetMemoryGrowthCount, NoDeclaredBudget(), DeclaredBudget(1.0), DeclaredBudget(1.0)},
+}};
+
+BudgetThreshold ResolveBudgetThreshold(const char* policy_mode, std::string_view metric_name) {
+  const std::string resolved_policy_mode =
+      ResolvePolicyMode(policy_mode == nullptr ? "" : policy_mode);
+  for (const auto& entry : kUnifiedBudgetPolicyTable) {
+    if (entry.metric_name != metric_name) {
+      continue;
+    }
+    if (resolved_policy_mode == kAuditPolicyModeDev) {
+      return entry.dev;
+    }
+    if (resolved_policy_mode == kAuditPolicyModeChallenge) {
+      return entry.challenge;
+    }
+    return entry.release;
+  }
+  return {};
+}
+
+void AppendIssue(std::vector<Issue>* issues,
+                 Severity severity,
+                 std::string_view code,
+                 std::string_view message) {
+  issues->push_back(Issue{severity, std::string(code), std::string(message), ""});
+}
+
+bool AppendArtifactBudgetIssues(const char* policy_mode,
+                                const CompatAuditMetrics* metrics,
+                                std::vector<Issue>* issues) {
+  bool requires_review = false;
+
+  const auto peak_memory_budget = ResolveBudgetThreshold(policy_mode, kAuditBudgetPeakMemoryMb);
+  if (peak_memory_budget.has_declared) {
+    if (metrics == nullptr || !metrics->has_peak_memory_mb) {
+      AppendIssue(issues,
+                  Severity::kWarning,
+                  "ARTIFACT_MEMORY_BUDGET_NOT_COLLECTED",
+                  "peak_memory_mb 未完成采集，不能作为 release/challenge 通过依据");
+      requires_review = true;
+    } else if (metrics->peak_memory_mb > peak_memory_budget.declared) {
+      AppendIssue(issues,
+                  Severity::kWarning,
+                  "ARTIFACT_MEMORY_OVER_BUDGET",
+                  "peak_memory_mb 超出 policy/manifest 预算");
+      requires_review = true;
+    }
+  }
+
+  const auto memory_growth_budget =
+      ResolveBudgetThreshold(policy_mode, kAuditBudgetMemoryGrowthCount);
+  if (memory_growth_budget.has_declared) {
+    if (metrics == nullptr || !metrics->has_memory_growth_count) {
+      AppendIssue(issues,
+                  Severity::kWarning,
+                  "ARTIFACT_MEMORY_GROWTH_BUDGET_NOT_COLLECTED",
+                  "memory_growth_count 未完成采集，不能作为 release/challenge 通过依据");
+      requires_review = true;
+    } else if (static_cast<double>(metrics->memory_growth_count) > memory_growth_budget.declared) {
+      AppendIssue(issues,
+                  Severity::kWarning,
+                  "ARTIFACT_MEMORY_GROWTH_OVER_BUDGET",
+                  "memory_growth_count 超出 policy/manifest 预算");
+      requires_review = true;
+    }
+  }
+
+  return requires_review;
 }
 
 bool IsReleaseReadyVerdict(const std::string& verdict) {
@@ -222,9 +325,9 @@ std::string ResolveEffectiveFinalVerdict(const std::string& verdict,
 }
 
 bool ResolveEffectiveReleaseReady(const std::string& final_verdict,
-                                  bool has_release_ready,
-                                  bool release_ready) {
-  return has_release_ready ? release_ready : IsReleaseReadyVerdict(final_verdict);
+                                  bool /*has_release_ready*/,
+                                  bool /*release_ready*/) {
+  return IsReleaseReadyVerdict(final_verdict);
 }
 
 std::string BuildBrowserWasmQualityGateJson(const BrowserWasmAuditReport& report,
@@ -278,41 +381,49 @@ std::string BuildArtifactSummaryJson(const GateReport& non_strict_report,
 }
 
 std::string BuildArtifactBudgetsJson(const GateReport& non_strict_report,
-                                     const CompatAuditMetrics* metrics) {
+                                     const CompatAuditMetrics* metrics,
+                                     const char* policy_mode) {
   const bool has_decompressed_size = non_strict_report.spz_l2.has_value();
+  const auto file_size_budget = ResolveBudgetThreshold(policy_mode, kAuditBudgetFileSizeBytes);
+  const auto decompressed_size_budget =
+      ResolveBudgetThreshold(policy_mode, kAuditBudgetDecompressedSizeBytes);
+  const auto process_time_budget = ResolveBudgetThreshold(policy_mode, kAuditBudgetProcessTimeMs);
+  const auto peak_memory_budget = ResolveBudgetThreshold(policy_mode, kAuditBudgetPeakMemoryMb);
+  const auto memory_growth_budget =
+      ResolveBudgetThreshold(policy_mode, kAuditBudgetMemoryGrowthCount);
   std::ostringstream oss;
   oss << "{";
   oss << "\"file_size_bytes\":"
-      << BuildBudgetItemJson(false,
-                             0.0,
+      << BuildBudgetItemJson(file_size_budget.has_declared,
+                             file_size_budget.declared,
                              metrics != nullptr && metrics->has_file_size_bytes,
                              metrics != nullptr && metrics->has_file_size_bytes
                                  ? static_cast<double>(metrics->file_size_bytes)
                                  : 0.0);
   oss << ",\"decompressed_size_bytes\":"
-      << BuildBudgetItemJson(false,
-                             0.0,
+      << BuildBudgetItemJson(decompressed_size_budget.has_declared,
+                             decompressed_size_budget.declared,
                              has_decompressed_size,
                              has_decompressed_size
                                  ? static_cast<double>(non_strict_report.spz_l2->decompressed_size)
                                  : 0.0);
   oss << ",\"process_time_ms\":"
-      << BuildBudgetItemJson(false,
-                             0.0,
+      << BuildBudgetItemJson(process_time_budget.has_declared,
+                             process_time_budget.declared,
                              metrics != nullptr && metrics->has_process_time_ms,
                              metrics != nullptr && metrics->has_process_time_ms
                                  ? metrics->process_time_ms
                                  : 0.0);
   oss << ",\"peak_memory_mb\":"
-      << BuildBudgetItemJson(false,
-                             0.0,
+      << BuildBudgetItemJson(peak_memory_budget.has_declared,
+                             peak_memory_budget.declared,
                              metrics != nullptr && metrics->has_peak_memory_mb,
                              metrics != nullptr && metrics->has_peak_memory_mb
                                  ? metrics->peak_memory_mb
                                  : 0.0);
   oss << ",\"memory_growth_count\":"
-      << BuildBudgetItemJson(false,
-                             0.0,
+      << BuildBudgetItemJson(memory_growth_budget.has_declared,
+                             memory_growth_budget.declared,
                              metrics != nullptr && metrics->has_memory_growth_count,
                              metrics != nullptr && metrics->has_memory_growth_count
                                  ? static_cast<double>(metrics->memory_growth_count)
@@ -355,6 +466,20 @@ std::string ResolveCompatVerdict(const GateReport& strict_report,
     return "review_required";
   }
   return "pass";
+}
+
+std::string ResolveCompatAuditVerdict(const GateReport& strict_report,
+                                      const GateReport& non_strict_report,
+                                      const CompatAuditMetrics* metrics,
+                                      const char* policy_mode,
+                                      bool* strict_ok,
+                                      bool* non_strict_ok) {
+  std::string verdict = ResolveCompatVerdict(strict_report, non_strict_report, strict_ok, non_strict_ok);
+  std::vector<Issue> budget_issues;
+  if (AppendArtifactBudgetIssues(policy_mode, metrics, &budget_issues) && verdict == "pass") {
+    return "review_required";
+  }
+  return verdict;
 }
 
 std::string ResolveCompatNextAction(const std::string& verdict) {
@@ -488,10 +613,16 @@ bool ParseBrowserAuditHandoffJson(const std::string& json_text,
 
   if (!ExtractJsonStringField(parsed.raw_json, "audit_profile", &parsed.audit_profile, err) ||
       !ExtractJsonStringField(parsed.raw_json, "audit_mode", &parsed.audit_mode, err) ||
-      !ExtractJsonStringField(parsed.raw_json, "verdict", &parsed.verdict, err) ||
       !ExtractJsonStringField(parsed.raw_json, "next_action", &parsed.next_action, err) ||
       !ExtractJsonStringField(parsed.raw_json, "bundle_id", &parsed.bundle_id, err) ||
       !ExtractJsonStringField(parsed.raw_json, "tool_version", &parsed.tool_version, err)) {
+    return false;
+  }
+  if (parsed.raw_json.find("\"bundle_verdict\"") != std::string::npos) {
+    if (!ExtractJsonStringField(parsed.raw_json, "bundle_verdict", &parsed.verdict, err)) {
+      return false;
+    }
+  } else if (!ExtractJsonStringField(parsed.raw_json, "verdict", &parsed.verdict, err)) {
     return false;
   }
   if (parsed.raw_json.find("\"policy_mode\"") != std::string::npos) {
@@ -597,12 +728,14 @@ std::string BuildCompatCheckAuditJson(const std::string& path,
   const bool validator_coverage_ok = HasValidatorCoverage(non_strict_report);
   const bool empty_shell_risk = HasEmptyShellRisk(non_strict_report);
   const bool memory_budget_wired = (metrics != nullptr);
-  const std::vector<Issue> merged_issues = MergeIssues(strict_report, non_strict_report);
+  const char* effective_policy_mode =
+      ResolvePolicyMode(policy_mode == nullptr ? "" : policy_mode);
+  std::vector<Issue> merged_issues = MergeIssues(strict_report, non_strict_report);
 
-  const std::string verdict = ResolveCompatVerdict(
-      strict_report, non_strict_report, &strict_ok, &non_strict_ok);
+  std::string verdict = ResolveCompatAuditVerdict(
+      strict_report, non_strict_report, metrics, effective_policy_mode, &strict_ok, &non_strict_ok);
+  AppendArtifactBudgetIssues(effective_policy_mode, metrics, &merged_issues);
   const std::string next_action = ResolveCompatNextAction(verdict);
-
 
   const bool release_ready = IsReleaseReadyVerdict(verdict);
   std::ostringstream oss;
@@ -611,7 +744,7 @@ std::string BuildCompatCheckAuditJson(const std::string& path,
   oss << ",\"audit_profile\":\"" << kAuditProfileSpz << "\"";
   oss << ",\"policy_name\":\"" << kAuditPolicyName << "\"";
   oss << ",\"policy_version\":\"" << kAuditPolicyVersion << "\"";
-  oss << ",\"policy_mode\":\"" << ResolvePolicyMode(policy_mode == nullptr ? "" : policy_mode) << "\"";
+  oss << ",\"policy_mode\":\"" << effective_policy_mode << "\"";
   oss << ",\"audit_mode\":\"" << kAuditModeLocalCliSpzArtifactAudit << "\"";
   oss << ",\"artifact_verdict\":\"" << verdict << "\"";
   oss << ",\"verdict\":\"" << verdict << "\"";
@@ -625,7 +758,7 @@ std::string BuildCompatCheckAuditJson(const std::string& path,
   oss << ",\"issue_count\":" << merged_issues.size();
   oss << "}";
   oss << ",\"artifact_summary\":" << BuildArtifactSummaryJson(non_strict_report, metrics);
-  oss << ",\"budgets\":" << BuildArtifactBudgetsJson(non_strict_report, metrics);
+  oss << ",\"budgets\":" << BuildArtifactBudgetsJson(non_strict_report, metrics, effective_policy_mode);
   oss << ",\"issues\":" << BuildIssueListJson(merged_issues);
 
   oss << ",\"next_action\":\"" << next_action << "\"";
