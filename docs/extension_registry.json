@@ -19,6 +19,50 @@
       "cli_verdict_is_final"
     ]
   },
+  "v2_closure": {
+    "boundary": {
+      "maturity_board": "compat-board and compatibility_board snapshot",
+      "release_gate": "CI release/challenge gate driven by compat-check runtime audits",
+      "rule": "board release_ready must not override CI gate verdict"
+    },
+    "remaining_gaps": [],
+    "done_criteria": [
+      "dev_release_challenge_policy_and_budget_state_semantics_are_consistent",
+      "browser_copy_budget_and_cli_memory_budget_are_blocking_gates",
+      "final_verdict_and_release_ready_are_produced_by_one_final_aggregation_path",
+      "challenge_manifest_output_is_stable_reproducible_and_top_item_consistent",
+      "ci_runs_real_profile_aware_gates_not_only_board_snapshots",
+      "readme_registry_cli_web_share_the_same_boundary_and_completion_semantics"
+    ],
+    "auxiliary_outputs": [
+      "browser_report_copy_breakdown_by_stage",
+      "challenge_batch_challenge_stats",
+      "challenge_batch_visualization_hints"
+    ],
+    "verification_status": {
+      "cpp_cli_tests": "passed_in_wsl",
+      "ci_profile_aware_gate": "configured",
+      "local_wasm_smoke": "blocked_in_current_wsl_env_missing_node_playwright_emscripten"
+    },
+    "release_gate_contract": {
+      "release_gate": {
+        "entry": "compat-check <file.spz> --json",
+        "must_pass": [
+          "exit_code_is_zero",
+          "policy_mode_is_release",
+          "critical_budgets_present_peak_memory_mb_and_memory_growth_count"
+        ]
+      },
+      "challenge_gate": {
+        "entry": "compat-check --manifest <manifest.json> --json",
+        "must_pass": [
+          "policy_mode_is_challenge",
+          "summary_total_matches_manifest_items",
+          "grouped_summary_present"
+        ]
+      }
+    }
+  },
   "registry": {
     "count": 1,
     "extensions": [
@@ -52,6 +96,8 @@
         "fixture_invalid_pass": true,
         "strict_check_pass": true,
         "non_strict_check_pass": true,
+        "final_verdict": "review_required",
+        "release_ready": false,
         "wasm_quality_gate": {
           "coverage_level": "baseline",
           "validator_coverage_ok": true,
@@ -66,6 +112,7 @@
           "artifact_audit_wired": false,
           "release_ready": false
         }
+
       }
     ]
   }

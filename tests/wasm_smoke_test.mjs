@@ -214,18 +214,18 @@ async function uploadBundleAndAssert(page, { name, buffer, expectedBadge, expect
   }
 }
 
-async function evaluateBundleAudit(page, buffer, fileName) {
-  return page.evaluate(async ({ bytes, name }) => {
+async function evaluateBundleAudit(page, buffer, fileName, options = {}) {
+  return page.evaluate(async ({ bytes, name, options: auditOptions }) => {
     const moduleFactory = (await import('./spz_gatekeeper.js')).default;
     const wasm = await moduleFactory();
     const bundle = new Uint8Array(bytes);
-    const report = await wasm.auditWasmBundle(bundle, name);
+    const report = await wasm.auditWasmBundle(bundle, name, auditOptions);
     return {
       hasSharedBuilder: typeof wasm.buildBrowserAuditReport === 'function',
       report,
       handoff: wasm.buildBrowserToCliHandoff(report),
     };
-  }, { bytes: Array.from(buffer), name: fileName });
+  }, { bytes: Array.from(buffer), name: fileName, options });
 }
 
 async function runCliRoundTrip(cliBinaryPath, artifactPath, handoff) {
@@ -282,8 +282,20 @@ async function runSmoke() {
     if (validAudit.report.audit_profile !== 'spz') {
       throw new Error('browser report audit_profile 不正确');
     }
+    if (validAudit.report.policy_name !== 'spz_gatekeeper_policy' || validAudit.report.policy_version !== '2.0.0') {
+      throw new Error('browser report policy metadata 不正确');
+    }
     if (validAudit.report.audit_mode !== 'browser_lightweight_wasm_audit') {
       throw new Error('browser report audit_mode 不正确');
+    }
+    if (validAudit.report.policy_mode !== 'release') {
+      throw new Error('browser report policy_mode 不正确');
+    }
+    if (validAudit.report.bundle_verdict !== 'pass') {
+      throw new Error('browser report bundle_verdict 不正确');
+    }
+    if (validAudit.report.final_verdict !== 'pass' || validAudit.report.release_ready !== true) {
+      throw new Error('browser report final_verdict/release_ready 不正确');
     }
     if (!validAudit.report.summary || validAudit.report.summary.bundle_name !== 'valid_bundle.zip') {
       throw new Error('browser report summary.bundle_name 不正确');
@@ -291,8 +303,108 @@ async function runSmoke() {
     if (!validAudit.report.budgets || !validAudit.report.budgets.cold_start_ms) {
       throw new Error('browser report budgets 缺少 cold_start_ms');
     }
+    if (!validAudit.report.copy_breakdown || validAudit.report.copy_breakdown.total_passes !== 1) {
+      throw new Error('browser report copy_breakdown.total_passes 不正确');
+    }
+    if (!Array.isArray(validAudit.report.copy_breakdown.stages) || !validAudit.report.copy_breakdown.stages.some((stage) => stage.name === 'module_clone' && stage.count === 1)) {
+      throw new Error('browser report copy_breakdown.stages 缺少 module_clone');
+    }
     if (!Array.isArray(validAudit.report.issues)) {
       throw new Error('browser report issues 不是数组');
+    }
+
+    const derivedReleaseReadyReport = await page.evaluate(async () => {
+      const moduleFactory = (await import('./spz_gatekeeper.js')).default;
+      const wasm = await moduleFactory();
+      if (typeof wasm.buildBrowserAuditReport !== 'function') {
+        return null;
+      }
+      return wasm.buildBrowserAuditReport({
+        bundle_id: 'sha256:derived-release-ready',
+        policy_mode: 'dev',
+        verdict: 'pass',
+        final_verdict: 'review_required',
+        release_ready: true,
+        next_action: 'review_bundle_before_cli',
+        audit_duration_ms: 1,
+        summary: {
+          bundle_name: 'derived_release_ready.zip',
+          file_count: 1,
+          issue_count: 1,
+          declared_export_count: 1,
+          loader_export_count: 1,
+          wasm_export_count: 1,
+          valid_tiny_passed: true,
+          invalid_tiny_handled: true,
+          runtime_available: true,
+        },
+        manifest_summary: {},
+        budgets: {},
+        issues: [{ severity: 'warning', code: 'BUNDLE_REVIEW', message: 'review required' }],
+        bundle_entries: [],
+        wasm_export_summary: [],
+        empty_shell_risk: false,
+        copy_budget_wired: true,
+        memory_budget_wired: true,
+        performance_budget_wired: true,
+      });
+    });
+    if (!derivedReleaseReadyReport) {
+      throw new Error('共享 browser schema builder 不可用');
+    }
+    if (derivedReleaseReadyReport.final_verdict !== 'review_required' || derivedReleaseReadyReport.release_ready !== false) {
+      throw new Error('browser report release_ready 应仅由 final_verdict 决定');
+    }
+
+    const devPolicyBundle = createBundleBuffer({
+      manifest: makeManifest({ budgets: { cold_start_ms: 1500, tiny_case_ms: 500, peak_memory_mb: 256 } }),
+    });
+    const devPolicyAudit = await evaluateBundleAudit(page, devPolicyBundle, 'dev_policy_bundle.zip', {
+      policy_mode: 'dev',
+    });
+    if (devPolicyAudit.report.policy_mode !== 'dev') {
+      throw new Error('dev policy_mode 不正确');
+    }
+    if (devPolicyAudit.report.budgets.copy_pass_limit.status !== 'observed_without_budget') {
+      throw new Error('dev copy budget 状态应为 observed_without_budget');
+    }
+    if (devPolicyAudit.report.final_verdict !== 'pass') {
+      throw new Error('dev copy budget 默认不应阻断通过');
+    }
+
+    const challengePolicyBundle = createBundleBuffer({
+      manifest: makeManifest({ budgets: { cold_start_ms: 1500, tiny_case_ms: 500, peak_memory_mb: 256 } }),
+    });
+    const challengePolicyAudit = await evaluateBundleAudit(
+      page,
+      challengePolicyBundle,
+      'challenge_policy_bundle.zip',
+      { policy_mode: 'challenge' },
+    );
+    if (challengePolicyAudit.report.policy_mode !== 'challenge') {
+      throw new Error('challenge policy_mode 不正确');
+    }
+    if (challengePolicyAudit.report.budgets.copy_pass_limit.declared !== 2) {
+      throw new Error('challenge copy budget 默认 declared 不正确');
+    }
+    if (challengePolicyAudit.report.budgets.copy_pass_limit.status !== 'within_budget') {
+      throw new Error('challenge copy budget 默认应为 within_budget');
+    }
+
+    const releaseCopyNotCollectedAudit = await evaluateBundleAudit(
+      page,
+      createBundleBuffer(),
+      'release_copy_not_collected_bundle.zip',
+      { policy_mode: 'release', disable_copy_budget_collection: true },
+    );
+    if (releaseCopyNotCollectedAudit.report.budgets.copy_pass_limit.status !== 'not_collected') {
+      throw new Error('release copy budget 未采集状态不正确');
+    }
+    if (!releaseCopyNotCollectedAudit.report.issues.some((issue) => issue.code === 'BUNDLE_COPY_BUDGET_NOT_COLLECTED')) {
+      throw new Error('release copy budget 未采集 issue 缺失');
+    }
+    if (releaseCopyNotCollectedAudit.report.final_verdict !== 'review_required') {
+      throw new Error('release copy budget 未采集应升级为 review_required');
     }
 
     await uploadBundleAndAssert(page, {
@@ -318,6 +430,12 @@ async function runSmoke() {
     }
     if (!handoffText.includes('"tool_version": "1.0.0"')) {
       throw new Error('handoff 缺少 tool_version');
+    }
+    if (!handoffText.includes('"policy_mode": "release"')) {
+      throw new Error('handoff 缺少 policy_mode');
+    }
+    if (!handoffText.includes('"bundle_verdict": "pass"')) {
+      throw new Error('handoff 缺少 bundle_verdict');
     }
     if (!handoffText.includes('"next_action": "allow_local_cli_audit"')) {
       throw new Error('handoff next_action 不正确');
@@ -367,7 +485,18 @@ async function runSmoke() {
       expectedIssueCode: 'BUNDLE_TINY_INVALID_EXPECTED_FAIL',
     });
 
+    const copyOverBudgetBundle = createBundleBuffer({
+      manifest: makeManifest({ budgets: { cold_start_ms: 1500, tiny_case_ms: 500, peak_memory_mb: 256, copy_pass_limit: 0 } }),
+    });
+    await uploadBundleAndAssert(page, {
+      name: 'copy_over_budget_bundle.zip',
+      buffer: copyOverBudgetBundle,
+      expectedBadge: 'REVIEW_REQUIRED',
+      expectedIssueCode: 'BUNDLE_COPY_OVER_BUDGET',
+    });
+
     const statusClasses = await page.$eval('#loadingStatus', (el) => el.className);
+
     if (statusClasses.includes('error')) {
       throw new Error(`页面状态异常: ${statusClasses}`);
     }

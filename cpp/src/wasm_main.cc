@@ -407,8 +407,13 @@ emscripten::val inspectCompatSummary(const emscripten::val& spz_buffer) {
   if (!TryInspect(spz_buffer, false, &non_strict_report, &non_strict_err)) {
     emscripten::val out = emscripten::val::object();
     out.set("audit_profile", std::string(spz_gatekeeper::kAuditProfileSpz));
+    out.set("policy_name", std::string(spz_gatekeeper::kAuditPolicyName));
+    out.set("policy_version", std::string(spz_gatekeeper::kAuditPolicyVersion));
+    out.set("policy_mode", std::string(spz_gatekeeper::kAuditPolicyModeRelease));
     out.set("audit_mode", std::string(spz_gatekeeper::kAuditModeLocalCliSpzArtifactAudit));
     out.set("verdict", std::string("block"));
+    out.set("final_verdict", std::string("block"));
+    out.set("release_ready", false);
     out.set("next_action", std::string("block_artifact"));
     out.set("error", non_strict_err);
     return out;
@@ -423,7 +428,9 @@ emscripten::val buildBrowserAuditReport(const emscripten::val& payload) {
 
   spz_gatekeeper::BrowserWasmAuditReport report;
   report.bundle_id = payload["bundle_id"].as<std::string>();
+  report.policy_mode = payload["policy_mode"].as<std::string>();
   report.verdict = payload["verdict"].as<std::string>();
+  report.final_verdict = payload["final_verdict"].as<std::string>();
   report.next_action = payload["next_action"].as<std::string>();
   report.audit_duration_ms = payload["audit_duration_ms"].as<double>();
   report.summary.bundle_name = summary["bundle_name"].as<std::string>();
@@ -440,14 +447,17 @@ emscripten::val buildBrowserAuditReport(const emscripten::val& payload) {
   report.summary.runtime_available = summary["runtime_available"].as<bool>();
   report.manifest_summary_json = StringifyJsonValue(payload["manifest_summary"]);
   report.budgets_json = StringifyJsonValue(payload["budgets"]);
+  report.copy_breakdown_json = StringifyJsonValue(payload["copy_breakdown"]);
   report.issues_json = StringifyJsonValue(payload["issues"]);
   report.bundle_entries_json = StringifyJsonValue(payload["bundle_entries"]);
   report.wasm_export_summary_json = StringifyJsonValue(payload["wasm_export_summary"]);
   report.empty_shell_risk = payload["empty_shell_risk"].as<bool>();
+  report.copy_budget_wired = payload["copy_budget_wired"].as<bool>();
   report.memory_budget_wired = payload["memory_budget_wired"].as<bool>();
   report.performance_budget_wired = payload["performance_budget_wired"].as<bool>();
   return ParseJsonObject(spz_gatekeeper::BuildBrowserWasmAuditJson(report));
 }
+
 
 emscripten::val listRegisteredExtensions() {
 

@@ -53,6 +53,11 @@
 #include <vector>
 #include <zlib.h>
 
+#if defined(__linux__) || defined(__APPLE__)
+#include <sys/resource.h>
+#endif
+
+
 
 
 namespace {
@@ -77,8 +82,24 @@ static bool ReadAllText(const std::string& path, std::string* out) {
   return true;
 }
 
+static std::optional<double> ReadPeakMemoryMb() {
+#if defined(__linux__) || defined(__APPLE__)
+  rusage usage{};
+  if (getrusage(RUSAGE_SELF, &usage) != 0) {
+    return std::nullopt;
+  }
+#if defined(__APPLE__)
+  return static_cast<double>(usage.ru_maxrss) / (1024.0 * 1024.0);
+#else
+  return static_cast<double>(usage.ru_maxrss) / 1024.0;
+#endif
+#else
+  return std::nullopt;
+#endif
+}
 
 static bool GzipCompress(const std::vector<std::uint8_t>& in, std::vector<std::uint8_t>* out,
+
                          std::string* err) {
   out->clear();
 
@@ -580,8 +601,11 @@ static std::string BuildCompatibilityBoardJson() {
     const bool strict_check_pass =
         !strict_valid_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_valid_report);
     const bool non_strict_check_pass = !non_strict_valid_report.HasErrors();
+    const bool release_ready = false;
+    const char* final_verdict = "review_required";
 
     oss << "{";
+
 
     oss << "\"type\":" << spec.type;
     oss << ",\"vendor_name\":\"" << spz_gatekeeper::JsonEscape(spec.vendor_name) << "\"";
@@ -593,8 +617,12 @@ static std::string BuildCompatibilityBoardJson() {
     oss << ",\"fixture_invalid_pass\":" << (fixture_invalid_pass ? "true" : "false");
     oss << ",\"strict_check_pass\":" << (strict_check_pass ? "true" : "false");
     oss << ",\"non_strict_check_pass\":" << (non_strict_check_pass ? "true" : "false");
+    oss << ",\"final_verdict\":\"" << final_verdict << "\"";
+    oss << ",\"release_ready\":" << (release_ready ? "true" : "false");
     oss << ",\"wasm_quality_gate\":"
-        << spz_gatekeeper::BuildWasmQualityGateJson(has_validator, !has_validator);
+        << spz_gatekeeper::BuildWasmQualityGateJson(
+               has_validator, !has_validator, false, release_ready);
+
 
     oss << "}";
 
@@ -637,8 +665,11 @@ static void PrintCompatibilityBoard(bool json) {
     const bool strict_check_pass =
         !strict_valid_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_valid_report);
     const bool non_strict_check_pass = !non_strict_valid_report.HasErrors();
+    const bool release_ready = false;
+    const char* final_verdict = "review_required";
 
     std::cout << "- type=" << spec.type
+
 
               << " vendor=\"" << spec.vendor_name << "\""
               << " name=\"" << spec.extension_name << "\""
@@ -649,10 +680,12 @@ static void PrintCompatibilityBoard(bool json) {
               << " fixture_invalid_pass=" << (fixture_invalid_pass ? "true" : "false")
               << " strict_check_pass=" << (strict_check_pass ? "true" : "false")
               << " non_strict_check_pass=" << (non_strict_check_pass ? "true" : "false")
+              << " final_verdict=" << final_verdict
+              << " release_ready=" << (release_ready ? "true" : "false")
               << " wasm_validator_coverage_ok=" << (has_validator ? "true" : "false")
               << " wasm_empty_shell_risk=" << (!has_validator ? "true" : "false")
-              << " wasm_release_ready=false"
               << "\n";
+
 
   }
 }
@@ -665,46 +698,245 @@ struct CompatAuditOutcome {
   bool strict_ok = false;
   bool non_strict_ok = false;
   std::vector<std::string> issue_codes;
+  std::string scene_id;
+  std::string group;
+  std::string split;
+  std::string difficulty;
 };
 
+struct ManifestTarget {
+  std::string path;
+  std::string scene_id;
+  std::string group;
+  std::string split;
+  std::string difficulty;
+};
 
+struct VerdictCounts {
+  std::size_t total = 0;
+  std::size_t pass = 0;
+  std::size_t review_required = 0;
+  std::size_t block = 0;
+};
 
 static bool IsSpzPath(const std::filesystem::path& path) {
   return path.has_extension() && path.extension() == ".spz";
 }
 
-static std::vector<std::string> ParseManifestSpzPaths(const std::string& manifest_path,
-                                                      std::string* err) {
-  std::ifstream in(manifest_path);
-  if (!in.good()) {
-    *err = "failed to read manifest";
+static bool IsAsciiWhitespace(char ch) {
+  return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t' || ch == '\f' || ch == '\v';
+}
+
+static std::string TrimTrailingAsciiWhitespace(const std::string& text) {
+  std::size_t end = text.size();
+  while (end > 0 && IsAsciiWhitespace(text[end - 1])) {
+    --end;
+  }
+  return text.substr(0, end);
+}
+
+static bool HasManifestLabels(const CompatAuditOutcome& outcome) {
+  return !outcome.scene_id.empty() || !outcome.group.empty() || !outcome.split.empty() ||
+         !outcome.difficulty.empty();
+}
+
+static void AddVerdictCount(const CompatAuditOutcome& outcome, VerdictCounts* counts) {
+  ++counts->total;
+  if (outcome.verdict == "pass") {
+    ++counts->pass;
+  } else if (outcome.verdict == "review_required") {
+    ++counts->review_required;
+  } else {
+    ++counts->block;
+  }
+}
+
+static std::string BuildVerdictCountsJson(const VerdictCounts& counts) {
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"total\":" << counts.total;
+  oss << ",\"pass\":" << counts.pass;
+  oss << ",\"review_required\":" << counts.review_required;
+  oss << ",\"block\":" << counts.block;
+  oss << "}";
+  return oss.str();
+}
+
+static std::string BuildStringArrayJson(const std::vector<std::string>& values) {
+  std::ostringstream oss;
+  oss << "[";
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    if (i) {
+      oss << ",";
+    }
+    oss << "\"" << spz_gatekeeper::JsonEscape(values[i]) << "\"";
+  }
+  oss << "]";
+  return oss.str();
+}
+
+static std::vector<std::string> BuildPresentGroupedDimensions(
+    const std::map<std::string, VerdictCounts>& scene_counts,
+    const std::map<std::string, VerdictCounts>& group_counts,
+    const std::map<std::string, VerdictCounts>& split_counts,
+    const std::map<std::string, VerdictCounts>& difficulty_counts) {
+  std::vector<std::string> dimensions;
+  if (!scene_counts.empty()) {
+    dimensions.push_back("scene_id");
+  }
+  if (!group_counts.empty()) {
+    dimensions.push_back("group");
+  }
+  if (!split_counts.empty()) {
+    dimensions.push_back("split");
+  }
+  if (!difficulty_counts.empty()) {
+    dimensions.push_back("difficulty");
+  }
+  return dimensions;
+}
+
+static std::string BuildChallengeStatsJson(
+    std::size_t labeled_items,
+    std::size_t unlabeled_items,
+    std::size_t scene_label_count,
+    std::size_t group_label_count,
+    std::size_t split_label_count,
+    std::size_t difficulty_label_count,
+    const std::map<std::string, VerdictCounts>& scene_counts,
+    const std::map<std::string, VerdictCounts>& group_counts,
+    const std::map<std::string, VerdictCounts>& split_counts,
+    const std::map<std::string, VerdictCounts>& difficulty_counts) {
+  const std::vector<std::string> dimensions =
+      BuildPresentGroupedDimensions(scene_counts, group_counts, split_counts, difficulty_counts);
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"labeled_items\":" << labeled_items;
+  oss << ",\"unlabeled_items\":" << unlabeled_items;
+  oss << ",\"dimensions\":" << BuildStringArrayJson(dimensions);
+  oss << ",\"stable_item_order\":true";
+  oss << ",\"label_coverage\":{";
+  oss << "\"scene_id\":" << scene_label_count;
+  oss << ",\"group\":" << group_label_count;
+  oss << ",\"split\":" << split_label_count;
+  oss << ",\"difficulty\":" << difficulty_label_count;
+  oss << "}";
+  oss << "}";
+  return oss.str();
+}
+
+static std::string BuildVisualizationJson(
+    const std::vector<std::pair<std::string, std::size_t>>& top_issues,
+    const std::map<std::string, VerdictCounts>& scene_counts,
+    const std::map<std::string, VerdictCounts>& group_counts,
+    const std::map<std::string, VerdictCounts>& split_counts,
+    const std::map<std::string, VerdictCounts>& difficulty_counts) {
+  std::vector<std::string> table_columns = {"asset_path", "verdict"};
+  const std::vector<std::string> grouped_dimensions =
+      BuildPresentGroupedDimensions(scene_counts, group_counts, split_counts, difficulty_counts);
+  table_columns.insert(table_columns.end(), grouped_dimensions.begin(), grouped_dimensions.end());
+
+  std::vector<std::string> top_issue_codes;
+  top_issue_codes.reserve(top_issues.size());
+  for (const auto& entry : top_issues) {
+    top_issue_codes.push_back(entry.first);
+  }
+
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"table_columns\":" << BuildStringArrayJson(table_columns);
+  oss << ",\"grouped_dimensions\":" << BuildStringArrayJson(grouped_dimensions);
+  oss << ",\"top_issue_codes\":" << BuildStringArrayJson(top_issue_codes);
+  oss << "}";
+  return oss.str();
+}
+
+static std::string BuildManifestLabelsJson(const CompatAuditOutcome& outcome) {
+  std::ostringstream oss;
+  oss << "{";
+  bool first = true;
+  const auto append_field = [&](const char* key, const std::string& value) {
+    if (value.empty()) {
+      return;
+    }
+    if (!first) {
+      oss << ",";
+    }
+    first = false;
+    oss << "\"" << key << "\":\"" << spz_gatekeeper::JsonEscape(value) << "\"";
+  };
+  append_field("scene_id", outcome.scene_id);
+  append_field("group", outcome.group);
+  append_field("split", outcome.split);
+  append_field("difficulty", outcome.difficulty);
+  oss << "}";
+  return oss.str();
+}
+
+static std::string BuildOutcomeJsonForBatch(const CompatAuditOutcome& outcome) {
+  if (!HasManifestLabels(outcome)) {
+    return outcome.json;
+  }
+  const std::string trimmed = TrimTrailingAsciiWhitespace(outcome.json);
+  if (trimmed.empty() || trimmed.back() != '}') {
+    return outcome.json;
+  }
+
+  std::ostringstream oss;
+  oss << trimmed.substr(0, trimmed.size() - 1);
+  oss << ",\"manifest_labels\":" << BuildManifestLabelsJson(outcome);
+  oss << "}";
+  return oss.str();
+}
+
+static std::string NormalizeManifestPath(const std::string& token,
+                                         const std::filesystem::path& base_dir) {
+  std::filesystem::path path(token);
+  if (path.is_relative()) {
+    path = base_dir / path;
+  }
+  std::error_code ec;
+  const auto normalized_path = std::filesystem::weakly_canonical(path, ec);
+  return (ec ? path : normalized_path).string();
+}
+
+static bool AppendManifestTargetIfSpz(const std::string& token,
+                                      const std::filesystem::path& base_dir,
+                                      const ManifestTarget& prototype,
+                                      std::set<std::string>* seen,
+                                      std::vector<ManifestTarget>* out) {
+  if (token.size() < 4 || token.substr(token.size() - 4) != ".spz") {
+    return false;
+  }
+  ManifestTarget target = prototype;
+  target.path = NormalizeManifestPath(token, base_dir);
+  if (seen->insert(target.path).second) {
+    out->push_back(std::move(target));
+  }
+  return true;
+}
+
+static std::string ReadOptionalJsonStringField(const spz_gatekeeper::JsonValue* object,
+                                               std::string_view key) {
+  if (object == nullptr || object->type != spz_gatekeeper::JsonType::kObject) {
     return {};
   }
-  std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  const auto* value = object->Find(key);
+  if (value == nullptr || value->type != spz_gatekeeper::JsonType::kString) {
+    return {};
+  }
+  return value->string_value;
+}
 
-  std::vector<std::string> out;
+static std::vector<ManifestTarget> ParseManifestTargetsFromTextScan(const std::string& text,
+                                                                    const std::string& manifest_path,
+                                                                    std::string* err) {
+  std::vector<ManifestTarget> out;
   std::set<std::string> seen;
   std::string current;
   bool in_string = false;
   bool escape = false;
   const auto base_dir = std::filesystem::path(manifest_path).parent_path();
-
-  const auto append_if_spz = [&](const std::string& token) {
-    if (token.size() < 4 || token.substr(token.size() - 4) != ".spz") {
-      return;
-    }
-    std::filesystem::path p(token);
-    if (p.is_relative()) {
-      p = base_dir / p;
-    }
-    std::error_code ec;
-    const auto normalized_path = std::filesystem::weakly_canonical(p, ec);
-    const std::string normalized = (ec ? p : normalized_path).string();
-
-    if (seen.insert(normalized).second) {
-      out.push_back(normalized);
-    }
-  };
 
   for (char ch : text) {
     if (!in_string) {
@@ -727,7 +959,7 @@ static std::vector<std::string> ParseManifestSpzPaths(const std::string& manifes
     }
     if (ch == '"') {
       in_string = false;
-      append_if_spz(current);
+      AppendManifestTargetIfSpz(current, base_dir, ManifestTarget{}, &seen, &out);
       continue;
     }
     current.push_back(ch);
@@ -739,15 +971,87 @@ static std::vector<std::string> ParseManifestSpzPaths(const std::string& manifes
   return out;
 }
 
-static bool RunCompatAuditForPath(const std::string& path, CompatAuditOutcome* out, std::string* err) {
+static std::vector<ManifestTarget> ParseStructuredManifestTargets(
+    const spz_gatekeeper::JsonValue& items,
+    const std::string& manifest_path,
+    std::string* err) {
+  if (items.type != spz_gatekeeper::JsonType::kArray) {
+    *err = "manifest field 'items' must be an array";
+    return {};
+  }
+
+  std::vector<ManifestTarget> out;
+  std::set<std::string> seen;
+  const auto base_dir = std::filesystem::path(manifest_path).parent_path();
+  for (const auto& item : items.array_value) {
+    ManifestTarget target;
+    std::string path;
+    if (item->type == spz_gatekeeper::JsonType::kString) {
+      path = item->string_value;
+    } else if (item->type == spz_gatekeeper::JsonType::kObject) {
+      path = ReadOptionalJsonStringField(item.get(), "path");
+      if (path.empty()) {
+        path = ReadOptionalJsonStringField(item.get(), "asset_path");
+      }
+      if (path.empty()) {
+        path = ReadOptionalJsonStringField(item.get(), "file");
+      }
+      target.scene_id = ReadOptionalJsonStringField(item.get(), "scene_id");
+      target.group = ReadOptionalJsonStringField(item.get(), "group");
+      target.split = ReadOptionalJsonStringField(item.get(), "split");
+      target.difficulty = ReadOptionalJsonStringField(item.get(), "difficulty");
+    } else {
+      *err = "manifest items must be strings or objects";
+      return {};
+    }
+
+    if (path.empty()) {
+      *err = "manifest item is missing string field 'path'";
+      return {};
+    }
+    AppendManifestTargetIfSpz(path, base_dir, target, &seen, &out);
+  }
+
+  if (out.empty()) {
+    *err = "manifest items does not contain any .spz path";
+  }
+  return out;
+}
+
+static std::vector<ManifestTarget> ParseManifestTargets(const std::string& manifest_path,
+                                                        std::string* err) {
+  std::string text;
+  if (!ReadAllText(manifest_path, &text)) {
+    *err = "failed to read manifest";
+    return {};
+  }
+
+  spz_gatekeeper::JsonParseError parse_err;
+  const auto root = spz_gatekeeper::ParseJson(text, &parse_err);
+  if (root.has_value() && root->type == spz_gatekeeper::JsonType::kObject) {
+    const auto* items = root->Find("items");
+    if (items != nullptr) {
+      return ParseStructuredManifestTargets(*items, manifest_path, err);
+    }
+  }
+
+  return ParseManifestTargetsFromTextScan(text, manifest_path, err);
+}
+
+static bool RunCompatAuditForPath(const std::string& path,
+                                 const char* policy_mode,
+                                 CompatAuditOutcome* out,
+                                 std::string* err) {
   std::vector<std::uint8_t> bytes;
   if (!ReadAllBytes(path, &bytes)) {
     *err = "failed to read: " + path;
     return false;
   }
 
+  const auto peak_memory_before_mb = ReadPeakMemoryMb();
   const auto started = std::chrono::steady_clock::now();
   spz_gatekeeper::SpzInspectOptions strict_options;
+
   strict_options.strict = true;
   const auto strict_report = spz_gatekeeper::InspectSpzBlob(bytes, strict_options, path);
 
@@ -755,32 +1059,44 @@ static bool RunCompatAuditForPath(const std::string& path, CompatAuditOutcome* o
   non_strict_options.strict = false;
   const auto non_strict_report = spz_gatekeeper::InspectSpzBlob(bytes, non_strict_options, path);
   const auto ended = std::chrono::steady_clock::now();
+  const auto peak_memory_after_mb = ReadPeakMemoryMb();
   const double elapsed_ms = std::chrono::duration<double, std::milli>(ended - started).count();
+
 
   spz_gatekeeper::CompatAuditMetrics metrics;
   metrics.file_size_bytes = static_cast<std::uint64_t>(bytes.size());
   metrics.has_file_size_bytes = true;
   metrics.process_time_ms = elapsed_ms;
   metrics.has_process_time_ms = true;
+  if (peak_memory_after_mb.has_value()) {
+    metrics.peak_memory_mb = *peak_memory_after_mb;
+    metrics.has_peak_memory_mb = true;
+  }
+  if (peak_memory_before_mb.has_value() && peak_memory_after_mb.has_value()) {
+    metrics.memory_growth_count =
+        *peak_memory_after_mb > *peak_memory_before_mb ? 1u : 0u;
+    metrics.has_memory_growth_count = true;
+  }
 
   bool strict_ok = false;
   bool non_strict_ok = false;
-  const std::string verdict =
-      spz_gatekeeper::ResolveCompatVerdict(strict_report, non_strict_report, &strict_ok, &non_strict_ok);
-
+  const std::string verdict = spz_gatekeeper::ResolveCompatAuditVerdict(
+      strict_report, non_strict_report, &metrics, policy_mode, &strict_ok, &non_strict_ok);
 
   out->path = path;
-  out->json = spz_gatekeeper::BuildCompatCheckAuditJson(path, strict_report, non_strict_report, &metrics);
+  out->json = spz_gatekeeper::BuildCompatCheckAuditJson(
+      path, strict_report, non_strict_report, &metrics, policy_mode);
   out->verdict = verdict;
   out->strict_ok = strict_ok;
   out->non_strict_ok = non_strict_ok;
-  out->issue_codes.clear();
+  std::set<std::string> unique_issue_codes;
   for (const auto& issue : strict_report.issues) {
-    out->issue_codes.push_back(issue.code);
+    unique_issue_codes.insert(issue.code);
   }
   for (const auto& issue : non_strict_report.issues) {
-    out->issue_codes.push_back(issue.code);
+    unique_issue_codes.insert(issue.code);
   }
+  out->issue_codes.assign(unique_issue_codes.begin(), unique_issue_codes.end());
   return true;
 }
 
@@ -795,22 +1111,47 @@ static void PrintCompatCheckSingle(const CompatAuditOutcome& outcome, bool json)
   std::cout << "non_strict_ok=" << (outcome.non_strict_ok ? "true" : "false") << "\n";
 }
 
-static void PrintCompatCheckBatch(const std::vector<CompatAuditOutcome>& outcomes, bool json) {
-  std::size_t pass_count = 0;
-  std::size_t review_count = 0;
-  std::size_t block_count = 0;
+static void PrintCompatCheckBatch(const std::vector<CompatAuditOutcome>& outcomes,
+                                  bool json,
+                                  const char* policy_mode) {
+  VerdictCounts totals;
   std::map<std::string, std::size_t> issue_count_by_code;
+  std::map<std::string, VerdictCounts> scene_counts;
+  std::map<std::string, VerdictCounts> group_counts;
+  std::map<std::string, VerdictCounts> split_counts;
+  std::map<std::string, VerdictCounts> difficulty_counts;
+  std::size_t labeled_items = 0;
+  std::size_t unlabeled_items = 0;
+  std::size_t scene_label_count = 0;
+  std::size_t group_label_count = 0;
+  std::size_t split_label_count = 0;
+  std::size_t difficulty_label_count = 0;
 
   for (const auto& outcome : outcomes) {
-    if (outcome.verdict == "pass") {
-      ++pass_count;
-    } else if (outcome.verdict == "review_required") {
-      ++review_count;
+    AddVerdictCount(outcome, &totals);
+    if (HasManifestLabels(outcome)) {
+      ++labeled_items;
     } else {
-      ++block_count;
+      ++unlabeled_items;
     }
     for (const auto& code : outcome.issue_codes) {
       issue_count_by_code[code] += 1;
+    }
+    if (!outcome.scene_id.empty()) {
+      ++scene_label_count;
+      AddVerdictCount(outcome, &scene_counts[outcome.scene_id]);
+    }
+    if (!outcome.group.empty()) {
+      ++group_label_count;
+      AddVerdictCount(outcome, &group_counts[outcome.group]);
+    }
+    if (!outcome.split.empty()) {
+      ++split_label_count;
+      AddVerdictCount(outcome, &split_counts[outcome.split]);
+    }
+    if (!outcome.difficulty.empty()) {
+      ++difficulty_label_count;
+      AddVerdictCount(outcome, &difficulty_counts[outcome.difficulty]);
     }
   }
 
@@ -823,17 +1164,38 @@ static void PrintCompatCheckBatch(const std::vector<CompatAuditOutcome>& outcome
     return lhs.first < rhs.first;
   });
 
+  const auto append_grouped_dimension = [](std::ostringstream* oss,
+                                           const char* key,
+                                           const std::map<std::string, VerdictCounts>& counts,
+                                           bool* first_dimension) {
+    if (!*first_dimension) {
+      *oss << ",";
+    }
+    *first_dimension = false;
+    *oss << "\"" << key << "\":[";
+    bool first_item = true;
+    for (const auto& entry : counts) {
+      if (!first_item) {
+        *oss << ",";
+      }
+      first_item = false;
+      *oss << "{";
+      *oss << "\"value\":\"" << spz_gatekeeper::JsonEscape(entry.first) << "\"";
+      *oss << ",\"summary\":" << BuildVerdictCountsJson(entry.second);
+      *oss << "}";
+    }
+    *oss << "]";
+  };
+
   if (json) {
     std::ostringstream oss;
     oss << "{";
     oss << "\"audit_profile\":\"" << spz_gatekeeper::kAuditProfileSpz << "\"";
+    oss << ",\"policy_name\":\"" << spz_gatekeeper::kAuditPolicyName << "\"";
+    oss << ",\"policy_version\":\"" << spz_gatekeeper::kAuditPolicyVersion << "\"";
+    oss << ",\"policy_mode\":\"" << policy_mode << "\"";
     oss << ",\"audit_mode\":\"" << spz_gatekeeper::kAuditModeLocalCliSpzArtifactAudit << "\"";
-    oss << ",\"summary\":{";
-    oss << "\"total\":" << outcomes.size();
-    oss << ",\"pass\":" << pass_count;
-    oss << ",\"review_required\":" << review_count;
-    oss << ",\"block\":" << block_count;
-    oss << "}";
+    oss << ",\"summary\":" << BuildVerdictCountsJson(totals);
     oss << ",\"top_issues\":[";
     for (std::size_t i = 0; i < top_issues.size(); ++i) {
       if (i) {
@@ -845,12 +1207,36 @@ static void PrintCompatCheckBatch(const std::vector<CompatAuditOutcome>& outcome
       oss << "}";
     }
     oss << "]";
+    oss << ",\"grouped_summary\":{";
+    bool first_dimension = true;
+    append_grouped_dimension(&oss, "scene_id", scene_counts, &first_dimension);
+    append_grouped_dimension(&oss, "group", group_counts, &first_dimension);
+    append_grouped_dimension(&oss, "split", split_counts, &first_dimension);
+    append_grouped_dimension(&oss, "difficulty", difficulty_counts, &first_dimension);
+    oss << "}";
+    oss << ",\"challenge_stats\":"
+        << BuildChallengeStatsJson(labeled_items,
+                                   unlabeled_items,
+                                   scene_label_count,
+                                   group_label_count,
+                                   split_label_count,
+                                   difficulty_label_count,
+                                   scene_counts,
+                                   group_counts,
+                                   split_counts,
+                                   difficulty_counts);
+    oss << ",\"visualization\":"
+        << BuildVisualizationJson(top_issues,
+                                  scene_counts,
+                                  group_counts,
+                                  split_counts,
+                                  difficulty_counts);
     oss << ",\"items\":[";
     for (std::size_t i = 0; i < outcomes.size(); ++i) {
       if (i) {
         oss << ",";
       }
-      oss << outcomes[i].json;
+      oss << BuildOutcomeJsonForBatch(outcomes[i]);
     }
     oss << "]";
     oss << "}";
@@ -858,8 +1244,8 @@ static void PrintCompatCheckBatch(const std::vector<CompatAuditOutcome>& outcome
     return;
   }
 
-  std::cout << "total=" << outcomes.size() << " pass=" << pass_count << " review_required="
-            << review_count << " block=" << block_count << "\n";
+  std::cout << "total=" << totals.total << " pass=" << totals.pass << " review_required="
+            << totals.review_required << " block=" << totals.block << "\n";
 }
 
 static int HandleCompatCheckCommand(int argc, char** argv) {
@@ -919,9 +1305,9 @@ static int HandleCompatCheckCommand(int argc, char** argv) {
   }
 
 
-  std::vector<std::string> targets;
+  std::vector<ManifestTarget> targets;
   if (!single_path.empty()) {
-    targets.push_back(single_path);
+    targets.push_back({single_path});
   } else if (!dir_path.empty()) {
     const std::filesystem::path root(dir_path);
     if (!std::filesystem::exists(root) || !std::filesystem::is_directory(root)) {
@@ -930,13 +1316,15 @@ static int HandleCompatCheckCommand(int argc, char** argv) {
     }
     for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
       if (entry.is_regular_file() && IsSpzPath(entry.path())) {
-        targets.push_back(entry.path().string());
+        targets.push_back({entry.path().string()});
       }
     }
-    std::sort(targets.begin(), targets.end());
+    std::sort(targets.begin(), targets.end(), [](const auto& lhs, const auto& rhs) {
+      return lhs.path < rhs.path;
+    });
   } else {
     std::string parse_err;
-    targets = ParseManifestSpzPaths(manifest_path, &parse_err);
+    targets = ParseManifestTargets(manifest_path, &parse_err);
     if (!parse_err.empty() && targets.empty()) {
       std::cerr << parse_err << "\n";
       return 2;
@@ -948,16 +1336,23 @@ static int HandleCompatCheckCommand(int argc, char** argv) {
     return 2;
   }
 
+  const char* policy_mode = manifest_path.empty() ? spz_gatekeeper::kAuditPolicyModeRelease
+                                                   : spz_gatekeeper::kAuditPolicyModeChallenge;
+
   std::vector<CompatAuditOutcome> outcomes;
   outcomes.reserve(targets.size());
   bool all_pass = true;
   for (const auto& target : targets) {
     CompatAuditOutcome outcome;
     std::string run_err;
-    if (!RunCompatAuditForPath(target, &outcome, &run_err)) {
+    if (!RunCompatAuditForPath(target.path, policy_mode, &outcome, &run_err)) {
       std::cerr << run_err << "\n";
       return 2;
     }
+    outcome.scene_id = target.scene_id;
+    outcome.group = target.group;
+    outcome.split = target.split;
+    outcome.difficulty = target.difficulty;
     if (outcome.verdict != "pass") {
       all_pass = false;
     }
@@ -984,7 +1379,7 @@ static int HandleCompatCheckCommand(int argc, char** argv) {
       PrintCompatCheckSingle(outcomes.front(), json);
     }
   } else {
-    PrintCompatCheckBatch(outcomes, json);
+    PrintCompatCheckBatch(outcomes, json, policy_mode);
   }
 
   return all_pass ? 0 : 1;
@@ -1056,6 +1451,7 @@ static void PrintUsage() {
   std::cerr << "Task 5 contract:\n";
   std::cerr << "  browser_lightweight_wasm_audit only gates a standard zip audit bundle in the browser.\n";
   std::cerr << "  local_cli_spz_artifact_audit audits the real .spz artifact, directory, or manifest locally.\n";
+  std::cerr << "  compat-check --manifest accepts legacy path scans and structured items[] with scene_id/group/split/difficulty.\n";
   std::cerr << "  browser_to_cli_handoff is optional, only merged into compat-check --json output.\n";
   std::cerr << "  final verdict still comes from the local CLI artifact audit.\n";
   std::cerr << "  spz_gatekeeper does not audit GLB or spz2glb.\n\n";

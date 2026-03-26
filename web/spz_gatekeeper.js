@@ -1,6 +1,46 @@
 const kAuditProfile = 'spz';
+const kAuditPolicyName = 'spz_gatekeeper_policy';
+const kAuditPolicyVersion = '2.0.0';
+const kAuditPolicyModeDev = 'dev';
+const kAuditPolicyModeRelease = 'release';
+const kAuditPolicyModeChallenge = 'challenge';
 const kAuditToolVersion = '1.0.0';
 const kBrowserAuditMode = 'browser_lightweight_wasm_audit';
+const kUnifiedBudgetPolicyTable = Object.freeze({
+  cold_start_ms: Object.freeze({
+    domain: 'perf',
+    thresholds: Object.freeze({ dev: null, release: 1500, challenge: 1500 }),
+  }),
+  tiny_case_ms: Object.freeze({
+    domain: 'perf',
+    thresholds: Object.freeze({ dev: null, release: 500, challenge: 500 }),
+  }),
+  peak_memory_mb: Object.freeze({
+    domain: 'memory',
+    thresholds: Object.freeze({ dev: null, release: 256, challenge: 256 }),
+  }),
+  copy_pass_limit: Object.freeze({
+    domain: 'copy',
+    thresholds: Object.freeze({ dev: null, release: 2, challenge: 2 }),
+  }),
+  file_size_bytes: Object.freeze({
+    domain: 'artifact',
+    thresholds: Object.freeze({ dev: null, release: null, challenge: null }),
+  }),
+  decompressed_size_bytes: Object.freeze({
+    domain: 'artifact',
+    thresholds: Object.freeze({ dev: null, release: null, challenge: null }),
+  }),
+  process_time_ms: Object.freeze({
+    domain: 'artifact',
+    thresholds: Object.freeze({ dev: null, release: null, challenge: null }),
+  }),
+  memory_growth_count: Object.freeze({
+    domain: 'memory',
+    thresholds: Object.freeze({ dev: null, release: 1, challenge: 1 }),
+  }),
+});
+
 
 const kSupportedZipCompressionStored = 0;
 const kSupportedZipCompressionDeflate = 8;
@@ -61,15 +101,28 @@ function findEndOfCentralDirectory(bytes) {
   throw new Error('zip end of central directory not found');
 }
 
-async function inflateRaw(bytes) {
+function markCopyPass(counter, stage) {
+  if (!counter) {
+    return;
+  }
+  counter.pass_count += 1;
+  if (stage) {
+    counter.by_stage[stage] = (counter.by_stage[stage] || 0) + 1;
+  }
+}
+
+async function inflateRaw(bytes, copyBudget) {
   if (typeof DecompressionStream !== 'function') {
     throw new Error('DecompressionStream(deflate-raw) not available in this browser');
   }
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const arrayBuffer = await new Response(stream).arrayBuffer();
+  markCopyPass(copyBudget, 'zip_inflate');
+  return new Uint8Array(arrayBuffer);
 }
 
-async function readZipEntries(input) {
+async function readZipEntries(input, copyBudget) {
+
   const bytes = toUint8Array(input);
   const eocdOffset = findEndOfCentralDirectory(bytes);
   const entryCount = readU16(bytes, eocdOffset + 10);
@@ -96,7 +149,8 @@ async function readZipEntries(input) {
     const commentLength = readU16(bytes, offset + 32);
     const localHeaderOffset = readU32(bytes, offset + 42);
     const nameOffset = offset + 46;
-    const rawName = decodeText(bytes.slice(nameOffset, nameOffset + nameLength));
+    const rawName = decodeText(bytes.subarray(nameOffset, nameOffset + nameLength));
+
     const name = normalizeEntryName(rawName);
 
     if ((generalPurpose & 0x08) !== 0) {
@@ -114,12 +168,13 @@ async function readZipEntries(input) {
       throw new Error(`zip entry payload is truncated: ${name}`);
     }
 
-    const compressedBytes = bytes.slice(dataOffset, dataEnd);
+    const compressedBytes = bytes.subarray(dataOffset, dataEnd);
     let payloadBytes;
     if (compressionMethod === kSupportedZipCompressionStored) {
       payloadBytes = compressedBytes;
     } else if (compressionMethod === kSupportedZipCompressionDeflate) {
-      payloadBytes = await inflateRaw(compressedBytes);
+      payloadBytes = await inflateRaw(compressedBytes, copyBudget);
+
     } else {
       throw new Error(`unsupported zip compression method ${compressionMethod}: ${name}`);
     }
@@ -164,6 +219,57 @@ function resolveNextAction(verdict) {
     return 'review_bundle_before_cli';
   }
   return 'block_bundle';
+}
+
+function resolvePolicyMode(policyMode) {
+  return policyMode === kAuditPolicyModeDev ||
+    policyMode === kAuditPolicyModeRelease ||
+    policyMode === kAuditPolicyModeChallenge
+    ? policyMode
+    : kAuditPolicyModeRelease;
+}
+
+function isReleaseReadyVerdict(verdict) {
+  return verdict === 'pass';
+}
+
+function resolveBundleVerdict(data) {
+  return typeof data.bundle_verdict === 'string' && data.bundle_verdict.length > 0
+    ? data.bundle_verdict
+    : data.verdict;
+}
+
+function resolveFinalVerdict(data) {
+  return typeof data.final_verdict === 'string' && data.final_verdict.length > 0
+    ? data.final_verdict
+    : resolveBundleVerdict(data);
+}
+
+function resolveReleaseReady(_data, finalVerdict) {
+  return isReleaseReadyVerdict(finalVerdict);
+}
+
+function resolvePolicyDeclaredBudget(policyMode, key) {
+  const spec = kUnifiedBudgetPolicyTable[key];
+  if (!spec) {
+    return undefined;
+  }
+  const declared = spec.thresholds[resolvePolicyMode(policyMode)];
+  return typeof declared === 'number' && Number.isFinite(declared)
+    ? declared
+    : undefined;
+}
+
+function resolveDeclaredBudget(manifestBudgets, policyMode, key) {
+  const declared = manifestBudgets?.[key];
+  if (typeof declared === 'number' && Number.isFinite(declared)) {
+    return declared;
+  }
+  return resolvePolicyDeclaredBudget(policyMode, key);
+}
+
+function describeBudgetFromPolicy(manifestBudgets, policyMode, key, observed, collected = true) {
+  return describeBudget(resolveDeclaredBudget(manifestBudgets, policyMode, key), observed, collected);
 }
 
 function isTruthyResult(value) {
@@ -259,14 +365,25 @@ function createRuntimeStatus(runtime) {
 }
 
 function buildLegacyBrowserAuditReport(data) {
+  const policyMode = resolvePolicyMode(data.policy_mode);
+  const bundleVerdict = resolveBundleVerdict(data);
+  const finalVerdict = resolveFinalVerdict(data);
+  const releaseReady = resolveReleaseReady(data, finalVerdict);
   return {
     audit_profile: kAuditProfile,
+    policy_name: kAuditPolicyName,
+    policy_version: kAuditPolicyVersion,
+    policy_mode: policyMode,
     audit_mode: kBrowserAuditMode,
     bundle_id: data.bundle_id,
     tool_version: kAuditToolVersion,
-    verdict: data.verdict,
+    bundle_verdict: bundleVerdict,
+    verdict: bundleVerdict,
+    final_verdict: finalVerdict,
+    release_ready: releaseReady,
     summary: data.summary,
     budgets: data.budgets,
+    copy_breakdown: data.copy_breakdown,
     issues: data.issues,
     next_action: data.next_action,
     manifest_summary: data.manifest_summary,
@@ -280,11 +397,12 @@ function buildLegacyBrowserAuditReport(data) {
       browser_smoke_wired: true,
       empty_shell_guard_wired: true,
       warning_budget_wired: true,
-      copy_budget_wired: false,
+      copy_budget_wired: data.copy_budget_wired,
       memory_budget_wired: data.memory_budget_wired,
+
       performance_budget_wired: data.performance_budget_wired,
       artifact_audit_wired: false,
-      release_ready: data.verdict === 'pass',
+      release_ready: releaseReady,
     },
     audit_duration_ms: data.audit_duration_ms,
   };
@@ -298,26 +416,34 @@ function buildBrowserAuditReport(data, runtime) {
 }
 
 function buildBrowserToCliHandoff(report) {
-
+  const bundleVerdict = resolveBundleVerdict(report);
+  const finalVerdict = resolveFinalVerdict(report);
   return {
     audit_profile: report.audit_profile,
     audit_mode: report.audit_mode,
+    policy_mode: resolvePolicyMode(report.policy_mode),
     bundle_id: report.bundle_id,
     tool_version: report.tool_version,
-    verdict: report.verdict,
+    bundle_verdict: bundleVerdict,
+    verdict: bundleVerdict,
+    final_verdict: finalVerdict,
+    release_ready: resolveReleaseReady(report, finalVerdict),
     summary: report.summary || {},
     budgets: report.budgets || {},
+    copy_breakdown: report.copy_breakdown || { total_passes: 0, stages: [] },
     issues: report.issues || [],
     next_action: report.next_action,
   };
 }
 
-async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
+async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null, options = {}) {
 
   const issues = [];
   const auditStartedAt = nowMs();
   const bundleBytes = toUint8Array(input);
   const bundleId = await buildBundleId(bundleBytes);
+  const policyMode = resolvePolicyMode(options.policy_mode);
+  const disableCopyBudgetCollection = options.disable_copy_budget_collection === true;
   let manifest = null;
 
   let entries = new Map();
@@ -327,6 +453,8 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
   let validTinyMs = null;
   let invalidTinyHandled = false;
   let memoryObservedMb = currentMemoryMb();
+  const copyBudget = { pass_count: 0 };
+
 
   try {
     entries = await readZipEntries(bundleBytes);
@@ -461,10 +589,16 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
   const context = {
     fileName,
     manifest,
-    moduleBytes: moduleEntry != null ? new Uint8Array(moduleEntry.bytes) : new Uint8Array(),
+    moduleBytes: moduleEntry != null
+      ? (() => {
+          markCopyPass(copyBudget, 'module_clone');
+          return new Uint8Array(moduleEntry.bytes);
+        })()
+      : new Uint8Array(),
     runtime,
     wasmExports,
   };
+
 
   if (issues.filter((issue) => issue.severity === 'error').length === 0 && typeof loaderModule.init === 'function') {
     const initStartedAt = nowMs();
@@ -523,11 +657,36 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
   memoryObservedMb = currentMemoryMb() ?? memoryObservedMb;
   const declaredBudgets = manifest?.budgets ?? {};
   const budgets = {
-    cold_start_ms: describeBudget(declaredBudgets.cold_start_ms, coldStartMs, coldStartMs !== null),
-    tiny_case_ms: describeBudget(declaredBudgets.tiny_case_ms, validTinyMs, validTinyMs !== null),
-    peak_memory_mb: describeBudget(declaredBudgets.peak_memory_mb, memoryObservedMb, memoryObservedMb !== null),
-    copy_pass_limit: describeBudget(declaredBudgets.copy_pass_limit, null, false),
+    cold_start_ms: describeBudgetFromPolicy(
+      declaredBudgets,
+      policyMode,
+      'cold_start_ms',
+      coldStartMs,
+      coldStartMs !== null,
+    ),
+    tiny_case_ms: describeBudgetFromPolicy(
+      declaredBudgets,
+      policyMode,
+      'tiny_case_ms',
+      validTinyMs,
+      validTinyMs !== null,
+    ),
+    peak_memory_mb: describeBudgetFromPolicy(
+      declaredBudgets,
+      policyMode,
+      'peak_memory_mb',
+      memoryObservedMb,
+      memoryObservedMb !== null,
+    ),
+    copy_pass_limit: describeBudgetFromPolicy(
+      declaredBudgets,
+      policyMode,
+      'copy_pass_limit',
+      copyBudget.pass_count,
+      !disableCopyBudgetCollection,
+    ),
   };
+
 
   if (budgets.cold_start_ms.status === 'over_budget') {
     pushIssue(issues, 'warning', 'BUNDLE_COLD_START_OVER_BUDGET', '冷启动耗时超出 manifest 预算');
@@ -538,6 +697,23 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
   if (budgets.peak_memory_mb.status === 'over_budget') {
     pushIssue(issues, 'warning', 'BUNDLE_MEMORY_OVER_BUDGET', '内存占用超出 manifest 预算');
   }
+  if (budgets.copy_pass_limit.status === 'over_budget') {
+    pushIssue(issues, 'warning', 'BUNDLE_COPY_OVER_BUDGET', 'copy 路径超出 policy/manifest 预算');
+  }
+  if (
+    budgets.copy_pass_limit.status === 'not_collected' &&
+    budgets.copy_pass_limit.declared !== null &&
+    policyMode !== kAuditPolicyModeDev
+  ) {
+    pushIssue(issues, 'warning', 'BUNDLE_COPY_BUDGET_NOT_COLLECTED', 'copy 预算未完成采集，不能作为 release/challenge 通过依据');
+  }
+
+  const copyBreakdown = {
+    total_passes: copyBudget.pass_count,
+    stages: Object.entries(copyBudget.by_stage)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([name, count]) => ({ name, count })),
+  };
 
   const verdict = resolveVerdict(issues);
   const summary = {
@@ -554,9 +730,12 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
 
   return buildBrowserAuditReport({
     bundle_id: bundleId,
+    policy_mode: policyMode,
     verdict,
+    final_verdict: verdict,
     summary,
     budgets,
+    copy_breakdown: copyBreakdown,
     issues,
     next_action: resolveNextAction(verdict),
     manifest_summary: manifestSummary,
@@ -568,7 +747,9 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null) {
     })),
     wasm_export_summary: wasmExports,
     empty_shell_risk: issues.some((issue) => issue.code === 'BUNDLE_EMPTY_SHELL_RISK'),
+    copy_budget_wired: budgets.copy_pass_limit.status !== 'not_collected',
     memory_budget_wired: budgets.peak_memory_mb.status !== 'not_collected',
+
     performance_budget_wired:
       budgets.cold_start_ms.status !== 'not_collected' ||
       budgets.tiny_case_ms.status !== 'not_collected',
@@ -588,17 +769,10 @@ export default async function createSpzGatekeeperModule() {
   const runtimeStatus = createRuntimeStatus(runtime);
 
   return {
-    auditWasmBundle: (input, fileName) => auditWasmBundle(input, fileName, runtime),
+    auditWasmBundle: (input, fileName, options) => auditWasmBundle(input, fileName, runtime, options),
     buildBrowserAuditReport: runtime?.buildBrowserAuditReport?.bind(runtime),
     buildBrowserToCliHandoff,
     getRuntimeStatus: () => runtimeStatus,
 
     inspectSpz: runtime?.inspectSpz?.bind(runtime) ?? createUnavailableMethod('inspectSpz'),
-    dumpTrailer: runtime?.dumpTrailer?.bind(runtime) ?? createUnavailableMethod('dumpTrailer'),
-    inspectSpzText: runtime?.inspectSpzText?.bind(runtime) ?? createUnavailableMethod('inspectSpzText'),
-    inspectCompatSummary: runtime?.inspectCompatSummary?.bind(runtime) ?? createUnavailableMethod('inspectCompatSummary'),
-    listRegisteredExtensions: runtime?.listRegisteredExtensions?.bind(runtime) ?? (() => ({ count: 0, extensions: [] })),
-    describeExtension: runtime?.describeExtension?.bind(runtime) ?? ((type) => ({ error: 'runtime unavailable', type })),
-    getCompatibilityBoard: runtime?.getCompatibilityBoard?.bind(runtime) ?? (() => ({ count: 0, extensions: [] })),
-  };
-}
+    dumpTrailer: runtime?.dumpTrailer?.bind(runtime) ?? createUnavailableMethod(
