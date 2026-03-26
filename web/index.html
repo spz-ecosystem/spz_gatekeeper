@@ -721,15 +721,31 @@
           <div class="stack-item-title">Next Action</div>
           <div class="stack-item-body">
             <strong>Next:</strong> ${escapeHtml(report.next_action || 'n/a')}<br>
+            <strong>Final Verdict:</strong> ${escapeHtml(report.final_verdict || report.verdict || 'n/a')}<br>
+            <strong>Release Ready:</strong> ${escapeHtml(String(report.release_ready ?? 'n/a'))}<br>
             <strong>Bundle ID:</strong> ${escapeHtml(report.bundle_id || 'n/a')}<br>
             <strong>Tool Version:</strong> ${escapeHtml(report.tool_version || 'n/a')}<br>
             <strong>Duration:</strong> ${escapeHtml(String(report.audit_duration_ms?.toFixed?.(2) ?? report.audit_duration_ms ?? 'n/a'))} ms
           </div>
         </div>
       `;
-
-      setStackList(trailerList, [actionCard, ...budgetItems]);
+      const copyBreakdown = report.copy_breakdown || { total_passes: 0, stages: [] };
+      const copyStages = Array.isArray(copyBreakdown.stages) && copyBreakdown.stages.length
+        ? copyBreakdown.stages.map((stage) => `${stage.name}:${stage.count}`).join(', ')
+        : 'n/a';
+      const copyBreakdownCard = `
+        <div class="stack-item">
+          <div class="stack-item-title">Copy Breakdown</div>
+          <div class="stack-item-body">
+            <strong>Total Passes:</strong> ${escapeHtml(String(copyBreakdown.total_passes ?? 0))}<br>
+            <strong>Stages:</strong> ${escapeHtml(copyStages)}
+          </div>
+        </div>
+      `;
+      setStackList(trailerList, [actionCard, copyBreakdownCard, ...budgetItems]);
     }
+
+
 
     function renderSummary(file, report) {
       const verdict = formatVerdict(report);

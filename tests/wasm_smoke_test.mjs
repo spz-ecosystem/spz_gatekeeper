@@ -303,6 +303,12 @@ async function runSmoke() {
     if (!validAudit.report.budgets || !validAudit.report.budgets.cold_start_ms) {
       throw new Error('browser report budgets 缺少 cold_start_ms');
     }
+    if (!validAudit.report.copy_breakdown || validAudit.report.copy_breakdown.total_passes !== 1) {
+      throw new Error('browser report copy_breakdown.total_passes 不正确');
+    }
+    if (!Array.isArray(validAudit.report.copy_breakdown.stages) || !validAudit.report.copy_breakdown.stages.some((stage) => stage.name === 'module_clone' && stage.count === 1)) {
+      throw new Error('browser report copy_breakdown.stages 缺少 module_clone');
+    }
     if (!Array.isArray(validAudit.report.issues)) {
       throw new Error('browser report issues 不是数组');
     }

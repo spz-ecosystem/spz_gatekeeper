@@ -402,6 +402,42 @@ TEST(test_compat_check_manifest_mode_supports_structured_items_and_grouped_summa
   ASSERT_TRUE(pass_pos < block_pos);
 }
 
+TEST(test_compat_check_manifest_mode_emits_challenge_stats_and_visualization) {
+  TempDirGuard workdir(MakeTempDirPath("compat_check_manifest_visualization"));
+  const auto pass_trailer = spz_gatekeeper_test::CreateTrailer(
+      {{0xADBE0002u, spz_gatekeeper_test::CreateAdobeSafeOrbitPayload()}});
+  const auto review_trailer = spz_gatekeeper_test::CreateTrailer(
+      {{0xCAFE0001u, std::vector<std::uint8_t>{0x01, 0x02, 0x03, 0x04}}});
+
+  const auto pass_path = workdir.path() / "scene_pass.spz";
+  const auto review_path = workdir.path() / "scene_review.spz";
+  WriteBinaryFile(pass_path,
+                  spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &pass_trailer));
+  WriteBinaryFile(review_path,
+                  spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &review_trailer));
+
+  const auto manifest_path = workdir.path() / "challenge_manifest_visualization.json";
+  std::ofstream manifest(manifest_path);
+  manifest << "{\"items\":["
+           << "{\"path\":\"" << pass_path.filename().generic_string()
+           << "\",\"scene_id\":\"scene-a\",\"group\":\"official\",\"split\":\"challenge\",\"difficulty\":\"easy\"},"
+           << "{\"path\":\"" << review_path.filename().generic_string()
+           << "\",\"scene_id\":\"scene-b\",\"group\":\"community\",\"split\":\"dev\",\"difficulty\":\"medium\"}"
+           << "]}";
+  manifest.close();
+
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check --manifest \"" + manifest_path.string() + "\" --json");
+  ASSERT_TRUE(result.exit_code == 1);
+  ASSERT_TRUE(result.output.find("\"challenge_stats\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"labeled_items\":2") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"unlabeled_items\":0") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"dimensions\":[\"scene_id\",\"group\",\"split\",\"difficulty\"]") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"stable_item_order\":true") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"visualization\":{") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"table_columns\":[\"asset_path\",\"verdict\",\"scene_id\",\"group\",\"split\",\"difficulty\"]") != std::string::npos);
+  ASSERT_TRUE(result.output.find("\"grouped_dimensions\":[\"scene_id\",\"group\",\"split\",\"difficulty\"]") != std::string::npos);
+}
+
 TEST(test_compat_check_merges_browser_handoff_without_skipping_artifact_audit) {
   TempDirGuard workdir(MakeTempDirPath("compat_check_handoff_mode"));
   const auto trailer = spz_gatekeeper_test::CreateTrailer(
@@ -460,6 +496,7 @@ int main() {
   RUN_TEST(test_compat_check_dir_mode_outputs_batch_summary);
   RUN_TEST(test_compat_check_manifest_mode_outputs_batch_summary);
   RUN_TEST(test_compat_check_manifest_mode_supports_structured_items_and_grouped_summary);
+  RUN_TEST(test_compat_check_manifest_mode_emits_challenge_stats_and_visualization);
   RUN_TEST(test_compat_check_merges_browser_handoff_without_skipping_artifact_audit);
   RUN_TEST(test_help_describes_task5_boundaries_and_handoff_contract);
 

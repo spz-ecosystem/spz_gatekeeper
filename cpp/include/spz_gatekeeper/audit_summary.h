@@ -107,6 +107,7 @@ struct BrowserWasmAuditReport {
 
   std::string manifest_summary_json = "{}";
   std::string budgets_json = "{}";
+  std::string copy_breakdown_json = "{}";
   std::string issues_json = "[]";
   std::string bundle_entries_json = "[]";
   std::string wasm_export_summary_json = "[]";

@@ -145,6 +145,36 @@ TEST(test_build_browser_wasm_audit_json_derives_release_ready_from_final_verdict
               std::string::npos);
 }
 
+TEST(test_build_browser_wasm_audit_json_includes_copy_breakdown) {
+  spz_gatekeeper::BrowserWasmAuditReport report;
+  report.bundle_id = "sha256:test-bundle";
+  report.verdict = "pass";
+  report.next_action = "allow_local_cli_audit";
+  report.audit_duration_ms = 4.0;
+  report.summary.bundle_name = "bundle.zip";
+  report.summary.file_count = 3;
+  report.summary.issue_count = 0;
+  report.summary.declared_export_count = 3;
+  report.summary.loader_export_count = 3;
+  report.summary.wasm_export_count = 1;
+  report.summary.valid_tiny_passed = true;
+  report.summary.invalid_tiny_handled = true;
+  report.summary.runtime_available = true;
+  report.manifest_summary_json = "{\"profile\":\"spz\"}";
+  report.budgets_json = "{\"copy_pass_limit\":{\"declared\":2,\"observed\":2,\"status\":\"within_budget\",\"within_budget\":true}}";
+  report.copy_breakdown_json =
+      "{\"total_passes\":2,\"stages\":[{\"name\":\"zip_inflate\",\"count\":1},{\"name\":\"module_clone\",\"count\":1}]}";
+  report.issues_json = "[]";
+  report.bundle_entries_json = "[]";
+  report.wasm_export_summary_json = "[]";
+  report.copy_budget_wired = true;
+
+  const std::string json = spz_gatekeeper::BuildBrowserWasmAuditJson(report);
+  ASSERT_TRUE(json.find("\"copy_breakdown\":{\"total_passes\":2") != std::string::npos);
+  ASSERT_TRUE(json.find("\"name\":\"zip_inflate\"") != std::string::npos);
+  ASSERT_TRUE(json.find("\"name\":\"module_clone\"") != std::string::npos);
+}
+
 TEST(test_build_compat_check_audit_json_reports_pass_schema) {
   spz_gatekeeper::GateReport strict_report;
   strict_report.asset_path = "fixture_valid.spz";
@@ -363,6 +393,7 @@ int main() {
   RUN_TEST(test_audit_summary_freezes_public_mode_constants);
   RUN_TEST(test_build_browser_wasm_audit_json_reports_pass_schema);
   RUN_TEST(test_build_browser_wasm_audit_json_derives_release_ready_from_final_verdict);
+  RUN_TEST(test_build_browser_wasm_audit_json_includes_copy_breakdown);
   RUN_TEST(test_build_compat_check_audit_json_reports_pass_schema);
   RUN_TEST(test_build_compat_check_audit_json_escalates_release_when_memory_budget_not_collected);
   RUN_TEST(test_build_compat_check_audit_json_keeps_dev_mode_observed_without_budget);

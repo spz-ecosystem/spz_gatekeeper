@@ -309,9 +309,8 @@ spz_gatekeeper compat-check --manifest ./fixtures/manifest.json --json
 - 看板里的 `release_ready` 不能反向覆盖 CI `compat-check` gate 的发布结论。
 
 ### v2 当前剩余缺口
-- Browser/CLI 在 `warning/copy/memory/perf/artifact` 五类预算上尚未完全收口到同一 declared policy 表。
-- `release_ready` 在所有路径上仍需彻底单源化语义。
-- challenge 路径仍需扩充 `single/dir/manifest/handoff` 的一致性矩阵覆盖。
+- `feature/spz-v2-profile-core` 当前已无已知的 v2 门禁代码路径缺口。
+- 当前本地阻塞点：本次 WSL 会话缺少 Node.js / Playwright / Emscripten，因此还不能在本机直接重跑 `tests/wasm_smoke_test.mjs`；该步骤仍以 CI 中的浏览器 gate 为准。
 
 ### v2 完成判据（必须同时满足）
 1. `dev/release/challenge` 三档在策略行为与预算状态语义上保持一致。
@@ -320,6 +319,11 @@ spz_gatekeeper compat-check --manifest ./fixtures/manifest.json --json
 4. challenge manifest 输出稳定、可复验，且 top-level 与 item-level 一致。
 5. CI 运行真实 profile-aware gate，而不是只看 board 快照。
 6. README、registry、CLI、Web 的边界口径与完成语义一致。
+
+### 7.3 补强输出
+- Browser bundle 报告现已输出 `copy_breakdown`，按阶段细分 copy 次数（当前包含 `zip_inflate` / `module_clone`）。
+- challenge 批量输出现已增加 `challenge_stats` 与 `visualization` 辅助区块，便于分组复核与下游渲染。
+- Web 摘要面板现已直接展示 `final_verdict`、`release_ready` 与 `Copy Breakdown`。
 
 由于浏览器端和 CLI 端都运行在用户本地，所以项目默认就具备“本地双端协同”。`browser_to_cli_handoff` 只是一个可选的标准化能力，不是后台服务，也不能替代真实 CLI 成品审查。
 

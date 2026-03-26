@@ -309,9 +309,8 @@ This compatibility-board snapshot is a maturity view, not the final release gate
 - `release_ready` in board snapshots must not override the release decision from CI `compat-check` gates.
 
 ### v2 remaining gaps (current)
-- Unified declared policy table is not fully closed for `warning/copy/memory/perf/artifact` across Browser and CLI.
-- `release_ready` still needs strict single-source semantics in all paths.
-- Challenge path still needs broader matrix coverage for `single/dir/manifest/handoff` policy consistency.
+- No known codepath gap remains in `feature/spz-v2-profile-core` for the v2 gate contract.
+- Current local blocker: re-running `tests/wasm_smoke_test.mjs` in this WSL session still requires Node.js / Playwright / Emscripten to be available locally; CI keeps the browser gate as the source of truth for that step.
 
 ### v2 done criteria (must all hold)
 1. `dev/release/challenge` use consistent policy behavior and budget-state semantics.
@@ -320,6 +319,11 @@ This compatibility-board snapshot is a maturity view, not the final release gate
 4. Challenge manifest output is stable, reproducible, and top-level/item-level consistent.
 5. CI runs real profile-aware gates (not only board snapshots).
 6. README, registry, CLI, and Web report the same boundary and completion semantics.
+
+### 7.3 supplemental outputs
+- Browser bundle reports now expose `copy_breakdown` with stage-level counts (currently `zip_inflate` / `module_clone`).
+- Challenge batch output now adds `challenge_stats` and `visualization` helper sections for grouped review and downstream rendering.
+- Web summary now surfaces `final_verdict`, `release_ready`, and `Copy Breakdown` alongside the existing budget cards.
 
 Because both browser and CLI run on the user's local machine, the project already has a local dual-end workflow by default. `browser_to_cli_handoff` is optional standardization, not a backend service, and it never replaces the real CLI artifact audit.
 

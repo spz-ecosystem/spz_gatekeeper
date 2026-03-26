@@ -447,6 +447,7 @@ emscripten::val buildBrowserAuditReport(const emscripten::val& payload) {
   report.summary.runtime_available = summary["runtime_available"].as<bool>();
   report.manifest_summary_json = StringifyJsonValue(payload["manifest_summary"]);
   report.budgets_json = StringifyJsonValue(payload["budgets"]);
+  report.copy_breakdown_json = StringifyJsonValue(payload["copy_breakdown"]);
   report.issues_json = StringifyJsonValue(payload["issues"]);
   report.bundle_entries_json = StringifyJsonValue(payload["bundle_entries"]);
   report.wasm_export_summary_json = StringifyJsonValue(payload["wasm_export_summary"]);

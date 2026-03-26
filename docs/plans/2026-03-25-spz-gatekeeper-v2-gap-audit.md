@@ -1,6 +1,6 @@
 # SPZ Gatekeeper v2 门卫收口计划（修订版，2026-03-25）
 
-> 本文替代“纯问题清单”写法，改为**可执行的收口计划**：明确已解决项、未解决项、剩余差距、执行路径与验收目标。  
+> 本文替代“纯问题清单”写法，改为**可执行的收口计划**：明确已解决项、未解决项、剩余差距、执行路径与验收目标。
 > 对齐基线：`docs/plans/2026-03-23-spz-gatekeeper-v2-hybrid-implementation-plan.md`（仅覆盖门卫主线，不包含数据集扩充实施细节）。
 
 ---
@@ -52,7 +52,7 @@
 > 说明：以下为“已修复/已变更到位”，但不等于整体验收已完成。
 
 ### 3.1 manifest item 级 `policy_mode` 透传
-- 已在 CLI 审查路径显式传递 `policy_mode` 到 item 级 JSON builder。  
+- 已在 CLI 审查路径显式传递 `policy_mode` 到 item 级 JSON builder。
 - 当前 `RunCompatAuditForPath(...)` 构建 item 输出时传入 `policy_mode`，避免默认回落 `release`。
 
 ### 3.2 CLI memory budget 从“观测字段”升级为“影响 verdict”
@@ -214,9 +214,13 @@ release gate 只由 CI 的 compat-check 判定。
 最后一次性自检并提交，保证变更边界干净。
 
 ## 7.3 执行批次 C（P2，可后移）
-- copy 口径细分、challenge 统计扩展、可视化辅助输出。
+- 已补齐 Browser `copy_breakdown`，按阶段细分 copy 次数（当前覆盖 `zip_inflate` / `module_clone`）。
+- 已补齐 challenge 批量输出的 `challenge_stats` 与 `visualization` 辅助区块。
+- 已在 Web 摘要面板补充 `final_verdict`、`release_ready` 与 `Copy Breakdown` 展示。
+- 本地补充验证已写入 `tests/wasm_smoke_test.mjs`，但当前 WSL 会话缺少 Node.js / Playwright / Emscripten，尚未在本机重跑 browser smoke。
 
 ---
+
 
 ## 8. 验收目标（完成判定）
 

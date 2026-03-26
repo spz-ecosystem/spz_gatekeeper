@@ -762,6 +762,95 @@ static std::string BuildVerdictCountsJson(const VerdictCounts& counts) {
   return oss.str();
 }
 
+static std::string BuildStringArrayJson(const std::vector<std::string>& values) {
+  std::ostringstream oss;
+  oss << "[";
+  for (std::size_t i = 0; i < values.size(); ++i) {
+    if (i) {
+      oss << ",";
+    }
+    oss << "\"" << spz_gatekeeper::JsonEscape(values[i]) << "\"";
+  }
+  oss << "]";
+  return oss.str();
+}
+
+static std::vector<std::string> BuildPresentGroupedDimensions(
+    const std::map<std::string, VerdictCounts>& scene_counts,
+    const std::map<std::string, VerdictCounts>& group_counts,
+    const std::map<std::string, VerdictCounts>& split_counts,
+    const std::map<std::string, VerdictCounts>& difficulty_counts) {
+  std::vector<std::string> dimensions;
+  if (!scene_counts.empty()) {
+    dimensions.push_back("scene_id");
+  }
+  if (!group_counts.empty()) {
+    dimensions.push_back("group");
+  }
+  if (!split_counts.empty()) {
+    dimensions.push_back("split");
+  }
+  if (!difficulty_counts.empty()) {
+    dimensions.push_back("difficulty");
+  }
+  return dimensions;
+}
+
+static std::string BuildChallengeStatsJson(
+    std::size_t labeled_items,
+    std::size_t unlabeled_items,
+    std::size_t scene_label_count,
+    std::size_t group_label_count,
+    std::size_t split_label_count,
+    std::size_t difficulty_label_count,
+    const std::map<std::string, VerdictCounts>& scene_counts,
+    const std::map<std::string, VerdictCounts>& group_counts,
+    const std::map<std::string, VerdictCounts>& split_counts,
+    const std::map<std::string, VerdictCounts>& difficulty_counts) {
+  const std::vector<std::string> dimensions =
+      BuildPresentGroupedDimensions(scene_counts, group_counts, split_counts, difficulty_counts);
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"labeled_items\":" << labeled_items;
+  oss << ",\"unlabeled_items\":" << unlabeled_items;
+  oss << ",\"dimensions\":" << BuildStringArrayJson(dimensions);
+  oss << ",\"stable_item_order\":true";
+  oss << ",\"label_coverage\":{";
+  oss << "\"scene_id\":" << scene_label_count;
+  oss << ",\"group\":" << group_label_count;
+  oss << ",\"split\":" << split_label_count;
+  oss << ",\"difficulty\":" << difficulty_label_count;
+  oss << "}";
+  oss << "}";
+  return oss.str();
+}
+
+static std::string BuildVisualizationJson(
+    const std::vector<std::pair<std::string, std::size_t>>& top_issues,
+    const std::map<std::string, VerdictCounts>& scene_counts,
+    const std::map<std::string, VerdictCounts>& group_counts,
+    const std::map<std::string, VerdictCounts>& split_counts,
+    const std::map<std::string, VerdictCounts>& difficulty_counts) {
+  std::vector<std::string> table_columns = {"asset_path", "verdict"};
+  const std::vector<std::string> grouped_dimensions =
+      BuildPresentGroupedDimensions(scene_counts, group_counts, split_counts, difficulty_counts);
+  table_columns.insert(table_columns.end(), grouped_dimensions.begin(), grouped_dimensions.end());
+
+  std::vector<std::string> top_issue_codes;
+  top_issue_codes.reserve(top_issues.size());
+  for (const auto& entry : top_issues) {
+    top_issue_codes.push_back(entry.first);
+  }
+
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"table_columns\":" << BuildStringArrayJson(table_columns);
+  oss << ",\"grouped_dimensions\":" << BuildStringArrayJson(grouped_dimensions);
+  oss << ",\"top_issue_codes\":" << BuildStringArrayJson(top_issue_codes);
+  oss << "}";
+  return oss.str();
+}
+
 static std::string BuildManifestLabelsJson(const CompatAuditOutcome& outcome) {
   std::ostringstream oss;
   oss << "{";
@@ -1031,22 +1120,37 @@ static void PrintCompatCheckBatch(const std::vector<CompatAuditOutcome>& outcome
   std::map<std::string, VerdictCounts> group_counts;
   std::map<std::string, VerdictCounts> split_counts;
   std::map<std::string, VerdictCounts> difficulty_counts;
+  std::size_t labeled_items = 0;
+  std::size_t unlabeled_items = 0;
+  std::size_t scene_label_count = 0;
+  std::size_t group_label_count = 0;
+  std::size_t split_label_count = 0;
+  std::size_t difficulty_label_count = 0;
 
   for (const auto& outcome : outcomes) {
     AddVerdictCount(outcome, &totals);
+    if (HasManifestLabels(outcome)) {
+      ++labeled_items;
+    } else {
+      ++unlabeled_items;
+    }
     for (const auto& code : outcome.issue_codes) {
       issue_count_by_code[code] += 1;
     }
     if (!outcome.scene_id.empty()) {
+      ++scene_label_count;
       AddVerdictCount(outcome, &scene_counts[outcome.scene_id]);
     }
     if (!outcome.group.empty()) {
+      ++group_label_count;
       AddVerdictCount(outcome, &group_counts[outcome.group]);
     }
     if (!outcome.split.empty()) {
+      ++split_label_count;
       AddVerdictCount(outcome, &split_counts[outcome.split]);
     }
     if (!outcome.difficulty.empty()) {
+      ++difficulty_label_count;
       AddVerdictCount(outcome, &difficulty_counts[outcome.difficulty]);
     }
   }
@@ -1110,6 +1214,23 @@ static void PrintCompatCheckBatch(const std::vector<CompatAuditOutcome>& outcome
     append_grouped_dimension(&oss, "split", split_counts, &first_dimension);
     append_grouped_dimension(&oss, "difficulty", difficulty_counts, &first_dimension);
     oss << "}";
+    oss << ",\"challenge_stats\":"
+        << BuildChallengeStatsJson(labeled_items,
+                                   unlabeled_items,
+                                   scene_label_count,
+                                   group_label_count,
+                                   split_label_count,
+                                   difficulty_label_count,
+                                   scene_counts,
+                                   group_counts,
+                                   split_counts,
+                                   difficulty_counts);
+    oss << ",\"visualization\":"
+        << BuildVisualizationJson(top_issues,
+                                  scene_counts,
+                                  group_counts,
+                                  split_counts,
+                                  difficulty_counts);
     oss << ",\"items\":[";
     for (std::size_t i = 0; i < outcomes.size(); ++i) {
       if (i) {

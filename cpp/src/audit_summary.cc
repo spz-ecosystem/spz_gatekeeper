@@ -700,6 +700,8 @@ std::string BuildBrowserWasmAuditJson(const BrowserWasmAuditReport& report) {
       << (report.summary.runtime_available ? "true" : "false");
   oss << "}";
   oss << ",\"budgets\":" << NormalizeJsonFragment(report.budgets_json, "{}");
+  oss << ",\"copy_breakdown\":"
+      << NormalizeJsonFragment(report.copy_breakdown_json, "{}");
   oss << ",\"issues\":" << NormalizeJsonFragment(report.issues_json, "[]");
   oss << ",\"next_action\":\"" << JsonEscape(report.next_action) << "\"";
   oss << ",\"manifest_summary\":"

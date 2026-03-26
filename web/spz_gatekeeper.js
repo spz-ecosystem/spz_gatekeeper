@@ -101,9 +101,13 @@ function findEndOfCentralDirectory(bytes) {
   throw new Error('zip end of central directory not found');
 }
 
-function markCopyPass(counter) {
-  if (counter) {
-    counter.pass_count += 1;
+function markCopyPass(counter, stage) {
+  if (!counter) {
+    return;
+  }
+  counter.pass_count += 1;
+  if (stage) {
+    counter.by_stage[stage] = (counter.by_stage[stage] || 0) + 1;
   }
 }
 
@@ -113,7 +117,7 @@ async function inflateRaw(bytes, copyBudget) {
   }
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   const arrayBuffer = await new Response(stream).arrayBuffer();
-  markCopyPass(copyBudget);
+  markCopyPass(copyBudget, 'zip_inflate');
   return new Uint8Array(arrayBuffer);
 }
 
@@ -379,6 +383,7 @@ function buildLegacyBrowserAuditReport(data) {
     release_ready: releaseReady,
     summary: data.summary,
     budgets: data.budgets,
+    copy_breakdown: data.copy_breakdown,
     issues: data.issues,
     next_action: data.next_action,
     manifest_summary: data.manifest_summary,
@@ -425,6 +430,7 @@ function buildBrowserToCliHandoff(report) {
     release_ready: resolveReleaseReady(report, finalVerdict),
     summary: report.summary || {},
     budgets: report.budgets || {},
+    copy_breakdown: report.copy_breakdown || { total_passes: 0, stages: [] },
     issues: report.issues || [],
     next_action: report.next_action,
   };
@@ -585,7 +591,7 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null, o
     manifest,
     moduleBytes: moduleEntry != null
       ? (() => {
-          markCopyPass(copyBudget);
+          markCopyPass(copyBudget, 'module_clone');
           return new Uint8Array(moduleEntry.bytes);
         })()
       : new Uint8Array(),
@@ -702,6 +708,13 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null, o
     pushIssue(issues, 'warning', 'BUNDLE_COPY_BUDGET_NOT_COLLECTED', 'copy 预算未完成采集，不能作为 release/challenge 通过依据');
   }
 
+  const copyBreakdown = {
+    total_passes: copyBudget.pass_count,
+    stages: Object.entries(copyBudget.by_stage)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([name, count]) => ({ name, count })),
+  };
+
   const verdict = resolveVerdict(issues);
   const summary = {
     bundle_name: fileName,
@@ -722,6 +735,7 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null, o
     final_verdict: verdict,
     summary,
     budgets,
+    copy_breakdown: copyBreakdown,
     issues,
     next_action: resolveNextAction(verdict),
     manifest_summary: manifestSummary,
