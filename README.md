@@ -116,7 +116,7 @@ node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-pages/site/synthetic_
 
 Policy: CI/Web smoke uses synthetic fixtures by default; real local assets remain optional and are not required for release gating.
 
-### v1.1.2 WASM audit mode status
+### v2.0.0 WASM audit mode status
 - Browser gate `browser_lightweight_wasm_audit` is enabled in Web UI.
 - Browser report can export `browser_to_cli_handoff` and merge into CLI `compat-check --handoff ... --json`.
 - Final release verdict still comes from local CLI artifact audit (`local_cli_spz_artifact_audit`).
