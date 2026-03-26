@@ -320,16 +320,19 @@ spz_gatekeeper compat-check --manifest ./fixtures/manifest.json --json
 5. CI 运行真实 profile-aware gate，而不是只看 board 快照。
 6. README、registry、CLI、Web 的边界口径与完成语义一致。
 
-### 7.3 补强输出
-- Browser bundle 报告现已输出 `copy_breakdown`，按阶段细分 copy 次数（当前包含 `zip_inflate` / `module_clone`）。
-- challenge 批量输出现已增加 `challenge_stats` 与 `visualization` 辅助区块，便于分组复核与下游渲染。
-- Web 摘要面板现已直接展示 `final_verdict`、`release_ready` 与 `Copy Breakdown`。
+### 发布前快速检查（2 分钟）
+```bash
+./build/spz_gatekeeper --self-test
+./build/spz_gatekeeper compat-check <file.spz> --json
+./build/spz_gatekeeper compat-board --json
+```
+
+### v2 收口补强输出
+- Browser bundle 报告输出 `copy_breakdown`，按阶段细分 copy 次数（当前包含 `zip_inflate` / `module_clone`）。
+- challenge 批量输出增加 `challenge_stats` 与 `visualization` 辅助区块，便于分组复核与下游渲染。
+- Web 摘要面板直接展示 `final_verdict`、`release_ready` 与 `Copy Breakdown`。
 
 由于浏览器端和 CLI 端都运行在用户本地，所以项目默认就具备“本地双端协同”。`browser_to_cli_handoff` 只是一个可选的标准化能力，不是后台服务，也不能替代真实 CLI 成品审查。
-
-延伸阅读：
-- `docs/plans/2026-03-22-spz-gatekeeper-wasm-audit-modes-design.md`
-- `docs/plans/2026-03-22-spz-gatekeeper-wasm-audit-implementation-plan.md`
 
 ## 扩展作者快速自测闭环
 ```bash

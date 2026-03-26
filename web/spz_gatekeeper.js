@@ -775,4 +775,11 @@ export default async function createSpzGatekeeperModule() {
     getRuntimeStatus: () => runtimeStatus,
 
     inspectSpz: runtime?.inspectSpz?.bind(runtime) ?? createUnavailableMethod('inspectSpz'),
-    dumpTrailer: runtime?.dumpTrailer?.bind(runtime) ?? createUnavailableMethod(
+    dumpTrailer: runtime?.dumpTrailer?.bind(runtime) ?? createUnavailableMethod('dumpTrailer'),
+    inspectSpzText: runtime?.inspectSpzText?.bind(runtime) ?? createUnavailableMethod('inspectSpzText'),
+    inspectCompatSummary: runtime?.inspectCompatSummary?.bind(runtime) ?? createUnavailableMethod('inspectCompatSummary'),
+    listRegisteredExtensions: runtime?.listRegisteredExtensions?.bind(runtime) ?? (() => ({ count: 0, extensions: [] })),
+    describeExtension: runtime?.describeExtension?.bind(runtime) ?? ((type) => ({ error: 'runtime unavailable', type })),
+    getCompatibilityBoard: runtime?.getCompatibilityBoard?.bind(runtime) ?? (() => ({ count: 0, extensions: [] })),
+  };
+}

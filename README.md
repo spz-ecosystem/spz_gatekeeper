@@ -320,10 +320,17 @@ This compatibility-board snapshot is a maturity view, not the final release gate
 5. CI runs real profile-aware gates (not only board snapshots).
 6. README, registry, CLI, and Web report the same boundary and completion semantics.
 
-### 7.3 supplemental outputs
-- Browser bundle reports now expose `copy_breakdown` with stage-level counts (currently `zip_inflate` / `module_clone`).
-- Challenge batch output now adds `challenge_stats` and `visualization` helper sections for grouped review and downstream rendering.
-- Web summary now surfaces `final_verdict`, `release_ready`, and `Copy Breakdown` alongside the existing budget cards.
+### Release quick check (2 minutes)
+```bash
+./build/spz_gatekeeper --self-test
+./build/spz_gatekeeper compat-check <file.spz> --json
+./build/spz_gatekeeper compat-board --json
+```
+
+### Supplemental outputs (v2 closure)
+- Browser bundle reports expose `copy_breakdown` with stage-level counts (currently `zip_inflate` / `module_clone`).
+- Challenge batch output adds `challenge_stats` and `visualization` helper sections for grouped review and downstream rendering.
+- Web summary surfaces `final_verdict`, `release_ready`, and `Copy Breakdown` alongside the existing budget cards.
 
 Because both browser and CLI run on the user's local machine, the project already has a local dual-end workflow by default. `browser_to_cli_handoff` is optional standardization, not a backend service, and it never replaces the real CLI artifact audit.
 
