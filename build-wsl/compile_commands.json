@@ -1,0 +1,116 @@
+[
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -o CMakeFiles/spz_gatekeeper_core.dir/src/audit_summary.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/audit_summary.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/audit_summary.cc",
+  "output": "CMakeFiles/spz_gatekeeper_core.dir/src/audit_summary.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -o CMakeFiles/spz_gatekeeper_core.dir/src/extension_spec_registry.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/extension_spec_registry.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/extension_spec_registry.cc",
+  "output": "CMakeFiles/spz_gatekeeper_core.dir/src/extension_spec_registry.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -o CMakeFiles/spz_gatekeeper_core.dir/src/json_min.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/json_min.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/json_min.cc",
+  "output": "CMakeFiles/spz_gatekeeper_core.dir/src/json_min.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -o CMakeFiles/spz_gatekeeper_core.dir/src/report.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/report.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/report.cc",
+  "output": "CMakeFiles/spz_gatekeeper_core.dir/src/report.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -o CMakeFiles/spz_gatekeeper_core.dir/src/spz.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/spz.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/spz.cc",
+  "output": "CMakeFiles/spz_gatekeeper_core.dir/src/spz.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -o CMakeFiles/spz_gatekeeper_core.dir/src/tlv.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/tlv.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/tlv.cc",
+  "output": "CMakeFiles/spz_gatekeeper_core.dir/src/tlv.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/spz_gatekeeper.dir/src/main.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/main.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/src/main.cc",
+  "output": "CMakeFiles/spz_gatekeeper.dir/src/main.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/spz_gatekeeper_test.dir/tests/spz_gatekeeper_test.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/spz_gatekeeper_test.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/spz_gatekeeper_test.cc",
+  "output": "CMakeFiles/spz_gatekeeper_test.dir/tests/spz_gatekeeper_test.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/extension_validator_test.dir/tests/extension_validator_test.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/extension_validator_test.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/extension_validator_test.cc",
+  "output": "CMakeFiles/extension_validator_test.dir/tests/extension_validator_test.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/adobe_extension_test.dir/tests/adobe_extension_test.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/adobe_extension_test.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/adobe_extension_test.cc",
+  "output": "CMakeFiles/adobe_extension_test.dir/tests/adobe_extension_test.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/validator_registry_test.dir/tests/validator_registry_test.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/validator_registry_test.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/validator_registry_test.cc",
+  "output": "CMakeFiles/validator_registry_test.dir/tests/validator_registry_test.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/extension_spec_registry_test.dir/tests/extension_spec_registry_test.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/extension_spec_registry_test.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/extension_spec_registry_test.cc",
+  "output": "CMakeFiles/extension_spec_registry_test.dir/tests/extension_spec_registry_test.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/registry_cli_test.dir/tests/registry_cli_test.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/registry_cli_test.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/registry_cli_test.cc",
+  "output": "CMakeFiles/registry_cli_test.dir/tests/registry_cli_test.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/gen_fixture_test.dir/tests/gen_fixture_test.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/gen_fixture_test.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/gen_fixture_test.cc",
+  "output": "CMakeFiles/gen_fixture_test.dir/tests/gen_fixture_test.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/compat_check_test.dir/tests/compat_check_test.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/compat_check_test.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/compat_check_test.cc",
+  "output": "CMakeFiles/compat_check_test.dir/tests/compat_check_test.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/audit_summary_test.dir/tests/audit_summary_test.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/audit_summary_test.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/audit_summary_test.cc",
+  "output": "CMakeFiles/audit_summary_test.dir/tests/audit_summary_test.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/tlv_multi_record_test.dir/tests/tlv_multi_record_test.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/tlv_multi_record_test.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/tlv_multi_record_test.cc",
+  "output": "CMakeFiles/tlv_multi_record_test.dir/tests/tlv_multi_record_test.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/extension_integration_test.dir/tests/extension_integration_test.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/extension_integration_test.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/extension_integration_test.cc",
+  "output": "CMakeFiles/extension_integration_test.dir/tests/extension_integration_test.cc.o"
+},
+{
+  "directory": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl",
+  "command": "/usr/bin/c++  -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/include -I/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/extensions -O3 -DNDEBUG -std=c++17 -o CMakeFiles/sh_quantization_test.dir/tests/sh_quantization_test.cc.o -c /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/sh_quantization_test.cc",
+  "file": "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/cpp/tests/sh_quantization_test.cc",
+  "output": "CMakeFiles/sh_quantization_test.dir/tests/sh_quantization_test.cc.o"
+}
+]

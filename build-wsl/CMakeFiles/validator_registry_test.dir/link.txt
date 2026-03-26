@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/validator_registry_test.dir/tests/validator_registry_test.cc.o -o validator_registry_test  libspz_gatekeeper_core.a /usr/lib/x86_64-linux-gnu/libz.so

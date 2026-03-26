@@ -1,0 +1,100 @@
+Start testing: Mar 26 14:45 CST
+----------------------------------------------------------
+7/13 Testing: registry_cli_test
+7/13 Test: registry_cli_test
+Command: "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl/registry_cli_test"
+Directory: /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl
+"registry_cli_test" start time: Mar 26 14:45 CST
+Output:
+----------------------------------------------------------
+=== Registry CLI Tests ===
+
+Running test_registry_json_lists_builtin_extension... PASS ✓
+Running test_registry_list_json_alias_works... PASS ✓
+Running test_registry_show_json_returns_single_entry... PASS ✓
+Running test_registry_show_text_includes_full_contract... PASS ✓
+Running test_registry_show_invalid_type_json_reports_original_input... PASS ✓
+Running test_registry_show_missing_type_json_reports_original_input... PASS ✓
+Running test_compat_board_json_exposes_maturity_fields... PASS ✓
+Running test_compat_board_text_mentions_registry_role... PASS ✓
+
+=== Test Summary ===
+Tests run: 8
+Tests passed: 8
+Tests failed: 0
+Result: ALL 8 REGISTRY CLI TESTS PASSED ✓
+<end of output>
+Test time =   0.16 sec
+----------------------------------------------------------
+Test Passed.
+"registry_cli_test" end time: Mar 26 14:45 CST
+"registry_cli_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/13 Testing: compat_check_test
+9/13 Test: compat_check_test
+Command: "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl/compat_check_test"
+Directory: /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl
+"compat_check_test" start time: Mar 26 14:45 CST
+Output:
+----------------------------------------------------------
+=== compat-check CLI Tests ===
+
+Running test_compat_check_reports_dual_path_for_valid_adobe_fixture... PASS ✓
+Running test_compat_check_surfaces_unknown_extension_issue_summary... PASS ✓
+Running test_compat_check_dir_mode_outputs_batch_summary... PASS ✓
+Running test_compat_check_manifest_mode_outputs_batch_summary... PASS ✓
+Running test_compat_check_manifest_mode_supports_structured_items_and_grouped_summary... PASS ✓
+Running test_compat_check_manifest_mode_emits_challenge_stats_and_visualization... PASS ✓
+Running test_compat_check_merges_browser_handoff_without_skipping_artifact_audit... PASS ✓
+Running test_help_describes_task5_boundaries_and_handoff_contract... PASS ✓
+
+=== Test Summary ===
+Tests run: 8
+Tests passed: 8
+Tests failed: 0
+Result: ALL 8 COMPAT-CHECK TESTS PASSED ✓
+<end of output>
+Test time =   0.16 sec
+----------------------------------------------------------
+Test Passed.
+"compat_check_test" end time: Mar 26 14:45 CST
+"compat_check_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/13 Testing: audit_summary_test
+10/13 Test: audit_summary_test
+Command: "/mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl/audit_summary_test"
+Directory: /mnt/c/Users/HP/Downloads/HunYuan3D_test_cases/spz_gatekeeper_project/build-wsl
+"audit_summary_test" start time: Mar 26 14:45 CST
+Output:
+----------------------------------------------------------
+=== audit_summary Tests ===
+
+Running test_audit_summary_freezes_public_mode_constants... PASS ✓
+Running test_build_browser_wasm_audit_json_reports_pass_schema... PASS ✓
+Running test_build_browser_wasm_audit_json_derives_release_ready_from_final_verdict... PASS ✓
+Running test_build_browser_wasm_audit_json_includes_copy_breakdown... PASS ✓
+Running test_build_compat_check_audit_json_reports_pass_schema... PASS ✓
+Running test_build_compat_check_audit_json_escalates_release_when_memory_budget_not_collected... PASS ✓
+Running test_build_compat_check_audit_json_keeps_dev_mode_observed_without_budget... PASS ✓
+Running test_build_compat_check_audit_json_escalates_challenge_when_memory_over_budget... PASS ✓
+Running test_build_compat_check_audit_json_reports_review_required_for_unknown_extension... PASS ✓
+Running test_parse_browser_handoff_and_merge_into_compat_audit_json... PASS ✓
+Running test_parse_browser_handoff_preserves_explicit_policy_mode... PASS ✓
+Running test_parse_browser_handoff_prefers_bundle_verdict_field... PASS ✓
+
+=== Test Summary ===
+Tests run: 12
+Tests passed: 12
+Tests failed: 0
+Result: ALL 12 AUDIT SUMMARY TESTS PASSED ✓
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"audit_summary_test" end time: Mar 26 14:45 CST
+"audit_summary_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Mar 26 14:45 CST

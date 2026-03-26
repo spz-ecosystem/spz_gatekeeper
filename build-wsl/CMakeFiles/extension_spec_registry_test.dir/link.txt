@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/extension_spec_registry_test.dir/tests/extension_spec_registry_test.cc.o -o extension_spec_registry_test  libspz_gatekeeper_core.a /usr/lib/x86_64-linux-gnu/libz.so

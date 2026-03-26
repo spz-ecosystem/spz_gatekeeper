@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/extension_integration_test.dir/tests/extension_integration_test.cc.o -o extension_integration_test  libspz_gatekeeper_core.a /usr/lib/x86_64-linux-gnu/libz.so /usr/lib/x86_64-linux-gnu/libz.so

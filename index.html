@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SPZ Validator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --brand-purple: #6666ff;
+      --success-green: #10b981;
+      --warning-yellow: #f59e0b;
+      --danger-red: #ef4444;
+      --text-primary: #1e293b;
+      --text-secondary: #64748b;
+      --text-muted: #94a3b8;
+      --bg-top: #f0f4ff;
+      --bg-bottom: #f8fafc;
+      --card-hover-bg: #f8faff;
+      --border-soft: rgba(148, 163, 184, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      min-height: 100%;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    .bg-particles {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.15;
+    }
+
+    .bg-particles svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .particle {
+      fill: var(--brand-purple);
+      animation: float 25s infinite ease-in-out;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0); }
+      25% { transform: translate(20px, -30px); }
+      50% { transform: translate(-10px, -50px); }
+      75% { transform: translate(15px, -20px); }
+    }
+
+    .main-wrapper {
+      width: min(1200px, 100%);
+      margin: 0 auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+      padding: 30px 20px 40px;
+    }
+
+    .header-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .content-area {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+      padding: 36px 0 0;
+    }
+
+    .upload-card,
+    .panel,
+    .feature-card {
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(102, 102, 255, 0.12);
+      border: 1px solid transparent;
+      display: flex;
+      flex-direction: column;
+    }
+
+
+    .upload-card {
+      width: 100%;
+      max-width: 1200px;
+      padding: 52px 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      align-items: center;
+      justify-content: center;
+    }
+
+
+    .upload-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 40px rgba(102, 102, 255, 0.18);
+    }
+
+    .upload-card.dragover {
+      border-color: var(--brand-purple);
+      background: var(--card-hover-bg);
+    }
+
+    .upload-card input[type="file"] {
+      display: none;
+    }
+
+    .upload-icon {
+      margin-bottom: 16px;
+    }
+
+    .upload-icon svg {
+      width: 34px;
+      height: 34px;
+      color: var(--brand-purple);
+    }
+
+    .upload-main-text {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 12px 0;
+    }
+
+    .upload-sub-text {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .loading-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--warning-yellow);
+    }
+
+    .loading-status.ready {
+      color: var(--success-green);
+    }
+
+    .loading-status.error {
+      color: var(--danger-red);
+    }
+
+    .loading-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .loading-status.ready .loading-spinner,
+    .loading-status.error .loading-spinner {
+      display: none;
+    }
+
+    .check-icon,
+    .error-icon {
+      display: none;
+      width: 14px;
+      height: 14px;
+    }
+
+    .loading-status.ready .check-icon,
+    .loading-status.error .error-icon {
+      display: block;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .features-section,
+    .panel-grid {
+      width: 100%;
+      display: grid;
+      gap: 24px;
+    }
+
+    .features-section {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: 100%;
+    }
+
+
+
+    .feature-card {
+      padding: 24px 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+      background: #ffffff;
+      border-radius: 20px;
+      border: 1px solid transparent;
+    }
+
+
+    .feature-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .feature-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .feature-desc {
+      padding-left: 28px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .panel-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+      max-width: 1200px;
+    }
+
+
+    .panel {
+      padding: 24px;
+    }
+
+    .panel h2 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+
+    .panel-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+
+    .summary-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 18px;
+      border-radius: 16px;
+      background: #f8fafc;
+      border: 1px solid var(--border-soft);
+      margin-bottom: 16px;
+    }
+
+    .summary-main {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .summary-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .action-button {
+      border: 1px solid rgba(102, 102, 255, 0.22);
+      background: rgba(102, 102, 255, 0.08);
+      color: var(--brand-purple);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .action-button:hover {
+      background: rgba(102, 102, 255, 0.14);
+    }
+
+    .action-button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .summary-title {
+
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .summary-meta {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .badge.pass {
+      color: #047857;
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .badge.warning {
+      color: #b45309;
+      background: rgba(245, 158, 11, 0.14);
+    }
+
+    .badge.error {
+      color: #b91c1c;
+      background: rgba(239, 68, 68, 0.12);
+    }
+
+    .stack-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .stack-item {
+      border: 1px solid var(--border-soft);
+      border-radius: 14px;
+      padding: 14px 16px;
+      background: #ffffff;
+    }
+
+    .stack-item-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .stack-item-meta,
+    .stack-item-body {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      word-break: break-word;
+    }
+
+    .stack-item-body strong {
+      color: var(--text-primary);
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .empty-state {
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: #f8fafc;
+      border: 1px dashed var(--border-soft);
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 12px;
+      color: var(--text-muted);
+      position: relative;
+      z-index: 1;
+    }
+
+    .footer a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    @media (max-width: 960px) {
+      .features-section,
+      .panel-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .upload-card,
+      .panel,
+      .feature-card {
+        padding: 20px;
+      }
+
+      .summary-card {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-particles">
+    <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+      <circle class="particle" cx="200" cy="300" r="3" style="animation-delay:0s"/>
+      <circle class="particle" cx="500" cy="150" r="2" style="animation-delay:2s"/>
+      <circle class="particle" cx="800" cy="400" r="4" style="animation-delay:4s"/>
+      <circle class="particle" cx="1100" cy="200" r="2" style="animation-delay:6s"/>
+      <circle class="particle" cx="1400" cy="500" r="3" style="animation-delay:8s"/>
+      <circle class="particle" cx="1700" cy="250" r="2" style="animation-delay:10s"/>
+      <circle class="particle" cx="300" cy="600" r="3" style="animation-delay:12s"/>
+      <circle class="particle" cx="600" cy="700" r="2" style="animation-delay:14s"/>
+      <circle class="particle" cx="900" cy="550" r="4" style="animation-delay:16s"/>
+      <circle class="particle" cx="1200" cy="650" r="2" style="animation-delay:18s"/>
+      <circle class="particle" cx="1500" cy="450" r="3" style="animation-delay:20s"/>
+      <circle class="particle" cx="1800" cy="600" r="2" style="animation-delay:22s"/>
+    </svg>
+  </div>
+
+  <div class="main-wrapper">
+    <header class="header-title">SPZ VALIDATOR</header>
+
+    <div class="content-area">
+      <div class="upload-card" id="dropZone">
+        <input type="file" id="fileInput" accept=".zip,application/zip">
+        <div class="upload-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+            <path d="M12 11v6"/>
+            <path d="M9 14h6"/>
+          </svg>
+        </div>
+        <div class="upload-main-text">点击或拖拽标准 WASM 审查包 `.zip` 至此</div>
+        <div class="upload-sub-text">浏览器端只做 `browser_lightweight_wasm_audit`：只审标准 zip 审查包，不审 `GLB`、不审 `spz2glb`，也不直接替代真实 `.spz` 成品的本地 CLI 深审。</div>
+        <div class="loading-status" id="loadingStatus">
+          <div class="loading-spinner"></div>
+          <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"/>
+            <path d="m6 6 12 12"/>
+          </svg>
+          <span id="statusText">正在加载浏览器轻审引擎...</span>
+        </div>
+      </div>
+
+      <div class="features-section">
+        <div class="feature-card">
+          <div class="feature-header">
+            <span style="color: var(--success-green); font-size: 20px;">✅</span>
+            <span class="feature-title">标准 Bundle 结构校验</span>
+          </div>
+          <div class="feature-desc">检查 `manifest.json`、`loader.mjs`、`module.wasm` 与 `tiny_fixtures/` 是否齐全，先挡住结构损坏或声明不完整的审查包。</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-header">
+            <span style="color: var(--brand-purple); font-size: 20px;">📋</span>
+            <span class="feature-title">导出与 Loader 协同检查</span>
+          </div>
+          <div class="feature-desc">对比 `manifest.exports` 与 `loader.mjs` 实际导出，并编译 `module.wasm` 检查空壳风险与最小可执行主路径。</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-header">
+            <span style="color: var(--text-secondary); font-size: 20px;">📈</span>
+            <span class="feature-title">Tiny Fixture 与预算门禁</span>
+          </div>
+          <div class="feature-desc">执行 valid / invalid tiny fixture，并汇总冷启动、tiny case、内存与 copy 预算状态，输出 `pass / review_required / block`。</div>
+        </div>
+      </div>
+
+
+      <div class="panel-grid">
+        <section class="panel">
+          <h2>Bundle Audit Result</h2>
+          <div class="panel-subtitle">上传后这里会展示审查包 verdict、结构化 issues、manifest 摘要以及轻量预算状态。若轻审完成，可导出可选的 `browser_to_cli_handoff` JSON，供本地 CLI 附带浏览器证据链；最终结论仍以 `local_cli_spz_artifact_audit` 为准。</div>
+
+
+          <div id="resultEmpty" class="empty-state">等待轻审引擎就绪后上传标准 `.zip` 审查包。</div>
+          <div id="resultContent" class="hidden">
+            <div class="summary-card">
+              <div class="summary-main">
+                <div class="summary-title" id="summaryTitle">等待文件</div>
+                <div class="summary-meta" id="summaryMeta"></div>
+              </div>
+              <div class="summary-actions">
+                <button type="button" class="action-button hidden" id="exportHandoffButton">导出 browser_to_cli_handoff</button>
+
+                <span class="badge pass" id="summaryBadge">PASS</span>
+              </div>
+            </div>
+
+            <div class="stack-list" id="issuesList"></div>
+            <div class="stack-list" id="extensionsList"></div>
+            <div class="stack-list" id="trailerList"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Audit Capability</h2>
+          <div class="panel-subtitle">展示当前浏览器轻审模式、运行时接线状态，以及后续是否允许进入本地 CLI 深审。</div>
+          <div id="registryEmpty" class="empty-state">正在等待轻审引擎初始化。</div>
+          <div id="registryContent" class="hidden">
+            <div class="summary-card">
+              <div class="summary-main">
+                <div class="summary-title">当前模式</div>
+                <div class="summary-meta" id="registryMeta"></div>
+              </div>
+              <span class="badge pass" id="registryCountBadge">就绪</span>
+            </div>
+            <div class="stack-list" id="registryList"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    © 2026 SPZ Ecosystem | <a href="https://github.com/spz-ecosystem/spz_gatekeeper#independent-work-statement" target="_blank" rel="noopener">Independent Project</a> | Powered by WebAssembly
+  </footer>
+
+  <script type="module">
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const loadingStatus = document.getElementById('loadingStatus');
+    const statusText = document.getElementById('statusText');
+    const resultEmpty = document.getElementById('resultEmpty');
+    const resultContent = document.getElementById('resultContent');
+    const summaryTitle = document.getElementById('summaryTitle');
+    const summaryMeta = document.getElementById('summaryMeta');
+    const summaryBadge = document.getElementById('summaryBadge');
+    const exportHandoffButton = document.getElementById('exportHandoffButton');
+    const issuesList = document.getElementById('issuesList');
+
+    const extensionsList = document.getElementById('extensionsList');
+    const trailerList = document.getElementById('trailerList');
+    const registryEmpty = document.getElementById('registryEmpty');
+    const registryContent = document.getElementById('registryContent');
+    const registryMeta = document.getElementById('registryMeta');
+    const registryCountBadge = document.getElementById('registryCountBadge');
+    const registryList = document.getElementById('registryList');
+
+    let wasmModule = null;
+    let lastAuditReport = null;
+    let lastAuditFileName = 'bundle.zip';
+
+    async function withTimeout(promise, ms, timeoutMessage) {
+
+      let timer = null;
+      try {
+        return await Promise.race([
+          promise,
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+          })
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
+
+    function setEngineStatus(state, message) {
+      loadingStatus.classList.remove('ready', 'error');
+      if (state === 'ready') {
+        loadingStatus.classList.add('ready');
+      } else if (state === 'error') {
+        loadingStatus.classList.add('error');
+      }
+      statusText.textContent = message;
+    }
+
+    function formatBytes(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 2)} ${units[index]}`;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function setStackList(container, sections) {
+      container.innerHTML = sections.length
+        ? sections.join('')
+        : '<div class="empty-state">当前无可展示数据。</div>';
+    }
+
+    function sanitizeDownloadName(fileName) {
+      return String(fileName || 'bundle')
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-zA-Z0-9._-]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'bundle';
+    }
+
+    function setHandoffButtonState(enabled) {
+      exportHandoffButton.disabled = !enabled;
+      exportHandoffButton.classList.toggle('hidden', !enabled);
+    }
+
+    function downloadJsonFile(content, fileName) {
+      const blob = new Blob([JSON.stringify(content, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function formatVerdict(report) {
+
+      const verdict = String(report?.verdict || 'block').toLowerCase();
+      if (verdict === 'pass') {
+        return { state: 'pass', label: 'PASS' };
+      }
+      if (verdict === 'review_required') {
+        return { state: 'warning', label: 'REVIEW_REQUIRED' };
+      }
+      return { state: 'error', label: 'BLOCK' };
+    }
+
+    function formatCompressionMethod(method) {
+      if (method === 0) return 'stored';
+      if (method === 8) return 'deflate';
+      return `method=${method}`;
+    }
+
+    function renderIssues(report) {
+      const items = (report.issues || []).map(issue => `
+        <div class="stack-item">
+          <div class="stack-item-title">Issue · ${escapeHtml(issue.code || 'UNKNOWN')}</div>
+          <div class="stack-item-meta">Severity: ${escapeHtml(issue.severity || 'note')}</div>
+          <div class="stack-item-body">${escapeHtml(issue.message || '')}</div>
+        </div>
+      `);
+      setStackList(issuesList, items.length ? items : [
+        '<div class="stack-item"><div class="stack-item-title">Issues</div><div class="stack-item-body">当前 bundle 未发现阻断或复核项。</div></div>'
+      ]);
+    }
+
+    function renderManifest(report) {
+      const manifest = report.manifest_summary || {};
+      const entryItems = (report.bundle_entries || []).map(entry => `
+        <div class="stack-item">
+          <div class="stack-item-title">Bundle Entry · ${escapeHtml(entry.name || 'unknown')}</div>
+          <div class="stack-item-meta">${escapeHtml(formatCompressionMethod(Number(entry.compression_method ?? -1)))} · compressed=${escapeHtml(formatBytes(Number(entry.compressed_size || 0)))} · raw=${escapeHtml(formatBytes(Number(entry.uncompressed_size || 0)))}</div>
+        </div>
+      `);
+      const wasmExports = (report.wasm_export_summary || []).map(item => `${item.name}:${item.kind}`).join(', ');
+      const manifestCard = `
+        <div class="stack-item">
+          <div class="stack-item-title">Manifest Summary</div>
+          <div class="stack-item-body">
+            <strong>Profile:</strong> ${escapeHtml(manifest.profile || 'n/a')}<br>
+            <strong>Package Type:</strong> ${escapeHtml(manifest.package_type || 'n/a')}<br>
+            <strong>Entry:</strong> ${escapeHtml(manifest.entry || 'n/a')}<br>
+            <strong>Module:</strong> ${escapeHtml(manifest.module || 'n/a')}<br>
+            <strong>Declared Exports:</strong> ${escapeHtml((manifest.declared_exports || []).join(', ') || 'n/a')}<br>
+            <strong>WASM Exports:</strong> ${escapeHtml(wasmExports || 'n/a')}
+          </div>
+        </div>
+      `;
+      setStackList(extensionsList, [manifestCard, ...entryItems]);
+    }
+
+    function renderBudgets(report) {
+      const budgetItems = Object.entries(report.budgets || {}).map(([name, budget]) => `
+        <div class="stack-item">
+          <div class="stack-item-title">Budget · ${escapeHtml(name)}</div>
+          <div class="stack-item-meta">status=${escapeHtml(budget?.status || 'unknown')} · within_budget=${escapeHtml(String(budget?.within_budget))}</div>
+          <div class="stack-item-body">
+            <strong>Declared:</strong> ${escapeHtml(String(budget?.declared ?? 'n/a'))}<br>
+            <strong>Observed:</strong> ${escapeHtml(String(budget?.observed ?? 'n/a'))}
+          </div>
+        </div>
+      `);
+      const actionCard = `
+        <div class="stack-item">
+          <div class="stack-item-title">Next Action</div>
+          <div class="stack-item-body">
+            <strong>Next:</strong> ${escapeHtml(report.next_action || 'n/a')}<br>
+            <strong>Final Verdict:</strong> ${escapeHtml(report.final_verdict || report.verdict || 'n/a')}<br>
+            <strong>Release Ready:</strong> ${escapeHtml(String(report.release_ready ?? 'n/a'))}<br>
+            <strong>Bundle ID:</strong> ${escapeHtml(report.bundle_id || 'n/a')}<br>
+            <strong>Tool Version:</strong> ${escapeHtml(report.tool_version || 'n/a')}<br>
+            <strong>Duration:</strong> ${escapeHtml(String(report.audit_duration_ms?.toFixed?.(2) ?? report.audit_duration_ms ?? 'n/a'))} ms
+          </div>
+        </div>
+      `;
+      const copyBreakdown = report.copy_breakdown || { total_passes: 0, stages: [] };
+      const copyStages = Array.isArray(copyBreakdown.stages) && copyBreakdown.stages.length
+        ? copyBreakdown.stages.map((stage) => `${stage.name}:${stage.count}`).join(', ')
+        : 'n/a';
+      const copyBreakdownCard = `
+        <div class="stack-item">
+          <div class="stack-item-title">Copy Breakdown</div>
+          <div class="stack-item-body">
+            <strong>Total Passes:</strong> ${escapeHtml(String(copyBreakdown.total_passes ?? 0))}<br>
+            <strong>Stages:</strong> ${escapeHtml(copyStages)}
+          </div>
+        </div>
+      `;
+      setStackList(trailerList, [actionCard, copyBreakdownCard, ...budgetItems]);
+    }
+
+
+
+    function renderSummary(file, report) {
+      const verdict = formatVerdict(report);
+      const summary = report.summary || {};
+      summaryTitle.textContent = file.name;
+      summaryMeta.textContent = `${formatBytes(file.size)} · entries ${summary.file_count ?? 0} · issues ${summary.issue_count ?? 0} · next ${report.next_action || 'n/a'}`;
+      summaryBadge.textContent = verdict.label;
+      summaryBadge.className = `badge ${verdict.state}`;
+    }
+
+    function renderRuntimeViewer() {
+      if (!wasmModule) return;
+      const runtimeStatus = wasmModule.getRuntimeStatus();
+      registryMeta.textContent = `${runtimeStatus.mode} · runtime=${runtimeStatus.runtime_engine}`;
+      registryCountBadge.textContent = runtimeStatus.available ? 'WASM+JS' : 'JS ONLY';
+      setStackList(registryList, [
+        `<div class="stack-item"><div class="stack-item-title">WASM Gate: ${escapeHtml(runtimeStatus.mode)}</div><div class="stack-item-body"><strong>Runtime Available:</strong> ${escapeHtml(String(runtimeStatus.available))}<br><strong>Engine:</strong> ${escapeHtml(runtimeStatus.runtime_engine)}</div></div>`,
+        '<div class="stack-item"><div class="stack-item-title">Policy</div><div class="stack-item-body">浏览器端只做标准 zip 审查包轻量门禁，不审 `GLB`、不审 `spz2glb`；真实 `.spz` 成品仍需进入本地 CLI 深审，最终以 CLI 结论为准。</div></div>'
+
+      ]);
+      registryEmpty.classList.add('hidden');
+      registryContent.classList.remove('hidden');
+    }
+
+    async function handleFile(file) {
+      if (!wasmModule) {
+        setEngineStatus('error', '轻审引擎仍未就绪，无法执行 bundle 审查');
+        return;
+      }
+
+      setEngineStatus('ready', `正在审查 ${file.name} ...`);
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const report = await wasmModule.auditWasmBundle(bytes, file.name);
+        lastAuditReport = report;
+        lastAuditFileName = file.name;
+        setHandoffButtonState(typeof wasmModule.buildBrowserToCliHandoff === 'function');
+        renderSummary(file, report);
+        renderIssues(report);
+        renderManifest(report);
+        renderBudgets(report);
+        resultEmpty.classList.add('hidden');
+        resultContent.classList.remove('hidden');
+        setEngineStatus('ready', `WASM 引擎就绪 · 最近审查 ${file.name}`);
+
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        lastAuditReport = null;
+        setHandoffButtonState(false);
+        setEngineStatus('error', `审查失败：${message}`);
+        resultEmpty.classList.add('hidden');
+        resultContent.classList.remove('hidden');
+        const fallback = {
+
+          verdict: 'block',
+          next_action: 'block_bundle',
+          summary: { file_count: 0, issue_count: 1 },
+          issues: [{ severity: 'error', code: 'BROWSER_AUDIT_RUNTIME_ERROR', message }],
+          budgets: {},
+          manifest_summary: {},
+          bundle_entries: [],
+          wasm_export_summary: [],
+        };
+        renderSummary(file, fallback);
+        renderIssues(fallback);
+        renderManifest(fallback);
+        renderBudgets(fallback);
+      }
+    }
+
+    async function initializeWasm() {
+      try {
+        const wasmEntry = './spz_gatekeeper.js';
+        const probe = await fetch(wasmEntry, { cache: 'no-store' });
+        if (!probe.ok) {
+          throw new Error('未检测到浏览器轻审入口 spz_gatekeeper.js');
+        }
+
+        const moduleFactory = (await withTimeout(import(wasmEntry), 8000, '加载浏览器轻审入口超时')).default;
+        wasmModule = await withTimeout(moduleFactory(), 15000, '浏览器轻审引擎初始化超时');
+        setEngineStatus('ready', 'WASM 引擎就绪 · 浏览器轻审模式已启用');
+        renderRuntimeViewer();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setEngineStatus('error', `轻审引擎加载失败：${message}`);
+        registryEmpty.textContent = `轻审模式未就绪：${message}`;
+      }
+    }
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, event => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      document.body.addEventListener(eventName, event => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'));
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'));
+    });
+
+    exportHandoffButton.addEventListener('click', () => {
+      if (!lastAuditReport || !wasmModule || typeof wasmModule.buildBrowserToCliHandoff !== 'function') {
+        return;
+      }
+      const handoff = wasmModule.buildBrowserToCliHandoff(lastAuditReport);
+      downloadJsonFile(handoff, `${sanitizeDownloadName(lastAuditFileName)}.browser_audit.json`);
+    });
+
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', event => {
+      const file = event.target.files?.[0];
+      if (file) {
+        handleFile(file);
+      }
+    });
+    dropZone.addEventListener('drop', event => {
+      const file = event.dataTransfer?.files?.[0];
+      if (file) {
+        handleFile(file);
+      }
+    });
+
+    setHandoffButtonState(false);
+    initializeWasm();
+
+  </script>
+</body>
+</html>

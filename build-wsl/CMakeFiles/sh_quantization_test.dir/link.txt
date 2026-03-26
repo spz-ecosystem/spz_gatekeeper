@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/sh_quantization_test.dir/tests/sh_quantization_test.cc.o -o sh_quantization_test  libspz_gatekeeper_core.a /usr/lib/x86_64-linux-gnu/libz.so

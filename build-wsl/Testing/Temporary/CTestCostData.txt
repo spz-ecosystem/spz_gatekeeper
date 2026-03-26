@@ -1,0 +1,5 @@
+registry_cli_test 6 0.0258507
+compat_check_test 24 0.00679776
+audit_summary_test 20 0.000702349
+gen_fixture_test 12 0.00812383
+---

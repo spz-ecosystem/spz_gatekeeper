@@ -1,0 +1,2 @@
+/usr/bin/ar qc libspz_gatekeeper_core.a CMakeFiles/spz_gatekeeper_core.dir/src/audit_summary.cc.o CMakeFiles/spz_gatekeeper_core.dir/src/extension_spec_registry.cc.o CMakeFiles/spz_gatekeeper_core.dir/src/json_min.cc.o CMakeFiles/spz_gatekeeper_core.dir/src/report.cc.o CMakeFiles/spz_gatekeeper_core.dir/src/spz.cc.o CMakeFiles/spz_gatekeeper_core.dir/src/tlv.cc.o
+/usr/bin/ranlib libspz_gatekeeper_core.a

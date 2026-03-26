@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/compat_check_test.dir/tests/compat_check_test.cc.o -o compat_check_test  libspz_gatekeeper_core.a /usr/lib/x86_64-linux-gnu/libz.so

@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/spz_gatekeeper.dir/src/main.cc.o -o spz_gatekeeper-1.0.0  libspz_gatekeeper_core.a /usr/lib/x86_64-linux-gnu/libz.so
