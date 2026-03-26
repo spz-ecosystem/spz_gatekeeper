@@ -258,8 +258,13 @@ Minimum expectations:
 ### Shared verdict schema
 Both modes align on the same top-level summary fields:
 - `audit_profile`
+- `policy_name`
+- `policy_version`
+- `policy_mode`
 - `audit_mode`
 - `verdict`
+- `final_verdict`
+- `release_ready`
 - `summary`
 - `budgets`
 - `issues`
@@ -285,11 +290,36 @@ spz_gatekeeper compat-check --dir ./fixtures --json
 spz_gatekeeper compat-check --manifest ./fixtures/manifest.json --json
 ```
 
+Policy-mode defaults stay fixed:
+- single-file `compat-check` and `--dir` run with `policy_mode="release"`
+- `--manifest` batch evaluation runs with `policy_mode="challenge"`
+- browser-exported `browser_to_cli_handoff` carries its own `policy_mode` for evidence alignment
+
 ### Current `wasm_quality_gate` status
-`docs/extension_registry.json` currently exposes a baseline `wasm_quality_gate` snapshot:
+`docs/extension_registry.json` mirrors the current compatibility-board snapshot:
 - already wired: `validator_coverage_ok`, `api_surface_wired`, `browser_smoke_wired`, `empty_shell_guard_wired`
-- not fully wired yet: `warning_budget_wired`, `copy_budget_wired`, `memory_budget_wired`, `performance_budget_wired`, `artifact_audit_wired`
-- current release posture: `release_ready=false`
+- still baseline-only in the sub-gate: `warning_budget_wired`, `copy_budget_wired`, `memory_budget_wired`, `performance_budget_wired`, `artifact_audit_wired`
+- current compatibility-board posture: `final_verdict="review_required"`, `release_ready=false`
+
+This compatibility-board snapshot is a maturity view, not the final release gate. It intentionally stays `review_required` until the remaining sub-gates stop being baseline-only.
+
+### Maturity Board vs Release Gate
+- `compat-board` and `docs/extension_registry.json` are **maturity snapshots** (observability and integration readiness).
+- CI `release/challenge` gate steps are the **release decision path** (runtime audit evidence).
+- `release_ready` in board snapshots must not override the release decision from CI `compat-check` gates.
+
+### v2 remaining gaps (current)
+- Unified declared policy table is not fully closed for `warning/copy/memory/perf/artifact` across Browser and CLI.
+- `release_ready` still needs strict single-source semantics in all paths.
+- Challenge path still needs broader matrix coverage for `single/dir/manifest/handoff` policy consistency.
+
+### v2 done criteria (must all hold)
+1. `dev/release/challenge` use consistent policy behavior and budget-state semantics.
+2. Browser copy budget and CLI memory budget act as real gates, not passive observations.
+3. `final_verdict/release_ready` are produced by one final aggregation path only.
+4. Challenge manifest output is stable, reproducible, and top-level/item-level consistent.
+5. CI runs real profile-aware gates (not only board snapshots).
+6. README, registry, CLI, and Web report the same boundary and completion semantics.
 
 Because both browser and CLI run on the user's local machine, the project already has a local dual-end workflow by default. `browser_to_cli_handoff` is optional standardization, not a backend service, and it never replaces the real CLI artifact audit.
 

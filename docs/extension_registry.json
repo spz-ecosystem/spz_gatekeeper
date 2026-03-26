@@ -19,6 +19,44 @@
       "cli_verdict_is_final"
     ]
   },
+  "v2_closure": {
+    "boundary": {
+      "maturity_board": "compat-board and compatibility_board snapshot",
+      "release_gate": "CI release/challenge gate driven by compat-check runtime audits",
+      "rule": "board release_ready must not override CI gate verdict"
+    },
+    "remaining_gaps": [
+      "unified_declared_policy_table_not_fully_closed_for_warning_copy_memory_perf_artifact",
+      "release_ready_single_source_semantics_not_fully_enforced_in_all_paths",
+      "challenge_policy_consistency_matrix_needs_more_coverage_for_single_dir_manifest_handoff"
+    ],
+    "done_criteria": [
+      "dev_release_challenge_policy_and_budget_state_semantics_are_consistent",
+      "browser_copy_budget_and_cli_memory_budget_are_blocking_gates",
+      "final_verdict_and_release_ready_are_produced_by_one_final_aggregation_path",
+      "challenge_manifest_output_is_stable_reproducible_and_top_item_consistent",
+      "ci_runs_real_profile_aware_gates_not_only_board_snapshots",
+      "readme_registry_cli_web_share_the_same_boundary_and_completion_semantics"
+    ],
+    "release_gate_contract": {
+      "release_gate": {
+        "entry": "compat-check <file.spz> --json",
+        "must_pass": [
+          "exit_code_is_zero",
+          "policy_mode_is_release",
+          "critical_budgets_present_peak_memory_mb_and_memory_growth_count"
+        ]
+      },
+      "challenge_gate": {
+        "entry": "compat-check --manifest <manifest.json> --json",
+        "must_pass": [
+          "policy_mode_is_challenge",
+          "summary_total_matches_manifest_items",
+          "grouped_summary_present"
+        ]
+      }
+    }
+  },
   "registry": {
     "count": 1,
     "extensions": [

@@ -104,6 +104,92 @@ jobs:
         run: |
           ctest --test-dir build --output-on-failure -C Release
 
+      - name: Release gate (Ubuntu, real compat-check)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p build/ci-gates
+          ./build/spz_gatekeeper gen-fixture \
+            --type 0xADBE0002 \
+            --mode valid \
+            --out build/ci-gates/release_valid.spz
+          ./build/spz_gatekeeper compat-check build/ci-gates/release_valid.spz --json | tee build/ci-gates/release_gate.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('build/ci-gates/release_gate.json').read_text(encoding='utf-8'))
+          if data.get('policy_mode') != 'release':
+              raise SystemExit('release gate: policy_mode must be release')
+          if data.get('verdict') == 'block' or data.get('final_verdict') == 'block':
+              raise SystemExit('release gate: block verdict is not allowed')
+          budgets = data.get('budgets', {})
+          for key in ('peak_memory_mb', 'memory_growth_count'):
+              if key not in budgets:
+                  raise SystemExit(f'release gate: missing critical budget {key}')
+              if budgets[key].get('declared') in (None, ''):
+                  raise SystemExit(f'release gate: missing declared threshold for {key}')
+          print('release gate checks passed')
+          PY
+
+      - name: Challenge gate (Ubuntu, manifest aggregation)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p build/ci-gates
+          ./build/spz_gatekeeper gen-fixture \
+            --type 0xADBE0002 \
+            --mode valid \
+            --out build/ci-gates/challenge_pass.spz
+          ./build/spz_gatekeeper gen-fixture \
+            --type 0xADBE0002 \
+            --mode invalid-size \
+            --out build/ci-gates/challenge_block.spz
+
+          cat > build/ci-gates/challenge_manifest.json <<'JSON'
+          {
+            "items": [
+              {
+                "path": "challenge_pass.spz",
+                "scene_id": "scene-a",
+                "group": "official",
+                "split": "challenge",
+                "difficulty": "easy"
+              },
+              {
+                "path": "challenge_block.spz",
+                "scene_id": "scene-b",
+                "group": "official",
+                "split": "challenge",
+                "difficulty": "hard"
+              }
+            ]
+          }
+          JSON
+
+          set +e
+          ./build/spz_gatekeeper compat-check --manifest build/ci-gates/challenge_manifest.json --json > build/ci-gates/challenge_gate.json
+          challenge_rc=$?
+          set -e
+
+          test "$challenge_rc" -eq 1
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('build/ci-gates/challenge_gate.json').read_text(encoding='utf-8'))
+          if data.get('policy_mode') != 'challenge':
+              raise SystemExit('challenge gate: policy_mode must be challenge')
+          summary = data.get('summary', {})
+          if summary.get('total') != 2:
+              raise SystemExit('challenge gate: summary.total must be 2')
+          if summary.get('block') != 1:
+              raise SystemExit('challenge gate: summary.block must be 1')
+          if 'grouped_summary' not in data:
+              raise SystemExit('challenge gate: grouped_summary is required')
+          if not isinstance(data.get('items'), list) or len(data['items']) != 2:
+              raise SystemExit('challenge gate: expected exactly 2 manifest items')
+          print('challenge gate checks passed')
+          PY
+
       - name: Upload build logs on failure
         if: failure()
         uses: actions/upload-artifact@v7

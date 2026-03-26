@@ -258,8 +258,13 @@ Web/WASM 侧现在统一为一套稳定的双模式契约：
 ### 统一审查摘要字段
 两种模式对齐到同一套顶层字段：
 - `audit_profile`
+- `policy_name`
+- `policy_version`
+- `policy_mode`
 - `audit_mode`
 - `verdict`
+- `final_verdict`
+- `release_ready`
 - `summary`
 - `budgets`
 - `issues`
@@ -285,11 +290,36 @@ spz_gatekeeper compat-check --dir ./fixtures --json
 spz_gatekeeper compat-check --manifest ./fixtures/manifest.json --json
 ```
 
+固定的 `policy_mode` 约定如下：
+- 单文件 `compat-check` 与 `--dir` 默认使用 `policy_mode="release"`
+- `--manifest` 批量评测默认使用 `policy_mode="challenge"`
+- 浏览器导出的 `browser_to_cli_handoff` 会保留自身 `policy_mode`，用于证据链对齐
+
 ### 当前 `wasm_quality_gate` 状态
-`docs/extension_registry.json` 已暴露基线版 `wasm_quality_gate` 快照：
+`docs/extension_registry.json` 现已对齐当前 compatibility-board 快照：
 - 已接线：`validator_coverage_ok`、`api_surface_wired`、`browser_smoke_wired`、`empty_shell_guard_wired`
-- 尚未完整接线：`warning_budget_wired`、`copy_budget_wired`、`memory_budget_wired`、`performance_budget_wired`、`artifact_audit_wired`
-- 当前发布状态：`release_ready=false`
+- 子 gate 仍是 baseline 状态：`warning_budget_wired`、`copy_budget_wired`、`memory_budget_wired`、`performance_budget_wired`、`artifact_audit_wired`
+- 当前 compatibility-board 结论：`final_verdict="review_required"`、`release_ready=false`
+
+这个 compatibility-board 快照表达的是成熟度视图，不是最终发布 gate。只要剩余子 gate 仍停留在 baseline-only，顶层就应保持 `review_required`。
+
+### 成熟度看板 vs 发布门禁
+- `compat-board` 与 `docs/extension_registry.json` 是**成熟度快照**（偏观测与接入状态）。
+- CI 中的 `release/challenge` gate 步骤才是**发布决策路径**（基于运行时审查证据）。
+- 看板里的 `release_ready` 不能反向覆盖 CI `compat-check` gate 的发布结论。
+
+### v2 当前剩余缺口
+- Browser/CLI 在 `warning/copy/memory/perf/artifact` 五类预算上尚未完全收口到同一 declared policy 表。
+- `release_ready` 在所有路径上仍需彻底单源化语义。
+- challenge 路径仍需扩充 `single/dir/manifest/handoff` 的一致性矩阵覆盖。
+
+### v2 完成判据（必须同时满足）
+1. `dev/release/challenge` 三档在策略行为与预算状态语义上保持一致。
+2. Browser copy budget 与 CLI memory budget 都是可阻断的真实门禁，不是仅观测。
+3. `final_verdict/release_ready` 仅由单一最终汇总路径产出。
+4. challenge manifest 输出稳定、可复验，且 top-level 与 item-level 一致。
+5. CI 运行真实 profile-aware gate，而不是只看 board 快照。
+6. README、registry、CLI、Web 的边界口径与完成语义一致。
 
 由于浏览器端和 CLI 端都运行在用户本地，所以项目默认就具备“本地双端协同”。`browser_to_cli_handoff` 只是一个可选的标准化能力，不是后台服务，也不能替代真实 CLI 成品审查。
 
