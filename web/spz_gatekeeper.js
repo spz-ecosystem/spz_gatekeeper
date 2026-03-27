@@ -6,6 +6,7 @@ const kAuditPolicyModeRelease = 'release';
 const kAuditPolicyModeChallenge = 'challenge';
 const kAuditToolVersion = '1.0.0';
 const kBrowserAuditMode = 'browser_lightweight_wasm_audit';
+const kBrowserToCliHandoffSchemaVersion = 'spz_gatekeeper.browser_to_cli_handoff.v1';
 const kUnifiedBudgetPolicyTable = Object.freeze({
   cold_start_ms: Object.freeze({
     domain: 'perf',
@@ -106,6 +107,9 @@ function markCopyPass(counter, stage) {
     return;
   }
   counter.pass_count += 1;
+  if (!counter.by_stage) {
+    counter.by_stage = {};
+  }
   if (stage) {
     counter.by_stage[stage] = (counter.by_stage[stage] || 0) + 1;
   }
@@ -419,6 +423,7 @@ function buildBrowserToCliHandoff(report) {
   const bundleVerdict = resolveBundleVerdict(report);
   const finalVerdict = resolveFinalVerdict(report);
   return {
+    schema_version: kBrowserToCliHandoffSchemaVersion,
     audit_profile: report.audit_profile,
     audit_mode: report.audit_mode,
     policy_mode: resolvePolicyMode(report.policy_mode),
@@ -453,11 +458,11 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null, o
   let validTinyMs = null;
   let invalidTinyHandled = false;
   let memoryObservedMb = currentMemoryMb();
-  const copyBudget = { pass_count: 0 };
+  const copyBudget = { pass_count: 0, by_stage: {} };
 
 
   try {
-    entries = await readZipEntries(bundleBytes);
+    entries = await readZipEntries(bundleBytes, copyBudget);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     pushIssue(issues, 'error', 'BUNDLE_ZIP_INVALID', reason);

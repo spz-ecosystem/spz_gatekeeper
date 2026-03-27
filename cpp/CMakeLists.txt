@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(spz_gatekeeper
-  VERSION 1.0.0
+  VERSION 2.0.0
   DESCRIPTION "SPZ Gatekeeper - SPZ format legality checker"
   LANGUAGES CXX
 )

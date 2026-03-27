@@ -22,6 +22,8 @@ inline constexpr const char* kAuditModeBrowserLightweightWasmAudit =
     "browser_lightweight_wasm_audit";
 inline constexpr const char* kAuditModeLocalCliSpzArtifactAudit =
     "local_cli_spz_artifact_audit";
+inline constexpr const char* kBrowserToCliHandoffSchemaVersion =
+    "spz_gatekeeper.browser_to_cli_handoff.v1";
 inline constexpr const char* kAuditBudgetColdStartMs = "cold_start_ms";
 inline constexpr const char* kAuditBudgetTinyCaseMs = "tiny_case_ms";
 inline constexpr const char* kAuditBudgetPeakMemoryMb = "peak_memory_mb";
@@ -72,10 +74,13 @@ struct CompatAuditMetrics {
 
 struct BrowserAuditHandoff {
   std::string raw_json;
+  std::string schema_version;
   std::string audit_profile;
   std::string audit_mode;
   std::string policy_mode = kAuditPolicyModeRelease;
   std::string verdict;
+  std::string final_verdict;
+  bool release_ready = false;
   std::string next_action;
   std::string bundle_id;
   std::string tool_version;
