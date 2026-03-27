@@ -1019,6 +1019,7 @@ static std::vector<ManifestTarget> ParseStructuredManifestTargets(
 }
 
 static std::vector<ManifestTarget> ParseManifestTargets(const std::string& manifest_path,
+                                                        bool allow_legacy_text_scan,
                                                         std::string* err) {
   std::string text;
   if (!ReadAllText(manifest_path, &text)) {
@@ -1033,6 +1034,17 @@ static std::vector<ManifestTarget> ParseManifestTargets(const std::string& manif
     if (items != nullptr) {
       return ParseStructuredManifestTargets(*items, manifest_path, err);
     }
+  }
+
+  if (!allow_legacy_text_scan) {
+    if (!root.has_value()) {
+      *err = "manifest JSON parse failed at offset " + std::to_string(parse_err.offset) +
+             ": " + parse_err.message +
+             " (legacy text-scan fallback disabled; pass --allow-legacy-text-scan to enable)";
+    } else {
+      *err = "manifest must provide structured items[] (legacy text-scan fallback disabled; pass --allow-legacy-text-scan to enable)";
+    }
+    return {};
   }
 
   return ParseManifestTargetsFromTextScan(text, manifest_path, err);
@@ -1255,6 +1267,7 @@ static int HandleCompatCheckCommand(int argc, char** argv) {
   }
 
   bool json = false;
+  bool allow_legacy_text_scan = false;
   std::string single_path;
   std::string dir_path;
   std::string manifest_path;
@@ -1265,6 +1278,10 @@ static int HandleCompatCheckCommand(int argc, char** argv) {
     const std::string arg = argv[i];
     if (arg == "--json") {
       json = true;
+      continue;
+    }
+    if (arg == "--allow-legacy-text-scan") {
+      allow_legacy_text_scan = true;
       continue;
     }
     if (arg == "--dir" && i + 1 < argc) {
@@ -1303,6 +1320,10 @@ static int HandleCompatCheckCommand(int argc, char** argv) {
     std::cerr << "--handoff requires single-file compat-check\n";
     return 2;
   }
+  if (allow_legacy_text_scan && manifest_path.empty()) {
+    std::cerr << "--allow-legacy-text-scan requires --manifest\n";
+    return 2;
+  }
 
 
   std::vector<ManifestTarget> targets;
@@ -1324,7 +1345,7 @@ static int HandleCompatCheckCommand(int argc, char** argv) {
     });
   } else {
     std::string parse_err;
-    targets = ParseManifestTargets(manifest_path, &parse_err);
+    targets = ParseManifestTargets(manifest_path, allow_legacy_text_scan, &parse_err);
     if (!parse_err.empty() && targets.empty()) {
       std::cerr << parse_err << "\n";
       return 2;
@@ -1421,7 +1442,7 @@ static void PrintUsage() {
   std::cerr << "  spz_gatekeeper registry show <type> [--json]\n";
   std::cerr << "  spz_gatekeeper compat-check <file.spz> [--handoff <browser_audit.json>] [--json]\n";
   std::cerr << "  spz_gatekeeper compat-check --dir <dir> [--json]\n";
-  std::cerr << "  spz_gatekeeper compat-check --manifest <manifest.json> [--json]\n";
+  std::cerr << "  spz_gatekeeper compat-check --manifest <manifest.json> [--allow-legacy-text-scan] [--json]\n";
 
 
   std::cerr << "  spz_gatekeeper compat-board [--json]\n";
@@ -1446,12 +1467,14 @@ static void PrintUsage() {
   std::cerr << "Options:\n";
   std::cerr << "  --strict      Strict mode: warnings become errors\n";
   std::cerr << "  --no-strict   Normal mode: warnings are non-fatal\n";
-  std::cerr << "  --json        Output in JSON format\n\n";
+  std::cerr << "  --json        Output in JSON format\n";
+  std::cerr << "  --allow-legacy-text-scan  Allow legacy manifest text-scan fallback (only with --manifest)\n\n";
 
   std::cerr << "Task 5 contract:\n";
   std::cerr << "  browser_lightweight_wasm_audit only gates a standard zip audit bundle in the browser.\n";
   std::cerr << "  local_cli_spz_artifact_audit audits the real .spz artifact, directory, or manifest locally.\n";
-  std::cerr << "  compat-check --manifest accepts legacy path scans and structured items[] with scene_id/group/split/difficulty.\n";
+  std::cerr << "  compat-check --manifest defaults to structured items[] with scene_id/group/split/difficulty.\n";
+  std::cerr << "  legacy path text-scan fallback is disabled by default; pass --allow-legacy-text-scan to enable.\n";
   std::cerr << "  browser_to_cli_handoff is optional, only merged into compat-check --json output.\n";
   std::cerr << "  final verdict still comes from the local CLI artifact audit.\n";
   std::cerr << "  spz_gatekeeper does not audit GLB or spz2glb.\n\n";
@@ -1465,6 +1488,7 @@ static void PrintUsage() {
   std::cerr << "  spz_gatekeeper compat-check model.spz --handoff browser_audit.json --json\n";
   std::cerr << "  spz_gatekeeper compat-check --dir ./fixtures --json\n";
   std::cerr << "  spz_gatekeeper compat-check --manifest ./fixtures/manifest.json --json\n";
+  std::cerr << "  spz_gatekeeper compat-check --manifest ./fixtures/legacy_manifest.json --allow-legacy-text-scan --json\n";
 
 
   std::cerr << "  spz_gatekeeper compat-board --json\n";

@@ -319,7 +319,7 @@ TEST(test_compat_check_manifest_mode_outputs_batch_summary) {
   manifest.close();
 
 
-  const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check --manifest \"" + manifest_path.string() + "\" --json");
+  const auto result = RunCommand(std::string(CliBinaryPath()) + " compat-check --manifest \"" + manifest_path.string() + "\" --allow-legacy-text-scan --json");
   ASSERT_TRUE(result.exit_code == 1);
   ASSERT_TRUE(result.output.find("\"summary\":{") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"total\":2") != std::string::npos);
@@ -332,6 +332,25 @@ TEST(test_compat_check_manifest_mode_outputs_batch_summary) {
       result.output.find("\"review_required\":1") != std::string::npos;
   ASSERT_TRUE(stable_release_summary || budget_limited_summary);
   ASSERT_TRUE(result.output.find("\"top_issues\":[") != std::string::npos);
+}
+
+TEST(test_compat_check_manifest_mode_rejects_legacy_without_flag) {
+  TempDirGuard workdir(MakeTempDirPath("compat_check_manifest_legacy_reject"));
+  const auto pass_trailer = spz_gatekeeper_test::CreateTrailer(
+      {{0xADBE0002u, spz_gatekeeper_test::CreateAdobeSafeOrbitPayload()}});
+  const auto pass_path = workdir.path() / "manifest_pass.spz";
+  WriteBinaryFile(pass_path,
+                  spz_gatekeeper_test::CreateMinimalSpz(1, 3, 0, 8, kFlagHasExtensions, &pass_trailer));
+
+  const auto manifest_path = workdir.path() / "legacy_manifest.json";
+  std::ofstream manifest(manifest_path);
+  manifest << "{\"files\":[\"" << pass_path.filename().generic_string() << "\"]}";
+  manifest.close();
+
+  const auto result =
+      RunCommand(std::string(CliBinaryPath()) + " compat-check --manifest \"" + manifest_path.string() + "\" --json");
+  ASSERT_TRUE(result.exit_code == 2);
+  ASSERT_TRUE(result.output.find("legacy text-scan fallback disabled") != std::string::npos);
 }
 
 TEST(test_compat_check_manifest_mode_supports_structured_items_and_grouped_summary) {
@@ -449,9 +468,11 @@ TEST(test_compat_check_merges_browser_handoff_without_skipping_artifact_audit) {
 
   const auto handoff_path = workdir.path() / "browser_handoff.json";
   std::ofstream handoff(handoff_path);
-  handoff << "{\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\","
+  handoff << "{\"schema_version\":\"spz_gatekeeper.browser_to_cli_handoff.v1\","
+             "\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\","
              "\"policy_mode\":\"dev\",\"bundle_id\":\"sha256:test-bundle\",\"tool_version\":\"1.0.0\","
-             "\"verdict\":\"block\",\"summary\":{},\"budgets\":{},\"issues\":[],"
+             "\"bundle_verdict\":\"block\",\"verdict\":\"block\",\"final_verdict\":\"block\","
+             "\"release_ready\":false,\"summary\":{},\"budgets\":{},\"issues\":[],"
              "\"next_action\":\"block_bundle\"}";
   handoff.close();
 
@@ -480,6 +501,8 @@ TEST(test_help_describes_task5_boundaries_and_handoff_contract) {
   ASSERT_TRUE(result.output.find("browser_to_cli_handoff") != std::string::npos);
   ASSERT_TRUE(result.output.find("does not audit GLB or spz2glb") != std::string::npos);
   ASSERT_TRUE(result.output.find("final verdict still comes from the local CLI artifact audit") != std::string::npos);
+  ASSERT_TRUE(result.output.find("--allow-legacy-text-scan") != std::string::npos);
+  ASSERT_TRUE(result.output.find("legacy path text-scan fallback is disabled by default") != std::string::npos);
 }
 
 
@@ -495,6 +518,7 @@ int main() {
   RUN_TEST(test_compat_check_surfaces_unknown_extension_issue_summary);
   RUN_TEST(test_compat_check_dir_mode_outputs_batch_summary);
   RUN_TEST(test_compat_check_manifest_mode_outputs_batch_summary);
+  RUN_TEST(test_compat_check_manifest_mode_rejects_legacy_without_flag);
   RUN_TEST(test_compat_check_manifest_mode_supports_structured_items_and_grouped_summary);
   RUN_TEST(test_compat_check_manifest_mode_emits_challenge_stats_and_visualization);
   RUN_TEST(test_compat_check_merges_browser_handoff_without_skipping_artifact_audit);

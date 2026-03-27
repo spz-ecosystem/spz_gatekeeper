@@ -91,86 +91,6 @@ std::string TrimAsciiWhitespace(const std::string& text) {
   return text.substr(start, end - start);
 }
 
-bool ExtractJsonStringField(const std::string& json_text,
-                            const std::string& field,
-                            std::string* value,
-                            std::string* err) {
-  const std::string key = "\"" + field + "\"";
-  const std::size_t key_pos = json_text.find(key);
-  if (key_pos == std::string::npos) {
-    if (err != nullptr) {
-      *err = "missing field: " + field;
-    }
-    return false;
-  }
-
-  const std::size_t colon_pos = json_text.find(':', key_pos + key.size());
-  if (colon_pos == std::string::npos) {
-    if (err != nullptr) {
-      *err = "invalid field separator: " + field;
-    }
-    return false;
-  }
-
-  std::size_t quote_pos = json_text.find('"', colon_pos + 1);
-  if (quote_pos == std::string::npos) {
-    if (err != nullptr) {
-      *err = "missing string value: " + field;
-    }
-    return false;
-  }
-
-  std::string parsed;
-  bool escape = false;
-  for (std::size_t i = quote_pos + 1; i < json_text.size(); ++i) {
-    const char ch = json_text[i];
-    if (escape) {
-      switch (ch) {
-        case '"':
-        case '\\':
-        case '/':
-          parsed.push_back(ch);
-          break;
-        case 'b':
-          parsed.push_back('\b');
-          break;
-        case 'f':
-          parsed.push_back('\f');
-          break;
-        case 'n':
-          parsed.push_back('\n');
-          break;
-        case 'r':
-          parsed.push_back('\r');
-          break;
-        case 't':
-          parsed.push_back('\t');
-          break;
-        default:
-          parsed.push_back(ch);
-          break;
-      }
-      escape = false;
-      continue;
-    }
-
-    if (ch == '\\') {
-      escape = true;
-      continue;
-    }
-    if (ch == '"') {
-      *value = parsed;
-      return true;
-    }
-    parsed.push_back(ch);
-  }
-
-  if (err != nullptr) {
-    *err = "unterminated string field: " + field;
-  }
-  return false;
-}
-
 
 std::string BuildBudgetItemJson(bool has_declared,
                                 double declared,
@@ -604,35 +524,107 @@ bool ParseBrowserAuditHandoffJson(const std::string& json_text,
     }
     return false;
   }
-  if (parsed.raw_json.front() != '{' || parsed.raw_json.back() != '}') {
+
+  JsonParseError parse_err;
+  const auto root = ParseJson(parsed.raw_json, &parse_err);
+  if (!root.has_value()) {
+    if (err != nullptr) {
+      *err = "handoff json parse failed at offset " + std::to_string(parse_err.offset) +
+             ": " + parse_err.message;
+    }
+    return false;
+  }
+  if (root->type != JsonType::kObject) {
     if (err != nullptr) {
       *err = "handoff json must be an object";
     }
     return false;
   }
 
-  if (!ExtractJsonStringField(parsed.raw_json, "audit_profile", &parsed.audit_profile, err) ||
-      !ExtractJsonStringField(parsed.raw_json, "audit_mode", &parsed.audit_mode, err) ||
-      !ExtractJsonStringField(parsed.raw_json, "next_action", &parsed.next_action, err) ||
-      !ExtractJsonStringField(parsed.raw_json, "bundle_id", &parsed.bundle_id, err) ||
-      !ExtractJsonStringField(parsed.raw_json, "tool_version", &parsed.tool_version, err)) {
-    return false;
-  }
-  if (parsed.raw_json.find("\"bundle_verdict\"") != std::string::npos) {
-    if (!ExtractJsonStringField(parsed.raw_json, "bundle_verdict", &parsed.verdict, err)) {
+  const auto require_string_field = [&](std::string_view key, std::string* out) -> bool {
+    const auto* value = root->Find(key);
+    if (value == nullptr) {
+      if (err != nullptr) {
+        *err = "missing field: " + std::string(key);
+      }
       return false;
     }
-  } else if (!ExtractJsonStringField(parsed.raw_json, "verdict", &parsed.verdict, err)) {
-    return false;
-  }
-  if (parsed.raw_json.find("\"policy_mode\"") != std::string::npos) {
-    std::string policy_mode;
-    if (!ExtractJsonStringField(parsed.raw_json, "policy_mode", &policy_mode, err)) {
+    if (value->type != JsonType::kString) {
+      if (err != nullptr) {
+        *err = "field must be string: " + std::string(key);
+      }
       return false;
     }
-    parsed.policy_mode = ResolvePolicyMode(policy_mode);
+    *out = value->string_value;
+    return true;
+  };
+
+  const auto require_bool_field = [&](std::string_view key, bool* out) -> bool {
+    const auto* value = root->Find(key);
+    if (value == nullptr) {
+      if (err != nullptr) {
+        *err = "missing field: " + std::string(key);
+      }
+      return false;
+    }
+    if (value->type != JsonType::kBool) {
+      if (err != nullptr) {
+        *err = "field must be bool: " + std::string(key);
+      }
+      return false;
+    }
+    *out = value->bool_value;
+    return true;
+  };
+
+  if (!require_string_field("schema_version", &parsed.schema_version) ||
+      !require_string_field("audit_profile", &parsed.audit_profile) ||
+      !require_string_field("audit_mode", &parsed.audit_mode) ||
+      !require_string_field("policy_mode", &parsed.policy_mode) ||
+      !require_string_field("next_action", &parsed.next_action) ||
+      !require_string_field("bundle_id", &parsed.bundle_id) ||
+      !require_string_field("tool_version", &parsed.tool_version) ||
+      !require_string_field("final_verdict", &parsed.final_verdict) ||
+      !require_bool_field("release_ready", &parsed.release_ready)) {
+    return false;
   }
 
+  const auto* issues = root->Find("issues");
+  if (issues == nullptr) {
+    if (err != nullptr) {
+      *err = "missing field: issues";
+    }
+    return false;
+  }
+  if (issues->type != JsonType::kArray) {
+    if (err != nullptr) {
+      *err = "field must be array: issues";
+    }
+    return false;
+  }
+
+  const auto* bundle_verdict = root->Find("bundle_verdict");
+  if (bundle_verdict != nullptr && bundle_verdict->type == JsonType::kString &&
+      !bundle_verdict->string_value.empty()) {
+    parsed.verdict = bundle_verdict->string_value;
+  } else {
+    const auto* verdict = root->Find("verdict");
+    if (verdict != nullptr && verdict->type == JsonType::kString &&
+        !verdict->string_value.empty()) {
+      parsed.verdict = verdict->string_value;
+    } else {
+      parsed.verdict = parsed.final_verdict;
+    }
+  }
+
+  parsed.policy_mode = ResolvePolicyMode(parsed.policy_mode);
+
+  if (parsed.schema_version != kBrowserToCliHandoffSchemaVersion) {
+    if (err != nullptr) {
+      *err = "unsupported handoff schema_version: " + parsed.schema_version;
+    }
+    return false;
+  }
   if (parsed.audit_profile != kAuditProfileSpz) {
     if (err != nullptr) {
       *err = "unsupported handoff audit_profile: " + parsed.audit_profile;
@@ -648,6 +640,19 @@ bool ParseBrowserAuditHandoffJson(const std::string& json_text,
   if (!IsSupportedAuditVerdict(parsed.verdict)) {
     if (err != nullptr) {
       *err = "unsupported handoff verdict: " + parsed.verdict;
+    }
+    return false;
+  }
+  if (!IsSupportedAuditVerdict(parsed.final_verdict)) {
+    if (err != nullptr) {
+      *err = "unsupported handoff final_verdict: " + parsed.final_verdict;
+    }
+    return false;
+  }
+  const bool expected_release_ready = IsReleaseReadyVerdict(parsed.final_verdict);
+  if (parsed.release_ready != expected_release_ready) {
+    if (err != nullptr) {
+      *err = "handoff release_ready must match final_verdict";
     }
     return false;
   }

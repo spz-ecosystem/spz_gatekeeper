@@ -214,63 +214,78 @@ release gate 只由 CI 的 compat-check 判定。
 最后一次性自检并提交，保证变更边界干净。
 
 ## 7.3 执行批次 C（P2，可后移）
-- 已补齐 Browser `copy_breakdown`，按阶段细分 copy 次数（当前覆盖 `zip_inflate` / `module_clone`）。
-- 已补齐 challenge 批量输出的 `challenge_stats` 与 `visualization` 辅助区块。
-- 已在 Web 摘要面板补充 `final_verdict`、`release_ready` 与 `Copy Breakdown` 展示。
-- 本地补充验证已写入 `tests/wasm_smoke_test.mjs`，但当前 WSL 会话缺少 Node.js / Playwright / Emscripten，尚未在本机重跑 browser smoke。
+
+### C1：handoff 结构化解析替换（P1→P2 过渡项）
+- 文件：
+  - `cpp/src/audit_summary.cc`
+  - `cpp/include/spz_gatekeeper/audit_summary.h`
+- 动作：
+  - 将 `ParseBrowserAuditHandoffJson` 从“字符串提取”切到结构化 JSON 校验；
+  - 固定必填字段（`schema_version/audit_profile/policy_mode/final_verdict/release_ready/issues`）；
+  - 缺失或类型错误返回可审计错误码，禁止静默容错。
+
+### C2：版本语义与文档引用收口（P2）
+- 文件：
+  - `cpp/CMakeLists.txt`
+  - `README.md`
+  - `README-zh.md`
+  - `docs/extension_registry.json`
+- 动作：
+  - 对齐版本口径（工程版本、策略版本、文档声明一致）；
+  - 修复不存在的计划文档引用，避免审计断链；
+  - 明确 `compat-board` 是成熟度视图，不是发布门禁结论。
+
+### C3：双端协同回归脚本固化（P2）
+- 文件：
+  - `tests/wasm_smoke_test.mjs`
+  - `.github/workflows/ci.yml`
+- 动作：
+  - 固定 browser→handoff→CLI roundtrip 断言模板；
+  - 固定三项一致性断言：`final_verdict`、`release_ready`、`policy_mode`。
 
 ---
 
-
-## 8. 验收目标（完成判定）
+## 8. P0-P2 修补验收门禁（完成判定）
 
 满足以下全部条件，才可宣称“门卫侧符合 v2 计划”：
 
-1. `dev/release/challenge` 三档 profile 可切换且预算策略一致；
-2. Browser `copy budget`、CLI `memory budget` 均为真实门禁（非仅观测）；
-3. `final_verdict/release_ready` 单一最终语义，无局部反向定义；
-4. `--manifest` challenge 在 top-level 与 item-level 语义一致，顺序稳定、聚合可复验；
-5. CI 运行 profile-aware gate（非仅 compat-board 快照）；
-6. README/registry/CLI/Web 报告口径一致，并明确 baseline-only 与未完成项边界。
+1. **P0 完成**：
+   - Browser `copy_breakdown` 统计链完整且可复验；
+   - `challenge` 禁止无开关 text-scan fallback 绕过；
+   - 本地最小双端回归（CLI + WASM + handoff）可执行。
+2. **P1 完成**：
+   - handoff 结构化校验落地；
+   - 预算状态机在 `dev/release/challenge` 语义一致。
+3. **P2 完成**：
+   - 版本与文档口径一致；
+   - README/registry/CLI/Web 声明边界一致。
 
 ### 8.1 验收前检查 Checklist
 
-在进入“门卫侧 v2 验收”前，必须逐项确认：
+#### A. P0（功能正确性）
+- [ ] `web/spz_gatekeeper.js` 中 `copy_breakdown` 按阶段输出稳定且总量守恒。
+- [ ] `cpp/src/main.cc` 中 challenge 默认不走宽松 text-scan fallback。
+- [ ] `tests/wasm_smoke_test.mjs` 可完成 browser→handoff→CLI roundtrip。
 
-#### A. 范围与分支基线
-- [ ] 当前验收仅声明门卫主线，不把数据集扩充、排行榜、远程评测服务混入本轮范围。
-- [ ] `feature/spz-v2-profile-core` 相对 `main` 的差异已复核，未引入与门卫无关的临时修补或超前口径。
-- [ ] 所有未完成项已在本文第 4/6 节登记，未出现“代码未落地但文档已宣称完成”的情况。
+#### B. P1（鲁棒性与一致性）
+- [ ] `ParseBrowserAuditHandoffJson` 已改为结构化校验。
+- [ ] `within_budget / over_budget / not_collected / observed_without_budget` 四态在三档 profile 下有断言覆盖。
+- [ ] `single/dir/manifest/handoff` 四路径 `policy_mode` 输出一致。
 
-#### B. 规则/语义收口
-- [ ] `dev/release/challenge` 三档 profile 由统一 policy 表驱动，Browser/CLI 共用同一组预算状态与判定动作。
-- [ ] `copy/memory/perf/artifact` 四类预算都具备 declared threshold 或明确的 `observed_without_budget` 语义，不存在静默放行。
-- [ ] `final_verdict`、`bundle_verdict`、`artifact_verdict`、`release_ready` 的关系已固定，且 `release_ready` 仅由最终汇总路径生成。
-- [ ] Browser legacy readiness / `wasm_quality_gate.release_ready` 不会反向定义最终发布结论。
+#### C. P2（语义与文档）
+- [ ] 版本口径在 CMake/README/registry 中一致。
+- [ ] 文档无失效引用，验收链路可追溯。
+- [ ] 对外口径严格区分“成熟度看板”与“发布门禁”。
 
-#### C. challenge / manifest 闭环
-- [ ] `single/dir/manifest/handoff` 四条路径的 `policy_mode` 输出一致，不会把 `challenge` 回退成 `release`。
-- [ ] `--manifest` 输出顺序稳定，top-level 与 item-level 聚合结论可复验。
-- [ ] challenge 主路径与 fallback 边界明确，text-scan fallback 不会绕过强约束。
+#### D. 发布门禁
+- [ ] CI 运行真实 profile-aware gate（非仅快照）。
+- [ ] `release` 遇关键预算缺失、over-budget 或 `block` 会真实失败。
 
-#### D. 证据与测试
-- [ ] `audit_summary_test` 已覆盖 profile x budget x status 矩阵，至少包含 `within_budget / over_budget / not_collected / observed_without_budget`。
-- [ ] `compat_check_test` 已覆盖 `single/dir/manifest/handoff` 一致性与 challenge 聚合断言。
-- [ ] `registry_cli_test` 与 `wasm_smoke_test.mjs` 已覆盖 README / registry / CLI / Web 口径一致性。
-- [ ] 所有相关验证均在 WSL 环境完成，验收证据可追溯到具体测试输出或 CI job。
-
-#### E. 发布门禁与对外口径
-- [ ] CI 已运行真实 profile-aware gate，而不是只看 `compat-board` 快照。
-- [ ] `release` 档遇到关键预算缺失、over-budget 或 `block` 时会真实失败。
-- [ ] README / registry 已明确区分“已实现 / baseline-only / 未完成 / 发布判定依据”。
-- [ ] 若以上任一项未满足，对外口径仍使用第 9 节限制表述，禁止宣称“v2 已完成可发布”。
-
-> 只有当第 8 节验收目标和本 Checklist 同时满足，才能发起最终验收。
+> 只有当 P0/P1/P2 与本 Checklist 同时满足，才能发起最终验收。
 
 ---
 
 ## 9. 交付口径（对外声明约束）
-
 
 在第 8 节全部达成前，只能使用以下口径：
 - “v2 门卫骨架已完成，正在进行规则层与发布门禁收口”；

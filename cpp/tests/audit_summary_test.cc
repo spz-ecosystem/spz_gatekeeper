@@ -332,9 +332,12 @@ TEST(test_parse_browser_handoff_and_merge_into_compat_audit_json) {
       spz_gatekeeper::BuildCompatCheckAuditJson("fixture_valid.spz", strict_report, non_strict_report);
 
   const std::string handoff_json =
-      "{\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\","
-      "\"bundle_id\":\"sha256:test-bundle\",\"tool_version\":\"1.0.0\","
-      "\"verdict\":\"review_required\",\"summary\":{},\"budgets\":{},\"issues\":[],"
+      "{\"schema_version\":\"spz_gatekeeper.browser_to_cli_handoff.v1\","
+      "\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\","
+      "\"policy_mode\":\"release\",\"bundle_id\":\"sha256:test-bundle\","
+      "\"tool_version\":\"1.0.0\",\"bundle_verdict\":\"review_required\","
+      "\"verdict\":\"review_required\",\"final_verdict\":\"review_required\","
+      "\"release_ready\":false,\"summary\":{},\"budgets\":{},\"issues\":[],"
       "\"next_action\":\"review_bundle_before_cli\"}";
 
   spz_gatekeeper::BrowserAuditHandoff handoff;
@@ -357,10 +360,12 @@ TEST(test_parse_browser_handoff_and_merge_into_compat_audit_json) {
 
 TEST(test_parse_browser_handoff_preserves_explicit_policy_mode) {
   const std::string handoff_json =
-      "{\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\","
+      "{\"schema_version\":\"spz_gatekeeper.browser_to_cli_handoff.v1\","
+      "\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\","
       "\"policy_mode\":\"dev\",\"bundle_id\":\"sha256:test-bundle\","
-      "\"tool_version\":\"1.0.0\",\"verdict\":\"review_required\","
-      "\"summary\":{},\"budgets\":{},\"issues\":[],"
+      "\"tool_version\":\"1.0.0\",\"bundle_verdict\":\"review_required\","
+      "\"verdict\":\"review_required\",\"final_verdict\":\"review_required\","
+      "\"release_ready\":false,\"summary\":{},\"budgets\":{},\"issues\":[],"
       "\"next_action\":\"review_bundle_before_cli\"}";
 
   spz_gatekeeper::BrowserAuditHandoff handoff;
@@ -371,10 +376,12 @@ TEST(test_parse_browser_handoff_preserves_explicit_policy_mode) {
 
 TEST(test_parse_browser_handoff_prefers_bundle_verdict_field) {
   const std::string handoff_json =
-      "{\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\","
+      "{\"schema_version\":\"spz_gatekeeper.browser_to_cli_handoff.v1\","
+      "\"audit_profile\":\"spz\",\"audit_mode\":\"browser_lightweight_wasm_audit\","
       "\"policy_mode\":\"challenge\",\"bundle_id\":\"sha256:test-bundle\","
       "\"tool_version\":\"1.0.0\",\"bundle_verdict\":\"block\","
-      "\"verdict\":\"review_required\",\"summary\":{},\"budgets\":{},\"issues\":[],"
+      "\"verdict\":\"review_required\",\"final_verdict\":\"block\","
+      "\"release_ready\":false,\"summary\":{},\"budgets\":{},\"issues\":[],"
       "\"next_action\":\"block_bundle\"}";
 
   spz_gatekeeper::BrowserAuditHandoff handoff;

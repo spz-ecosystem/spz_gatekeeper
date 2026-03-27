@@ -422,6 +422,9 @@ async function runSmoke() {
       throw new Error('handoff 下载文件路径为空');
     }
     const handoffText = await readFile(handoffPath, 'utf8');
+    if (!handoffText.includes('"schema_version": "spz_gatekeeper.browser_to_cli_handoff.v1"')) {
+      throw new Error('handoff 缺少 schema_version');
+    }
     if (!handoffText.includes('"audit_mode": "browser_lightweight_wasm_audit"')) {
       throw new Error('handoff 缺少 browser audit mode');
     }
