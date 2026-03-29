@@ -4,7 +4,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, feature/spz-v2-profile-core ]
+    branches: [ main, feature/spz-v2-profile-core, feature-spz-gatekeeper-2.1-batch1 ]
   pull_request:
     branches: [ main ]
 
