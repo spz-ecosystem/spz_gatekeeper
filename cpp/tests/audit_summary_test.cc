@@ -32,6 +32,12 @@ int g_tests_passed = 0;
   } \
 } while (0)
 
+void ExpectContains(const std::string& json, const std::string& needle) {
+  if (json.find(needle) == std::string::npos) {
+    throw std::runtime_error("Expected JSON to contain: " + needle);
+  }
+}
+
 spz_gatekeeper::ExtensionReport MakeKnownExtension() {
   spz_gatekeeper::ExtensionReport ext;
   ext.type = 0xADBE0002u;
@@ -173,6 +179,22 @@ TEST(test_build_browser_wasm_audit_json_includes_copy_breakdown) {
   ASSERT_TRUE(json.find("\"copy_breakdown\":{\"total_passes\":2") != std::string::npos);
   ASSERT_TRUE(json.find("\"name\":\"zip_inflate\"") != std::string::npos);
   ASSERT_TRUE(json.find("\"name\":\"module_clone\"") != std::string::npos);
+}
+
+TEST(test_dual_end_report_contract_fields_are_frozen) {
+  const std::string json = spz_gatekeeper::BuildDualEndReportContractSampleJson();
+  ExpectContains(json, "\"artifact_id\"");
+  ExpectContains(json, "\"artifact_kind\"");
+  ExpectContains(json, "\"source_stage\"");
+  ExpectContains(json, "\"run_meta\"");
+  ExpectContains(json, "\"input_summary\"");
+  ExpectContains(json, "\"stage_results\"");
+  ExpectContains(json, "\"final_verdict\"");
+  ExpectContains(json, "\"boards\"");
+  ExpectContains(json, "\"status\":\"success\"");
+  ExpectContains(json, "\"status\":\"failed\"");
+  ExpectContains(json, "\"status\":\"skipped\"");
+  ExpectContains(json, "\"status\":\"missing\"");
 }
 
 TEST(test_build_compat_check_audit_json_reports_pass_schema) {
@@ -401,6 +423,7 @@ int main() {
   RUN_TEST(test_build_browser_wasm_audit_json_reports_pass_schema);
   RUN_TEST(test_build_browser_wasm_audit_json_derives_release_ready_from_final_verdict);
   RUN_TEST(test_build_browser_wasm_audit_json_includes_copy_breakdown);
+  RUN_TEST(test_dual_end_report_contract_fields_are_frozen);
   RUN_TEST(test_build_compat_check_audit_json_reports_pass_schema);
   RUN_TEST(test_build_compat_check_audit_json_escalates_release_when_memory_budget_not_collected);
   RUN_TEST(test_build_compat_check_audit_json_keeps_dev_mode_observed_without_budget);

@@ -505,6 +505,42 @@ std::string BuildWasmQualityGateJson(bool validator_coverage_ok,
   return oss.str();
 }
 
+std::string BuildDualEndReportContractSampleJson() {
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"" << kArtifactFieldArtifactId << "\":\"sample-dual-end-report\"";
+  oss << ",\"" << kArtifactFieldArtifactKind << "\":\"dual_end_report_json\"";
+  oss << ",\"" << kArtifactFieldSourceStage << "\":\"" << kAuditStageReportFusion << "\"";
+  oss << ",\"" << kDualEndFieldRunMeta << "\":{";
+  oss << "\"run_id\":\"sample-run\"";
+  oss << ",\"policy_mode\":\"" << kAuditPolicyModeRelease << "\"";
+  oss << ",\"execution_mode\":\"full_dual_end\"";
+  oss << "}";
+  oss << ",\"" << kDualEndFieldInputSummary << "\":{";
+  oss << "\"bundle_present\":true";
+  oss << ",\"handoff_present\":true";
+  oss << ",\"ply_present\":true";
+  oss << ",\"spz_present\":true";
+  oss << ",\"challenge_enabled\":true";
+  oss << "}";
+  oss << ",\"" << kDualEndFieldStageResults << "\":{";
+  oss << "\"" << kAuditStageWebAudit << "\":{\"status\":\"" << kStageStatusSuccess << "\"}";
+  oss << ",\"" << kAuditStageEncodeRun << "\":{\"status\":\"" << kStageStatusFailed << "\"}";
+  oss << ",\"" << kAuditStageCliAudit << "\":{\"status\":\"" << kStageStatusSkipped << "\"}";
+  oss << ",\"" << kAuditStageChallengeReport << "\":{\"status\":\"" << kStageStatusMissing << "\"}";
+  oss << ",\"" << kAuditStageReportFusion << "\":{\"status\":\"" << kStageStatusSuccess << "\"}";
+  oss << "}";
+  oss << ",\"" << kDualEndFieldFinalVerdict << "\":{";
+  oss << "\"verdict\":\"review_required\"";
+  oss << "}";
+  oss << ",\"" << kDualEndFieldBoards << "\":{";
+  oss << "\"maturity_board_snapshot\":{\"status\":\"not_enabled\"}";
+  oss << ",\"quality_board_snapshot\":{\"status\":\"not_enabled\"}";
+  oss << "}";
+  oss << "}";
+  return oss.str();
+}
+
 
 bool ParseBrowserAuditHandoffJson(const std::string& json_text,
                                   BrowserAuditHandoff* handoff,
