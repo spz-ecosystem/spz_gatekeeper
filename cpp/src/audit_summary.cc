@@ -136,6 +136,129 @@ const char* ResolvePolicyMode(const std::string& policy_mode) {
   return kAuditPolicyModeRelease;
 }
 
+const char* ResolveStageStatus(const std::string& status, const char* fallback) {
+  if (status == kStageStatusSuccess) {
+    return kStageStatusSuccess;
+  }
+  if (status == kStageStatusFailed) {
+    return kStageStatusFailed;
+  }
+  if (status == kStageStatusSkipped) {
+    return kStageStatusSkipped;
+  }
+  if (status == kStageStatusMissing) {
+    return kStageStatusMissing;
+  }
+  return fallback;
+}
+
+const char* ResolveArtifactSourceStage(const std::string& source_stage) {
+  if (source_stage == kAuditStageWebAudit) {
+    return kAuditStageWebAudit;
+  }
+  if (source_stage == kAuditStageCliAudit) {
+    return kAuditStageCliAudit;
+  }
+  if (source_stage == kAuditStageChallengeReport) {
+    return kAuditStageChallengeReport;
+  }
+  if (source_stage == kAuditStageReportFusion) {
+    return kAuditStageReportFusion;
+  }
+  return kAuditStageEncodeRun;
+}
+
+std::string OptionalJsonString(const std::string& value) {
+  if (value.empty()) {
+    return "null";
+  }
+  return "\"" + JsonEscape(value) + "\"";
+}
+
+std::string BuildFailureJson(const std::string& code, const std::string& message) {
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"code\":" << OptionalJsonString(code);
+  oss << ",\"message\":" << OptionalJsonString(message);
+  oss << "}";
+  return oss.str();
+}
+
+std::string BuildArtifactRecordJson(const AuditArtifactRecord& artifact) {
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"" << kArtifactFieldArtifactId << "\":\"" << JsonEscape(artifact.artifact_id)
+      << "\"";
+  oss << ",\"" << kArtifactFieldArtifactKind << "\":\""
+      << JsonEscape(artifact.artifact_kind) << "\"";
+  oss << ",\"" << kArtifactFieldSourceStage << "\":\""
+      << ResolveArtifactSourceStage(artifact.source_stage) << "\"";
+  oss << ",\"status\":\"" << ResolveStageStatus(artifact.status, kStageStatusSuccess) << "\"";
+  oss << ",\"path\":" << OptionalJsonString(artifact.path);
+  oss << ",\"media_type\":" << OptionalJsonString(artifact.media_type);
+  oss << ",\"sha256\":" << OptionalJsonString(artifact.sha256);
+  oss << ",\"size_bytes\":";
+  if (artifact.has_size_bytes) {
+    oss << artifact.size_bytes;
+  } else {
+    oss << "null";
+  }
+  oss << "}";
+  return oss.str();
+}
+
+std::string BuildArtifactRecordListJson(const std::vector<AuditArtifactRecord>& artifacts) {
+  std::ostringstream oss;
+  oss << "[";
+  for (std::size_t i = 0; i < artifacts.size(); ++i) {
+    if (i) {
+      oss << ",";
+    }
+    oss << BuildArtifactRecordJson(artifacts[i]);
+  }
+  oss << "]";
+  return oss.str();
+}
+
+struct ArtifactStatusCounts {
+  std::size_t total = 0;
+  std::size_t success = 0;
+  std::size_t failed = 0;
+  std::size_t skipped = 0;
+  std::size_t missing = 0;
+};
+
+ArtifactStatusCounts CountArtifactStatuses(const std::vector<AuditArtifactRecord>& artifacts) {
+  ArtifactStatusCounts counts;
+  for (const auto& artifact : artifacts) {
+    ++counts.total;
+    const char* status = ResolveStageStatus(artifact.status, kStageStatusSuccess);
+    if (status == kStageStatusFailed) {
+      ++counts.failed;
+    } else if (status == kStageStatusSkipped) {
+      ++counts.skipped;
+    } else if (status == kStageStatusMissing) {
+      ++counts.missing;
+    } else {
+      ++counts.success;
+    }
+  }
+  return counts;
+}
+
+std::string BuildArtifactIndexSummaryJson(const std::vector<AuditArtifactRecord>& artifacts) {
+  const ArtifactStatusCounts counts = CountArtifactStatuses(artifacts);
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"total_artifacts\":" << counts.total;
+  oss << ",\"success_artifacts\":" << counts.success;
+  oss << ",\"failed_artifacts\":" << counts.failed;
+  oss << ",\"skipped_artifacts\":" << counts.skipped;
+  oss << ",\"missing_artifacts\":" << counts.missing;
+  oss << "}";
+  return oss.str();
+}
+
 struct BudgetThreshold {
   bool has_declared = false;
   double declared = 0.0;
@@ -501,6 +624,60 @@ std::string BuildWasmQualityGateJson(bool validator_coverage_ok,
   oss << ",\"artifact_audit_wired\":false";
   oss << ",\"release_ready\":" << (release_ready ? "true" : "false");
 
+  oss << "}";
+  return oss.str();
+}
+
+std::string BuildEncodeRunJson(const EncodeRunAuditReport& report) {
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"" << kArtifactFieldArtifactId << "\":\"" << JsonEscape(report.artifact_id) << "\"";
+  oss << ",\"" << kArtifactFieldArtifactKind << "\":\"" << kArtifactKindEncodeRunJson << "\"";
+  oss << ",\"" << kArtifactFieldSourceStage << "\":\"" << kAuditStageEncodeRun << "\"";
+  oss << ",\"" << kDualEndFieldRunMeta << "\":{";
+  oss << "\"run_id\":\"" << JsonEscape(report.run_id) << "\"";
+  oss << ",\"policy_mode\":\"" << ResolvePolicyMode(report.policy_mode) << "\"";
+  oss << "}";
+  oss << ",\"status\":\"" << ResolveStageStatus(report.status, kStageStatusSuccess) << "\"";
+  oss << ",\"input_summary\":{";
+  oss << "\"bundle_id\":" << OptionalJsonString(report.bundle_id);
+  oss << ",\"handoff_artifact_id\":" << OptionalJsonString(report.handoff_artifact_id);
+  oss << ",\"input_ply_path\":" << OptionalJsonString(report.input_ply_path);
+  oss << "}";
+  oss << ",\"output_summary\":{";
+  oss << "\"output_spz_path\":" << OptionalJsonString(report.output_spz_path);
+  oss << ",\"output_log_path\":" << OptionalJsonString(report.output_log_path);
+  oss << "}";
+  oss << ",\"metrics\":{";
+  oss << "\"duration_ms\":";
+  if (report.has_duration_ms) {
+    oss << report.duration_ms;
+  } else {
+    oss << "null";
+  }
+  oss << "}";
+  oss << ",\"artifacts\":" << BuildArtifactRecordListJson(report.artifacts);
+  oss << ",\"failure\":" << BuildFailureJson(report.failure_code, report.failure_message);
+  oss << ",\"issues\":" << BuildIssueListJson(report.issues);
+  oss << "}";
+  return oss.str();
+}
+
+std::string BuildArtifactIndexJson(const ArtifactIndexReport& report) {
+  std::ostringstream oss;
+  oss << "{";
+  oss << "\"" << kArtifactFieldArtifactId << "\":\"" << JsonEscape(report.artifact_id) << "\"";
+  oss << ",\"" << kArtifactFieldArtifactKind << "\":\"" << kArtifactKindArtifactIndexJson << "\"";
+  oss << ",\"" << kArtifactFieldSourceStage << "\":\"" << kAuditStageEncodeRun << "\"";
+  oss << ",\"" << kDualEndFieldRunMeta << "\":{";
+  oss << "\"run_id\":\"" << JsonEscape(report.run_id) << "\"";
+  oss << ",\"policy_mode\":\"" << ResolvePolicyMode(report.policy_mode) << "\"";
+  oss << "}";
+  oss << ",\"status\":\"" << ResolveStageStatus(report.status, kStageStatusSuccess) << "\"";
+  oss << ",\"summary\":" << BuildArtifactIndexSummaryJson(report.artifacts);
+  oss << ",\"artifacts\":" << BuildArtifactRecordListJson(report.artifacts);
+  oss << ",\"failure\":" << BuildFailureJson(report.failure_code, report.failure_message);
+  oss << ",\"issues\":" << BuildIssueListJson(report.issues);
   oss << "}";
   return oss.str();
 }

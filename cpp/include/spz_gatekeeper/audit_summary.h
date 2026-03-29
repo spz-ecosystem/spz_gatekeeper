@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 
 namespace spz_gatekeeper {
@@ -27,6 +28,8 @@ inline constexpr const char* kBrowserToCliHandoffSchemaVersion =
 inline constexpr const char* kArtifactFieldArtifactId = "artifact_id";
 inline constexpr const char* kArtifactFieldArtifactKind = "artifact_kind";
 inline constexpr const char* kArtifactFieldSourceStage = "source_stage";
+inline constexpr const char* kArtifactKindEncodeRunJson = "encode_run_json";
+inline constexpr const char* kArtifactKindArtifactIndexJson = "artifact_index_json";
 inline constexpr const char* kDualEndFieldRunMeta = "run_meta";
 inline constexpr const char* kDualEndFieldInputSummary = "input_summary";
 inline constexpr const char* kDualEndFieldStageResults = "stage_results";
@@ -139,11 +142,53 @@ struct BrowserWasmAuditReport {
   bool performance_budget_wired = false;
 };
 
+struct AuditArtifactRecord {
+  std::string artifact_id;
+  std::string artifact_kind;
+  std::string source_stage = kAuditStageEncodeRun;
+  std::string status = kStageStatusSuccess;
+  std::string path;
+  std::string media_type;
+  std::string sha256;
+  std::uint64_t size_bytes = 0;
+  bool has_size_bytes = false;
+};
+
+struct EncodeRunAuditReport {
+  std::string artifact_id;
+  std::string run_id;
+  std::string policy_mode = kAuditPolicyModeRelease;
+  std::string status = kStageStatusSuccess;
+  std::string bundle_id;
+  std::string handoff_artifact_id;
+  std::string input_ply_path;
+  std::string output_spz_path;
+  std::string output_log_path;
+  double duration_ms = 0.0;
+  bool has_duration_ms = false;
+  std::string failure_code;
+  std::string failure_message;
+  std::vector<AuditArtifactRecord> artifacts;
+  std::vector<Issue> issues;
+};
+
+struct ArtifactIndexReport {
+  std::string artifact_id;
+  std::string run_id;
+  std::string policy_mode = kAuditPolicyModeRelease;
+  std::string status = kStageStatusSuccess;
+  std::string failure_code;
+  std::string failure_message;
+  std::vector<AuditArtifactRecord> artifacts;
+  std::vector<Issue> issues;
+};
 
 bool ParseBrowserAuditHandoffJson(const std::string& json_text,
                                   BrowserAuditHandoff* handoff,
                                   std::string* err);
 std::string BuildBrowserWasmAuditJson(const BrowserWasmAuditReport& report);
+std::string BuildEncodeRunJson(const EncodeRunAuditReport& report);
+std::string BuildArtifactIndexJson(const ArtifactIndexReport& report);
 
 std::string BuildCompatCheckAuditJson(const std::string& path,
                                       const GateReport& strict_report,
