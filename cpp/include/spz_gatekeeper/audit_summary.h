@@ -24,6 +24,23 @@ inline constexpr const char* kAuditModeLocalCliSpzArtifactAudit =
     "local_cli_spz_artifact_audit";
 inline constexpr const char* kBrowserToCliHandoffSchemaVersion =
     "spz_gatekeeper.browser_to_cli_handoff.v1";
+inline constexpr const char* kArtifactFieldArtifactId = "artifact_id";
+inline constexpr const char* kArtifactFieldArtifactKind = "artifact_kind";
+inline constexpr const char* kArtifactFieldSourceStage = "source_stage";
+inline constexpr const char* kDualEndFieldRunMeta = "run_meta";
+inline constexpr const char* kDualEndFieldInputSummary = "input_summary";
+inline constexpr const char* kDualEndFieldStageResults = "stage_results";
+inline constexpr const char* kDualEndFieldFinalVerdict = "final_verdict";
+inline constexpr const char* kDualEndFieldBoards = "boards";
+inline constexpr const char* kAuditStageWebAudit = "web_audit";
+inline constexpr const char* kAuditStageEncodeRun = "encode_run";
+inline constexpr const char* kAuditStageCliAudit = "cli_audit";
+inline constexpr const char* kAuditStageChallengeReport = "challenge_report";
+inline constexpr const char* kAuditStageReportFusion = "report_fusion";
+inline constexpr const char* kStageStatusSuccess = "success";
+inline constexpr const char* kStageStatusFailed = "failed";
+inline constexpr const char* kStageStatusSkipped = "skipped";
+inline constexpr const char* kStageStatusMissing = "missing";
 inline constexpr const char* kAuditBudgetColdStartMs = "cold_start_ms";
 inline constexpr const char* kAuditBudgetTinyCaseMs = "tiny_case_ms";
 inline constexpr const char* kAuditBudgetPeakMemoryMb = "peak_memory_mb";
@@ -58,7 +75,7 @@ std::string BuildWasmQualityGateJson(bool validator_coverage_ok,
                                      bool empty_shell_risk,
                                      bool memory_budget_wired = false,
                                      bool release_ready = false);
-
+std::string BuildDualEndReportContractSampleJson();
 
 
 struct CompatAuditMetrics {
