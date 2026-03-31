@@ -9,7 +9,7 @@
 - 起始年份：**2026**
 
 ## 个人独立作品声明
-本仓库为 **Pu Junhan** 独立完成的净室实现（clean-room implementation）。SPZ 文件格式规范（原由 Niantic, Inc. 开发并发布于 https://github.com/nianticlabs/spz）仅作为实现技术互操作性的参考依据。与 "SPZ" 及 "Niantic" 相关的所有商标、商号及知识产权归其各自权利人专有。
+本仓库为 **Pu Junhan** 独立完成的兼容性实现。SPZ 文件格式规范（原由 Niantic, Inc. 开发并发布于 https://github.com/nianticlabs/spz）及公开可观察的格式行为仅作为实现技术互操作性的参考依据。与 "SPZ" 及 "Niantic" 相关的所有商标、商号及知识产权归其各自权利人专有。
 
 ## 组织与政治立场分离声明
 

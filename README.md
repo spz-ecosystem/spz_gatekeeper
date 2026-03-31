@@ -9,7 +9,7 @@
 - Start year: **2026**
 
 ## Independent Work Statement
-This repository is an independent, clean-room implementation by **Pu Junhan**. The SPZ file format specification (originally developed by Niantic, Inc. and published at https://github.com/nianticlabs/spz) is referenced solely for the purpose of achieving technical interoperability. All trademarks, trade names, and intellectual property rights related to "SPZ" and "Niantic" remain the exclusive property of their respective owners.
+This repository is an independent compatibility-focused implementation by **Pu Junhan**. The SPZ file format specification (originally developed by Niantic, Inc. and published at https://github.com/nianticlabs/spz), together with publicly observable format behavior, is referenced solely for the purpose of achieving technical interoperability. All trademarks, trade names, and intellectual property rights related to "SPZ" and "Niantic" remain the exclusive property of their respective owners.
 
 ## Organizational & Political Separation
 
