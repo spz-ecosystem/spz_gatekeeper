@@ -39,6 +39,8 @@ test_output/
 codebubby.md
 new_ci.sh
 push_ci.sh
+.commands/
+.codebuddy/
 
 # Local-only planning docs (do not open-source)
 docs/Adobe_Safe_Orbit_Camera_Spec.md
