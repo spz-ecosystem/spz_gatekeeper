@@ -1,6 +1,7 @@
 # Build output
 build/
 build_wsl/
+build_*/
 build-*/
 cmake-build-*/
 web/spz_gatekeeper.wasm
@@ -43,3 +44,8 @@ push_ci.sh
 docs/Adobe_Safe_Orbit_Camera_Spec.md
 docs/Implementing_Custom_Extension.md
 docs/Vendor_ID_Allocation.md
+docs/plans/
+docs/agent_contract_v1.json
+docs/extension_registry.json
+research_report_spz_agent_stack_refresh.md
+research_report_spz_gatekeeper_21_alignment.md
