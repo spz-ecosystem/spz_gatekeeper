@@ -429,12 +429,12 @@ TocParseResult ParseToc(const uint8_t* data, size_t size, const SpzHeaderV4& hea
 
 **验证逻辑**:
 
-1. `header.numStreams == 0` → 报错 `L2_NUM_STREAMS_ZERO`
-2. `header.numStreams > 6` → 警告 `L2_NUM_STREAMS_EXCEEDS_EXPECTED`（SPZ v4 规范当前定义≤6 流，但 `numStreams` 字段允许未来扩展。不拦截，仅记录）
-3. `header.tocByteOffset < 32` → 报错 `L2_TOC_OFFSET`
-4. `tocEnd (= tocByteOffset + numStreams * 16) > size` → 报错 `L2_TOC_TRUNCATED`
+1. `header.numStreams == 0` → 报错 `SPZ_TOC_NUM_STREAMS_ZERO`
+2. `header.numStreams > 6` → 警告 `SPZ_TOC_NUM_STREAMS_EXCEEDS`（SPZ v4 规范当前定义≤6 流，但 `numStreams` 字段允许未来扩展。不拦截，仅记录）
+3. `header.tocByteOffset < 32` → 报错 `SPZ_TOC_OFFSET`
+4. `tocEnd (= tocByteOffset + numStreams * 16) > size` → 报错 `SPZ_TOC_TRUNCATED`
 5. 遍历每个 stream entry: 读 `compressedSize`/`uncompressedSize`，累加 `compressedOffset`
-6. `compressedOffset != size` → 报错 `L2_TOC_SIZE_MISMATCH`
+6. `compressedOffset != size` → 报错 `SPZ_TOC_SIZE_MISMATCH`
 
 **关于流数**: Niantic 源码 [load-spz.cc L802-L805](file:///C:/Users/HP/Downloads/v3.0.0/spz-3.0.0/src/cc/load-spz.cc#L802-L805) 的动态逻辑表明流数取决于非空属性——`shDegree=0` 只有 5 流。门卫读取 header 的 `numStreams` 字段，有多少解多少，不硬编码 6。顺序固定: positions → alphas → colors → scales → rotations → sh。
 
@@ -631,11 +631,11 @@ bool ParseHeaderV4(const std::vector<uint8_t>& raw, SpzHeaderV4* h, std::string*
 
 1. `raw.size() < 32` → error
 2. `memcpy` 32 字节到 `SpzHeaderV4`
-3. `magic != 0x5053474e` → error `L2_MAGIC`
-4. `version < 4` → error `L2_VERSION` (v4 路径不应该收到 <4)
-5. `num_points == 0` → error `L2_NUM_POINTS`
-6. `sh_degree > 4` → error `L2_SH_DEGREE`
-7. `reserved[12]` 全零检查 → error `L2_RESERVED` 如有非零字节 (⚠️ 审查发现 CR-IMP-1)
+3. `magic != 0x5053474e` → error `SPZ_FORMAT_MAGIC`
+4. `version < 4` → error `SPZ_FORMAT_VERSION` (v4 路径不应该收到 <4)
+5. `num_points == 0` → error `SPZ_FORMAT_NUM_POINTS`
+6. `sh_degree > 4` → error `SPZ_FORMAT_SH_DEGREE`
+7. `reserved[12]` 全零检查 → error `SPZ_FORMAT_RESERVED` 如有非零字节 (⚠️ 审查发现 CR-IMP-1)
 
 **变更量**: spz.cc +50 行
 
@@ -752,7 +752,7 @@ InspectSpzBlob(raw_spz):
   │   │       └─ ComputeBasePayloadSize() → ParseIlvRecords() (原 ParseTlvTrailer)
   │   │           └─ return GateReport (v1-v3 legacy, 无改动)
   │   │
-  │   └─ else → AddIssue(L2_UNKNOWN_FORMAT) → return GateReport
+  │   └─ else → AddIssue(SPZ_FORMAT_UNKNOWN) → return GateReport
 ```
 
 **参照**: [Niantic loadSpzPacked L977-1015](file:///C:/Users/HP/Downloads/v3.0.0/spz-3.0.0/src/cc/load-spz.cc#L977-L1015)
@@ -778,7 +778,7 @@ InspectSpzBlob(raw_spz):
 const uint8_t* raw = raw_spz.data();
 size_t raw_size = raw_spz.size();
 
-if (raw_size < 4) { AddIssue(L2_TOO_SMALL); return rep; }
+if (raw_size < 4) { AddIssue(SPZ_FORMAT_TOO_SMALL); return rep; }
 
 uint32_t magic = ReadU32LE(raw, 0);
 
@@ -789,7 +789,7 @@ if (magic == 0x5053474e) {
   // gzip magic → v1-v3 legacy 路径
   return InspectSpzBlobLegacy(raw_spz, opt, where);  // 现有逻辑提取为函数
 } else {
-  AddIssue(&rep, Severity::kError, "L2_UNKNOWN_FORMAT", "unrecognized SPZ format", where);
+  AddIssue(&rep, Severity::kError, "SPZ_FORMAT_UNKNOWN", "unrecognized SPZ format", where);
   return rep;
 }
 ```
@@ -912,6 +912,9 @@ v4 路径 (`InspectSpzBlobV4`) 对 `version > 4` 报 warning 但继续校验，�
 | `L2_HEADER` | `SPZ_FORMAT_HEADER` | 格式校验 |
 | `L2_TRUNCATED` | `SPZ_FORMAT_TRUNCATED` | 格式校验 |
 | `L2_BASE_SIZE` | `SPZ_FORMAT_BASE_SIZE` | 格式校验 |
+| `L2_NUM_POINTS` (新增) | `SPZ_FORMAT_NUM_POINTS` | 格式校验 |
+| `L2_TOO_SMALL` (新增) | `SPZ_FORMAT_TOO_SMALL` | 格式校验 |
+| `L2_UNKNOWN_FORMAT` (新增) | `SPZ_FORMAT_UNKNOWN` | 格式校验 |
 | `L2_GZIP_DECOMPRESS` | `SPZ_DECOMPRESS_GZIP` | 压缩/解压 |
 | `L2_ZSTD_DECOMPRESS` (新增) | `SPZ_DECOMPRESS_ZSTD` | 压缩/解压 |
 | `L2_TOC_OFFSET` (新增) | `SPZ_TOC_OFFSET` | TOC |
@@ -945,7 +948,7 @@ v4 路径 (`InspectSpzBlobV4`) 对 `version > 4` 报 warning 但继续校验，�
 | :------------------------ | :------------------------------- | :--------------------------------------------------------------------- |
 | `v4_header_parse_test`    | 新增 `cpp/tests/v4_format_test.cc` | 合法 32B header、损坏 header（magic 错误、version<4、numStreams=0、reserved 非零）   |
 | `v4_zstd_decompress_test` | 同上                               | 构建合法 v4 blob（32B header + 1 stream ZSTD），验证 `DecompressNgspStreams` 成功 |
-| `v4_zstd_corrupt_test`    | 同上                               | 故意损坏 ZSTD stream 数据，验证返回 `L2_ZSTD_DECOMPRESS`                          |
+| `v4_zstd_corrupt_test`    | 同上                               | 故意损坏 ZSTD stream 数据，验证返回 `SPZ_DECOMPRESS_ZSTD`                          |
 | `v4_header_zone_ilv_test` | 同上                               | 扩展在 `bytes[32..tocByteOffset)`，验证 `ParseHeaderZoneExtensions`          |
 | `v4_version_detect_test`  | 同上                               | NGSP magic→v4 路径；0x1f 0x8b→legacy 路径；其他→报错                             |
 | `v1_v3_regression_test`   | 保持现有 13 个测试全量通过                  | v1-v3 gzip 路径无退化                                                       |
@@ -1271,7 +1274,7 @@ Day 4: R6 完成 (WASM 验证 + 版本 bump + CHANGELOG)
 
 ***
 
-**计划版本**: 1.7  
+**计划版本**: 1.8  
 **审查状态**: 6 层交叉审查通过 (L1✅ L2✅ L3✅ L4✅ L5 N/A L6 待实施后同步)  
 **GitNexus 三项目基线**: Bridge 1768节点 · Gatekeeper 1368节点 · SPZ v3.0.0 767节点  
 **变更总量**: +898 行新增 / ~257 行修改 / 30 个任务 (T00-T28)
