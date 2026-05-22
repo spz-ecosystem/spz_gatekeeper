@@ -17,6 +17,7 @@
 #include <cstring>
 #if !defined(__EMSCRIPTEN__)
 #include <future>
+#include <thread>
 #endif
 #include <limits>
 #include <numeric>
