@@ -633,6 +633,7 @@ bool ParseHeaderV4(const std::vector<uint8_t>& raw, SpzHeaderV4* h, std::string*
 2. `memcpy` 32 字节到 `SpzHeaderV4`
 3. `magic != 0x5053474e` → error `SPZ_FORMAT_MAGIC`
 4. `version < 4` → error `SPZ_FORMAT_VERSION` (v4 路径不应该收到 <4)
+4.5 `version > kKnownMaxVersion` → warning `SPZ_FORMAT_VERSION` (社区定制/未来版本，不拦截，继续校验)
 5. `num_points == 0` → error `SPZ_FORMAT_NUM_POINTS`
 6. `sh_degree > 4` → error `SPZ_FORMAT_SH_DEGREE`
 7. `reserved[12]` 全零检查 → error `SPZ_FORMAT_RESERVED` 如有非零字节 (⚠️ 审查发现 CR-IMP-1)
