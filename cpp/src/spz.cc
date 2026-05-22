@@ -11,10 +11,14 @@
 
 
 #include <zlib.h>
+#include <zstd.h>
 
 #include <algorithm>
 #include <cstring>
+#include <future>
 #include <limits>
+#include <numeric>
+#include <thread>
 
 namespace spz_gatekeeper {
 
@@ -201,6 +205,243 @@ static std::size_t ComputeBasePayloadSize(const SpzHeader& h, bool* ok) {
   }
   deflateEnd(&strm);
   return ok;
+}
+
+struct TocEntry {
+  uint64_t compressed_size;
+  uint64_t uncompressed_size;
+  size_t compressed_offset;
+};
+
+struct TocParseResult {
+  bool ok = false;
+  std::string error;
+  std::vector<TocEntry> entries;
+};
+
+static TocParseResult ParseToc(const uint8_t* data, size_t size, uint32_t toc_byte_offset, uint8_t num_streams) {
+  TocParseResult result;
+  const size_t toc_size = static_cast<size_t>(num_streams) * 16;
+  const size_t toc_end = static_cast<size_t>(toc_byte_offset) + toc_size;
+  if (toc_end > size) {
+    result.error = "SPZ_TOC_TRUNCATED";
+    return result;
+  }
+
+  size_t compressed_offset = toc_end;
+  for (uint8_t i = 0; i < num_streams; i++) {
+    TocEntry e;
+    const size_t pos = static_cast<size_t>(toc_byte_offset) + static_cast<size_t>(i) * 16;
+    std::memcpy(&e.compressed_size, data + pos, sizeof(uint64_t));
+    std::memcpy(&e.uncompressed_size, data + pos + sizeof(uint64_t), sizeof(uint64_t));
+    e.compressed_offset = compressed_offset;
+    compressed_offset += e.compressed_size;
+
+    if (compressed_offset > size) {
+      result.error = "SPZ_TOC_OFFSET";
+      return result;
+    }
+    result.entries.push_back(e);
+  }
+
+  if (compressed_offset != size) {
+    result.error = "SPZ_TOC_SIZE_MISMATCH";
+    return result;
+  }
+  result.ok = true;
+  return result;
+}
+
+static bool DecompressZstdStream(const uint8_t* src, size_t src_size,
+                                 std::vector<uint8_t>* out, std::string* err) {
+  const size_t bound = ZSTD_getFrameContentSize(src, src_size);
+  if (bound == ZSTD_CONTENTSIZE_ERROR) {
+    if (err) *err = "SPZ_DECOMPRESS_ZSTD";
+    return false;
+  }
+  if (bound == ZSTD_CONTENTSIZE_UNKNOWN) {
+    if (err) *err = "SPZ_DECOMPRESS_ZSTD";
+    return false;
+  }
+
+  out->resize(bound);
+  const size_t ret = ZSTD_decompress(out->data(), out->size(), src, src_size);
+  if (ZSTD_isError(ret)) {
+    if (err) *err = std::string("ZSTD_decompress: ") + ZSTD_getErrorName(ret);
+    return false;
+  }
+  if (ret != bound) {
+    if (err) *err = "SPZ_DECOMPRESS_ZSTD";
+    return false;
+  }
+  return true;
+}
+
+static bool DecompressNgspStreams(const uint8_t* data, size_t size,
+                                  const std::vector<TocEntry>& toc,
+                                  std::vector<uint8_t>* decomp, std::string* err) {
+  uint64_t total = 0;
+  for (const auto& entry : toc) {
+    total += entry.uncompressed_size;
+  }
+  decomp->clear();
+  decomp->reserve(static_cast<size_t>(total));
+
+#if defined(__EMSCRIPTEN__)
+  for (const auto& entry : toc) {
+    std::vector<uint8_t> buf;
+    if (!DecompressZstdStream(data + entry.compressed_offset,
+                               static_cast<size_t>(entry.compressed_size), &buf, err))
+      return false;
+    decomp->insert(decomp->end(), buf.begin(), buf.end());
+  }
+#else
+  const bool try_parallel =
+      std::thread::hardware_concurrency() >= 2 && toc.size() > 1;
+
+  if (try_parallel) {
+    std::vector<std::future<std::vector<uint8_t>>> futures;
+    try {
+      for (const auto& entry : toc) {
+        futures.push_back(std::async(std::launch::async,
+          [&entry, data]() -> std::vector<uint8_t> {
+            std::vector<uint8_t> buf;
+            std::string ignored;
+            DecompressZstdStream(data + entry.compressed_offset,
+                                  static_cast<size_t>(entry.compressed_size), &buf, &ignored);
+            return buf;
+          }));
+      }
+      for (auto& f : futures) {
+        auto result = f.get();
+        if (result.empty()) return false;
+        decomp->insert(decomp->end(), result.begin(), result.end());
+      }
+    } catch (const std::system_error&) {
+      goto fallback_serial;
+    }
+  } else {
+fallback_serial:
+    for (const auto& entry : toc) {
+      std::vector<uint8_t> buf;
+      if (!DecompressZstdStream(data + entry.compressed_offset,
+                                 static_cast<size_t>(entry.compressed_size), &buf, err))
+        return false;
+      decomp->insert(decomp->end(), buf.begin(), buf.end());
+    }
+  }
+#endif
+  return true;
+}
+
+static bool CompressZstdStream(const uint8_t* src, size_t src_size,
+                               std::vector<uint8_t>* out, std::string* err) {
+  const size_t bound = ZSTD_compressBound(src_size);
+  out->resize(bound);
+  const int compression_level = 12;
+  const size_t ret = ZSTD_compress(out->data(), out->size(), src, src_size, compression_level);
+  if (ZSTD_isError(ret)) {
+    if (err) *err = std::string("ZSTD_compress: ") + ZSTD_getErrorName(ret);
+    return false;
+  }
+  out->resize(ret);
+  return true;
+}
+
+static bool CompressNgspStreams(
+    const std::vector<std::pair<const uint8_t*, size_t>>& srcs,
+    std::vector<std::vector<uint8_t>>* chunks,
+    std::vector<uint64_t>* uncompressed_sizes,
+    std::string* err) {
+  chunks->clear();
+  chunks->resize(srcs.size());
+  uncompressed_sizes->clear();
+  uncompressed_sizes->resize(srcs.size());
+
+  for (size_t i = 0; i < srcs.size(); i++) {
+    uncompressed_sizes->at(i) = srcs[i].second;
+  }
+
+#if defined(__EMSCRIPTEN__)
+  for (size_t i = 0; i < srcs.size(); i++) {
+    if (!CompressZstdStream(srcs[i].first, srcs[i].second, &chunks->at(i), err))
+      return false;
+  }
+#else
+  const bool try_parallel =
+      std::thread::hardware_concurrency() >= 2 && srcs.size() > 1;
+
+  if (try_parallel) {
+    std::vector<std::future<bool>> futures;
+    try {
+      for (size_t i = 0; i < srcs.size(); i++) {
+        futures.push_back(std::async(std::launch::async,
+          [i, &srcs, chunks, err]() -> bool {
+            return CompressZstdStream(srcs[i].first, srcs[i].second,
+                                       &chunks->at(i), err);
+          }));
+      }
+      for (auto& f : futures) {
+        if (!f.get()) return false;
+      }
+    } catch (const std::system_error&) {
+      goto compress_fallback_serial;
+    }
+  } else {
+compress_fallback_serial:
+    for (size_t i = 0; i < srcs.size(); i++) {
+      if (!CompressZstdStream(srcs[i].first, srcs[i].second, &chunks->at(i), err))
+        return false;
+    }
+  }
+#endif
+  return true;
+}
+
+static bool BuildNgspBlob(uint32_t num_points, uint8_t sh_degree,
+                          uint8_t fractional_bits, uint8_t flags,
+                          const std::vector<uint8_t>& extension_data,
+                          const std::vector<std::vector<uint8_t>>& chunks,
+                          const std::vector<uint64_t>& uncompressed_sizes,
+                          std::vector<uint8_t>* out) {
+  const uint8_t num_streams = static_cast<uint8_t>(chunks.size());
+  const uint32_t toc_byte_offset = 32 + static_cast<uint32_t>(extension_data.size());
+
+  out->clear();
+  out->reserve(toc_byte_offset + static_cast<size_t>(num_streams) * 16 +
+               std::accumulate(chunks.begin(), chunks.end(), size_t(0),
+                               [](size_t s, const auto& c) { return s + c.size(); }));
+
+  const uint32_t magic = 0x5053474e;
+  const uint32_t version = 4;
+  out->insert(out->end(), reinterpret_cast<const uint8_t*>(&magic),
+              reinterpret_cast<const uint8_t*>(&magic) + sizeof(magic));
+  out->insert(out->end(), reinterpret_cast<const uint8_t*>(&version),
+              reinterpret_cast<const uint8_t*>(&version) + sizeof(version));
+  out->insert(out->end(), reinterpret_cast<const uint8_t*>(&num_points),
+              reinterpret_cast<const uint8_t*>(&num_points) + sizeof(num_points));
+  uint8_t sh_pad[4] = {sh_degree, fractional_bits, flags, num_streams};
+  out->insert(out->end(), sh_pad, sh_pad + 4);
+  out->insert(out->end(), reinterpret_cast<const uint8_t*>(&toc_byte_offset),
+              reinterpret_cast<const uint8_t*>(&toc_byte_offset) + sizeof(toc_byte_offset));
+  uint8_t reserved[12] = {};
+  out->insert(out->end(), reserved, reserved + 12);
+
+  out->insert(out->end(), extension_data.begin(), extension_data.end());
+
+  for (size_t i = 0; i < chunks.size(); i++) {
+    const uint64_t csize = chunks[i].size();
+    const uint64_t usize = uncompressed_sizes[i];
+    out->insert(out->end(), reinterpret_cast<const uint8_t*>(&csize),
+                reinterpret_cast<const uint8_t*>(&csize) + sizeof(csize));
+    out->insert(out->end(), reinterpret_cast<const uint8_t*>(&usize),
+                reinterpret_cast<const uint8_t*>(&usize) + sizeof(usize));
+  }
+
+  for (const auto& chunk : chunks) {
+    out->insert(out->end(), chunk.begin(), chunk.end());
+  }
+  return true;
 }
 
 }  // namespace

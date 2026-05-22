@@ -45,7 +45,61 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   target_link_options(spz_gatekeeper_zlib INTERFACE "-sUSE_ZLIB=1")
 else()
   find_package(ZLIB REQUIRED)
+  if(ZLIB_VERSION_STRING VERSION_LESS "1.3.1")
+    message(WARNING "System zlib ${ZLIB_VERSION_STRING} < 1.3.1. CI enforces 1.3.1 via runner pre-install.")
+  endif()
   target_link_libraries(spz_gatekeeper_zlib INTERFACE ZLIB::ZLIB)
+endif()
+
+# zstd: required for SPZ v4 ZSTD decompression (v2.0.2).
+# Locked at v1.5.6 with SHA256 verification per supply-chain defense policy.
+set(SPZ_GATEKEEPER_ZSTD_VERSION "1.5.6")
+set(SPZ_GATEKEEPER_ZSTD_SHA256
+  "8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd403c1")
+set(SPZ_GATEKEEPER_ZSTD_URL
+  "https://github.com/facebook/zstd/releases/download/v${SPZ_GATEKEEPER_ZSTD_VERSION}/zstd-${SPZ_GATEKEEPER_ZSTD_VERSION}.tar.gz")
+
+add_library(spz_gatekeeper_zstd INTERFACE)
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  include(FetchContent)
+  FetchContent_Declare(zstd URL ${SPZ_GATEKEEPER_ZSTD_URL}
+    URL_HASH SHA256=${SPZ_GATEKEEPER_ZSTD_SHA256})
+  set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+  set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+  set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(zstd)
+  if(TARGET libzstd_static)
+    target_link_libraries(spz_gatekeeper_zstd INTERFACE libzstd_static)
+  else()
+    target_link_libraries(spz_gatekeeper_zstd INTERFACE libzstd_shared)
+  endif()
+else()
+  find_package(zstd ${SPZ_GATEKEEPER_ZSTD_VERSION} QUIET)
+  if(zstd_FOUND AND TARGET zstd::libzstd_static)
+    target_link_libraries(spz_gatekeeper_zstd INTERFACE zstd::libzstd_static)
+  elseif(zstd_FOUND AND TARGET zstd::libzstd_shared)
+    target_link_libraries(spz_gatekeeper_zstd INTERFACE zstd::libzstd_shared)
+  else()
+    find_library(ZSTD_LIBRARY zstd REQUIRED)
+    find_path(ZSTD_INCLUDE_DIR zstd.h REQUIRED)
+    if(ZSTD_LIBRARY AND ZSTD_INCLUDE_DIR)
+      target_link_libraries(spz_gatekeeper_zstd INTERFACE ${ZSTD_LIBRARY})
+      target_include_directories(spz_gatekeeper_zstd INTERFACE ${ZSTD_INCLUDE_DIR})
+    else()
+      include(FetchContent)
+      FetchContent_Declare(zstd URL ${SPZ_GATEKEEPER_ZSTD_URL}
+        URL_HASH SHA256=${SPZ_GATEKEEPER_ZSTD_SHA256})
+      set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+      set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+      set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+      FetchContent_MakeAvailable(zstd)
+      if(TARGET libzstd_static)
+        target_link_libraries(spz_gatekeeper_zstd INTERFACE libzstd_static)
+      else()
+        target_link_libraries(spz_gatekeeper_zstd INTERFACE libzstd_shared)
+      endif()
+    endif()
+  endif()
 endif()
 
 set(SPZ_GATEKEEPER_CORE_SOURCES
@@ -68,6 +122,7 @@ target_include_directories(spz_gatekeeper_core
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/extensions>
 )
 target_link_libraries(spz_gatekeeper_core PUBLIC spz_gatekeeper_zlib)
+target_link_libraries(spz_gatekeeper_core PUBLIC spz_gatekeeper_zstd)
 
 target_compile_options(spz_gatekeeper_core PRIVATE
   $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>:
