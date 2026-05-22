@@ -867,6 +867,7 @@ v4 路径 (`InspectSpzBlobV4`) 对 `version > 4` 报 warning 但继续校验，�
 | T22  | 13 个测试文件 + extensions 引用更新                                                                    | `cpp/tests/*.cc` + `cpp/extensions/**/*.h`       | \~25 |
 | T22b | 版权头统一 (16 文件: 8 个 `PuJunhan`→SPZ Gatekeeper Contributors + 8 个补版权头)                           | 16 文件                                            | \~32 |
 | T22c | `SPZ_ADOBE_coordinate_system` 登记 (`0xADBE0003`, status=draft, validator 待后续)                     | `cpp/src/spz.cc`                                 | +12 |
+| T22d | 错误码前缀 `L2_` → `SPZ_<CATEGORY>_` 标准化 (17 个旧码 + 新码全部重命名)                                    | 7 文件                                               | \~50 |
 
 ### 7.4 版权头统一 (T22b)
 
@@ -893,6 +894,44 @@ v4 路径 (`InspectSpzBlobV4`) 对 `version > 4` 报 warning 但继续校验，�
 **变更量**: 16 文件，每文件 ±2 行。版权头修复涉及: 修正 `PuJunhan`→`SPZ Gatekeeper Contributors` (8个: `spz.cc`, `wasm_main.cc`, `tlv.cc`, `audit_summary.cc`, `report.cc`, `json_min.cc`, `report.h`, `audit_summary.h`) + 补全版权头 (8个: `main.cc`, `extension_spec_registry.cc`, `spz.h`, `tlv.h`, `extension_validator.h`, `extension_spec_registry.h`, `safe_orbit_camera_validator.h`, `validator_registry.h`)。
 
 **GitNexus 节奏**: R5 后 analyze（文件重命名 + 版权头变更 + 调用图符号变更）
+
+### 7.5 错误码前缀标准化 (T22d)
+
+**问题**: 当前所有错误码使用 `L2_` 前缀，是早期设计遗留（L1 的 glb 验证被拆分后留下的考古标记），对外部消费者无信息量。且所有码混在同一前缀下，无法按类别区分。
+
+**对齐标准**: 业界主流三段式分类前缀——`<NAMESPACE>_<CATEGORY>_<DESCRIPTION>`（如微服务 `ORD-API-001`，嵌入式 `ERR_DB_CONNECT_FAILED`）。
+
+**方案**: 全量 17 个旧码 + R1-R4 新增码统一映射到 `SPZ_<CATEGORY>_` 二级分类前缀：
+
+| 旧码 | 新码 | 类别 |
+|:--|:--|:--|
+| `L2_MAGIC` | `SPZ_FORMAT_MAGIC` | 格式校验 |
+| `L2_VERSION` | `SPZ_FORMAT_VERSION` | 格式校验 |
+| `L2_SH_DEGREE` | `SPZ_FORMAT_SH_DEGREE` | 格式校验 |
+| `L2_RESERVED` | `SPZ_FORMAT_RESERVED` | 格式校验 |
+| `L2_HEADER` | `SPZ_FORMAT_HEADER` | 格式校验 |
+| `L2_TRUNCATED` | `SPZ_FORMAT_TRUNCATED` | 格式校验 |
+| `L2_BASE_SIZE` | `SPZ_FORMAT_BASE_SIZE` | 格式校验 |
+| `L2_GZIP_DECOMPRESS` | `SPZ_DECOMPRESS_GZIP` | 压缩/解压 |
+| `L2_ZSTD_DECOMPRESS` (新增) | `SPZ_DECOMPRESS_ZSTD` | 压缩/解压 |
+| `L2_TOC_OFFSET` (新增) | `SPZ_TOC_OFFSET` | TOC |
+| `L2_TOC_TRUNCATED` (新增) | `SPZ_TOC_TRUNCATED` | TOC |
+| `L2_TOC_SIZE_MISMATCH` (新增) | `SPZ_TOC_SIZE_MISMATCH` | TOC |
+| `L2_NUM_STREAMS_ZERO` (新增) | `SPZ_TOC_NUM_STREAMS_ZERO` | TOC |
+| `L2_NUM_STREAMS_EXCEEDS_EXPECTED` (新增) | `SPZ_TOC_NUM_STREAMS_EXCEEDS` | TOC |
+| `L2_TLV_PARSE` | `SPZ_EXT_PARSE` | 扩展 |
+| `L2_EXT_VALIDATION` | `SPZ_EXT_VALIDATION` | 扩展 |
+| `L2_EXT_REGISTERED_NO_VALIDATOR` | `SPZ_EXT_REGISTERED_NO_VALIDATOR` | 扩展 |
+| `L2_EXT_UNREGISTERED_VALIDATOR` | `SPZ_EXT_UNREGISTERED_VALIDATOR` | 扩展 |
+| `L2_EXT_UNKNOWN` | `SPZ_EXT_UNKNOWN` | 扩展 |
+| `L2_UNDECLARED_TRAILER` | `SPZ_EXT_UNDECLARED_TRAILER` | 扩展 |
+| `L2_EXT_DECLARED_NO_TRAILER` | `SPZ_EXT_DECLARED_NO_DATA` | 扩展 |
+
+**影响面**: 7 个文件，32 处字符串引用（`spz.cc` 17 + `main.cc` 4 + 3 个测试文件 7 + `README.md/zh` 4）。
+
+**变更量**: 7 文件，\~50 行。
+
+> **为何并入 R5**: 去 `L2_` 前缀和去 `TLV` 命名同为早期设计遗留清理，在同一 R 阶段集中处理避免跨 R 字符串碎片化。
 
 ***
 
@@ -1034,6 +1073,7 @@ rm cpp/src/tlv.cc
 | **R5** | T15-T22 | TLV→ILV 全局重命名 (8 项)                                | 16 文件                 | \~130 | R4 定型后      |
 | <br /> | T22b    | 版权头统一 (16 文件)                                      | 16 文件                 |  \~32 | R5 同期       |
 | <br /> | T22c    | `SPZ_ADOBE_coordinate_system` 登记 (`0xADBE0003`)     | spz.cc                |  +12  | R5 同期       |
+| <br /> | T22d    | 错误码前缀 `L2_`→`SPZ_<CATEGORY>_` 标准化             | 7 文件                 |  \~50 | R5 同期       |
 | **R6** | T23     | v4 专项测试 (6 类)                                      | v4\_format\_test.cc   |  +200 | R1-R5 全     |
 | <br /> | T24     | `gen-fixture` v4 扩展                                | main.cc+wasm\_main.cc |  +50  | R1-R5       |
 | <br /> | T25     | WASM 生产标志 `-sASSERTIONS=0` + `-sNO_EXIT_RUNTIME=1` | CMakeLists.txt        |   +2  | —           |
@@ -1231,7 +1271,7 @@ Day 4: R6 完成 (WASM 验证 + 版本 bump + CHANGELOG)
 
 ***
 
-**计划版本**: 1.6  
+**计划版本**: 1.7  
 **审查状态**: 6 层交叉审查通过 (L1✅ L2✅ L3✅ L4✅ L5 N/A L6 待实施后同步)  
 **GitNexus 三项目基线**: Bridge 1768节点 · Gatekeeper 1368节点 · SPZ v3.0.0 767节点  
-**变更总量**: +848 行新增 / ~257 行修改 / 29 个任务 (T00-T28)
+**变更总量**: +898 行新增 / ~257 行修改 / 30 个任务 (T00-T28)
