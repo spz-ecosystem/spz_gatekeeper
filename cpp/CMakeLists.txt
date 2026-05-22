@@ -39,13 +39,68 @@ set(SPZ_GATEKEEPER_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
 set(SPZ_GATEKEEPER_VERSION_MINOR ${PROJECT_VERSION_MINOR})
 set(SPZ_GATEKEEPER_VERSION_PATCH ${PROJECT_VERSION_PATCH})
 
+# zlib v1.3.2 — modeled on SPZ v3.0.0 CMakeLists.txt L29-49 + PR#89.
+# Emscripten: use --use-port=zlib (bundled with emsdk).
+# Native: find_package first, fallback to FetchContent with SHA256.
+set(SPZ_GATEKEEPER_ZLIB_VERSION "1.3.2")
+set(SPZ_GATEKEEPER_ZLIB_SHA256
+  "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16")
+set(SPZ_GATEKEEPER_ZLIB_URL
+  "https://zlib.net/zlib-${SPZ_GATEKEEPER_ZLIB_VERSION}.tar.gz")
+
 add_library(spz_gatekeeper_zlib INTERFACE)
 if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   target_compile_options(spz_gatekeeper_zlib INTERFACE "-sUSE_ZLIB=1")
   target_link_options(spz_gatekeeper_zlib INTERFACE "-sUSE_ZLIB=1")
 else()
-  find_package(ZLIB REQUIRED)
-  target_link_libraries(spz_gatekeeper_zlib INTERFACE ZLIB::ZLIB)
+  find_package(ZLIB QUIET)
+  if(NOT ZLIB_FOUND)
+    message(STATUS "zlib not found, using FetchContent to download v${SPZ_GATEKEEPER_ZLIB_VERSION}")
+    include(FetchContent)
+    FetchContent_Declare(
+      zlib
+      URL ${SPZ_GATEKEEPER_ZLIB_URL}
+      URL_HASH SHA256=${SPZ_GATEKEEPER_ZLIB_SHA256}
+    )
+    FetchContent_MakeAvailable(zlib)
+    target_link_libraries(spz_gatekeeper_zlib INTERFACE zlib)
+  else()
+    target_link_libraries(spz_gatekeeper_zlib INTERFACE ZLIB::ZLIB)
+  endif()
+endif()
+
+# zstd: required for SPZ v4 ZSTD decompression (v2.0.2).
+# Locked at v1.5.6 with SHA256 verification per supply-chain defense policy.
+set(SPZ_GATEKEEPER_ZSTD_VERSION "1.5.6")
+set(SPZ_GATEKEEPER_ZSTD_SHA256
+  "8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd403c1")
+set(SPZ_GATEKEEPER_ZSTD_URL
+  "https://github.com/facebook/zstd/releases/download/v${SPZ_GATEKEEPER_ZSTD_VERSION}/zstd-${SPZ_GATEKEEPER_ZSTD_VERSION}.tar.gz")
+
+# zstd resolution (modeled on Niantic spz v3.0.0 CMakeLists.txt L52-75):
+# find_package first; if not found, FetchContent with SOURCE_SUBDIR build/cmake.
+# Unified alias zstd::zstd for all code paths.
+find_package(zstd QUIET)
+if(NOT zstd_FOUND)
+  message(STATUS "zstd not found, using FetchContent to download v${SPZ_GATEKEEPER_ZSTD_VERSION}")
+  include(FetchContent)
+  FetchContent_Declare(
+    zstd
+    URL ${SPZ_GATEKEEPER_ZSTD_URL}
+    URL_HASH SHA256=${SPZ_GATEKEEPER_ZSTD_SHA256}
+    SOURCE_SUBDIR build/cmake
+  )
+  set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+  set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+  set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(zstd)
+  add_library(zstd::zstd ALIAS libzstd_static)
+else()
+  if(TARGET zstd::libzstd_static)
+    add_library(zstd::zstd ALIAS zstd::libzstd_static)
+  elseif(NOT TARGET zstd::zstd)
+    add_library(zstd::zstd ALIAS zstd::libzstd_shared)
+  endif()
 endif()
 
 set(SPZ_GATEKEEPER_CORE_SOURCES
@@ -68,6 +123,7 @@ target_include_directories(spz_gatekeeper_core
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/extensions>
 )
 target_link_libraries(spz_gatekeeper_core PUBLIC spz_gatekeeper_zlib)
+target_link_libraries(spz_gatekeeper_core PUBLIC zstd::zstd)
 
 target_compile_options(spz_gatekeeper_core PRIVATE
   $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>:
@@ -177,7 +233,7 @@ if(BUILD_TESTING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   spz_gatekeeper_add_test(compat_check_test tests/compat_check_test.cc)
   spz_gatekeeper_add_test(audit_summary_test tests/audit_summary_test.cc)
   spz_gatekeeper_add_test(tlv_multi_record_test tests/tlv_multi_record_test.cc)
-  spz_gatekeeper_add_test(extension_integration_test tests/extension_integration_test.cc ZLIB::ZLIB)
+  spz_gatekeeper_add_test(extension_integration_test tests/extension_integration_test.cc)
   spz_gatekeeper_add_test(sh_quantization_test tests/sh_quantization_test.cc)
 
   if(SPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS)
