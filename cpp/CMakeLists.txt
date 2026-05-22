@@ -59,6 +59,18 @@ set(SPZ_GATEKEEPER_ZSTD_SHA256
 set(SPZ_GATEKEEPER_ZSTD_URL
   "https://github.com/facebook/zstd/releases/download/v${SPZ_GATEKEEPER_ZSTD_VERSION}/zstd-${SPZ_GATEKEEPER_ZSTD_VERSION}.tar.gz")
 
+# zstd v1.5.6: download source, compile .c files into core (no separate
+# library target → no MSBuild/emcc target propagation issues).
+FetchContent_Declare(zstd URL ${SPZ_GATEKEEPER_ZSTD_URL}
+  URL_HASH SHA256=${SPZ_GATEKEEPER_ZSTD_SHA256})
+FetchContent_GetProperties(zstd)
+if(NOT zstd_POPULATED)
+  FetchContent_Populate(zstd)
+endif()
+file(GLOB SPZ_GATEKEEPER_ZSTD_COMMON "${zstd_SOURCE_DIR}/lib/common/*.c")
+file(GLOB SPZ_GATEKEEPER_ZSTD_COMPRESS "${zstd_SOURCE_DIR}/lib/compress/*.c")
+file(GLOB SPZ_GATEKEEPER_ZSTD_DECOMPRESS "${zstd_SOURCE_DIR}/lib/decompress/*.c")
+
 set(SPZ_GATEKEEPER_CORE_SOURCES
   src/audit_summary.cc
   src/extension_spec_registry.cc
@@ -66,6 +78,9 @@ set(SPZ_GATEKEEPER_CORE_SOURCES
   src/report.cc
   src/spz.cc
   src/tlv.cc
+  ${SPZ_GATEKEEPER_ZSTD_COMMON}
+  ${SPZ_GATEKEEPER_ZSTD_COMPRESS}
+  ${SPZ_GATEKEEPER_ZSTD_DECOMPRESS}
 )
 
 # Core library: L2 SPZ validation engine.
@@ -77,45 +92,9 @@ target_include_directories(spz_gatekeeper_core
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/extensions>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/extensions>
+    $<BUILD_INTERFACE:${zstd_SOURCE_DIR}/lib>
 )
 target_link_libraries(spz_gatekeeper_core PUBLIC spz_gatekeeper_zlib)
-
-# zstd v1.5.6: link directly to core (no INTERFACE middleman).
-if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-  include(FetchContent)
-  FetchContent_Declare(zstd URL ${SPZ_GATEKEEPER_ZSTD_URL}
-    URL_HASH SHA256=${SPZ_GATEKEEPER_ZSTD_SHA256})
-  set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-  set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
-  set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-  FetchContent_MakeAvailable(zstd)
-  target_include_directories(spz_gatekeeper_core PUBLIC ${zstd_SOURCE_DIR}/lib)
-  target_link_libraries(spz_gatekeeper_core PUBLIC libzstd_static)
-else()
-  find_package(zstd ${SPZ_GATEKEEPER_ZSTD_VERSION} QUIET)
-  if(zstd_FOUND AND TARGET zstd::libzstd_static)
-    target_link_libraries(spz_gatekeeper_core PUBLIC zstd::libzstd_static)
-  elseif(zstd_FOUND AND TARGET zstd::libzstd_shared)
-    target_link_libraries(spz_gatekeeper_core PUBLIC zstd::libzstd_shared)
-  else()
-    find_library(ZSTD_LIBRARY zstd)
-    find_path(ZSTD_INCLUDE_DIR zstd.h)
-    if(ZSTD_LIBRARY AND ZSTD_INCLUDE_DIR)
-      target_link_libraries(spz_gatekeeper_core PUBLIC ${ZSTD_LIBRARY})
-      target_include_directories(spz_gatekeeper_core PUBLIC ${ZSTD_INCLUDE_DIR})
-    else()
-      include(FetchContent)
-      FetchContent_Declare(zstd URL ${SPZ_GATEKEEPER_ZSTD_URL}
-        URL_HASH SHA256=${SPZ_GATEKEEPER_ZSTD_SHA256})
-      set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-      set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
-      set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-      FetchContent_MakeAvailable(zstd)
-      target_include_directories(spz_gatekeeper_core PUBLIC ${zstd_SOURCE_DIR}/lib)
-      target_link_libraries(spz_gatekeeper_core PUBLIC libzstd_static)
-    endif()
-  endif()
-endif()
 
 target_compile_options(spz_gatekeeper_core PRIVATE
   $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>:
