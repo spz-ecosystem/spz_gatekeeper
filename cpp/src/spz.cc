@@ -15,10 +15,11 @@
 
 #include <algorithm>
 #include <cstring>
+#if !defined(__EMSCRIPTEN__)
 #include <future>
+#endif
 #include <limits>
 #include <numeric>
-#include <thread>
 
 namespace spz_gatekeeper {
 
@@ -296,6 +297,7 @@ static bool DecompressNgspStreams(const uint8_t* data, size_t size,
     decomp->insert(decomp->end(), buf.begin(), buf.end());
   }
 #else
+  bool fallback = false;
   const bool try_parallel =
       std::thread::hardware_concurrency() >= 2 && toc.size() > 1;
 
@@ -318,10 +320,10 @@ static bool DecompressNgspStreams(const uint8_t* data, size_t size,
         decomp->insert(decomp->end(), result.begin(), result.end());
       }
     } catch (const std::system_error&) {
-      goto fallback_serial;
+      fallback = true;
     }
-  } else {
-fallback_serial:
+  }
+  if (!try_parallel || fallback) {
     for (const auto& entry : toc) {
       std::vector<uint8_t> buf;
       if (!DecompressZstdStream(data + entry.compressed_offset,
@@ -368,6 +370,7 @@ static bool CompressNgspStreams(
       return false;
   }
 #else
+  bool fallback = false;
   const bool try_parallel =
       std::thread::hardware_concurrency() >= 2 && srcs.size() > 1;
 
@@ -385,10 +388,10 @@ static bool CompressNgspStreams(
         if (!f.get()) return false;
       }
     } catch (const std::system_error&) {
-      goto compress_fallback_serial;
+      fallback = true;
     }
-  } else {
-compress_fallback_serial:
+  }
+  if (!try_parallel || fallback) {
     for (size_t i = 0; i < srcs.size(); i++) {
       if (!CompressZstdStream(srcs[i].first, srcs[i].second, &chunks->at(i), err))
         return false;
