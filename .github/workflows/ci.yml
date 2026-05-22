@@ -39,12 +39,12 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y zlib1g-dev cmake g++
+          sudo apt-get install -y zlib1g-dev libzstd-dev cmake g++
 
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install zlib cmake
+          brew install zlib zstd cmake
 
       - name: Install vcpkg and dependencies (Windows)
         if: matrix.os == 'windows-latest'
@@ -59,7 +59,7 @@ jobs:
           } else {
             C:/vcpkg/bootstrap-vcpkg.bat -disableMetrics
           }
-          C:/vcpkg/vcpkg install zlib:x64-windows
+          C:/vcpkg/vcpkg install zlib:x64-windows zstd:x64-windows
 
       - name: Configure CMake (Windows)
         if: matrix.os == 'windows-latest'
@@ -85,7 +85,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=ON \
             -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix zlib)"
+            -DCMAKE_PREFIX_PATH="$(brew --prefix zlib);$(brew --prefix zstd)"
 
       - name: Build (with verbose output)
         run: |
@@ -230,7 +230,7 @@ jobs:
       - name: Build native fixture generator (Ubuntu)
         run: |
           sudo apt-get update
-          sudo apt-get install -y zlib1g-dev cmake g++
+          sudo apt-get install -y zlib1g-dev libzstd-dev cmake g++
           cmake -S cpp -B build-native \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
