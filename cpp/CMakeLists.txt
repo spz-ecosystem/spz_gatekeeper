@@ -59,51 +59,6 @@ set(SPZ_GATEKEEPER_ZSTD_SHA256
 set(SPZ_GATEKEEPER_ZSTD_URL
   "https://github.com/facebook/zstd/releases/download/v${SPZ_GATEKEEPER_ZSTD_VERSION}/zstd-${SPZ_GATEKEEPER_ZSTD_VERSION}.tar.gz")
 
-add_library(spz_gatekeeper_zstd INTERFACE)
-if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-  include(FetchContent)
-  FetchContent_Declare(zstd URL ${SPZ_GATEKEEPER_ZSTD_URL}
-    URL_HASH SHA256=${SPZ_GATEKEEPER_ZSTD_SHA256})
-  set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-  set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
-  set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-  FetchContent_MakeAvailable(zstd)
-  target_include_directories(spz_gatekeeper_zstd INTERFACE ${zstd_SOURCE_DIR}/lib)
-  find_library(ZSTD_BUILT_LIBRARY
-    NAMES zstd_static zstd
-    PATHS ${zstd_BINARY_DIR}/lib
-    NO_DEFAULT_PATH)
-  target_link_libraries(spz_gatekeeper_zstd INTERFACE ${ZSTD_BUILT_LIBRARY})
-else()
-  find_package(zstd ${SPZ_GATEKEEPER_ZSTD_VERSION} QUIET)
-  if(zstd_FOUND AND TARGET zstd::libzstd_static)
-    target_link_libraries(spz_gatekeeper_zstd INTERFACE zstd::libzstd_static)
-  elseif(zstd_FOUND AND TARGET zstd::libzstd_shared)
-    target_link_libraries(spz_gatekeeper_zstd INTERFACE zstd::libzstd_shared)
-  else()
-    find_library(ZSTD_LIBRARY zstd)
-    find_path(ZSTD_INCLUDE_DIR zstd.h)
-    if(ZSTD_LIBRARY AND ZSTD_INCLUDE_DIR)
-      target_link_libraries(spz_gatekeeper_zstd INTERFACE ${ZSTD_LIBRARY})
-      target_include_directories(spz_gatekeeper_zstd INTERFACE ${ZSTD_INCLUDE_DIR})
-    else()
-      include(FetchContent)
-      FetchContent_Declare(zstd URL ${SPZ_GATEKEEPER_ZSTD_URL}
-        URL_HASH SHA256=${SPZ_GATEKEEPER_ZSTD_SHA256})
-      set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-      set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
-      set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-      FetchContent_MakeAvailable(zstd)
-      target_include_directories(spz_gatekeeper_zstd INTERFACE ${zstd_SOURCE_DIR}/lib)
-      find_library(ZSTD_BUILT_LIBRARY
-        NAMES zstd_static zstd
-        PATHS ${zstd_BINARY_DIR}/lib
-        NO_DEFAULT_PATH)
-      target_link_libraries(spz_gatekeeper_zstd INTERFACE ${ZSTD_BUILT_LIBRARY})
-    endif()
-  endif()
-endif()
-
 set(SPZ_GATEKEEPER_CORE_SOURCES
   src/audit_summary.cc
   src/extension_spec_registry.cc
@@ -124,7 +79,43 @@ target_include_directories(spz_gatekeeper_core
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/extensions>
 )
 target_link_libraries(spz_gatekeeper_core PUBLIC spz_gatekeeper_zlib)
-target_link_libraries(spz_gatekeeper_core PUBLIC spz_gatekeeper_zstd)
+
+# zstd v1.5.6: link directly to core (no INTERFACE middleman).
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  include(FetchContent)
+  FetchContent_Declare(zstd URL ${SPZ_GATEKEEPER_ZSTD_URL}
+    URL_HASH SHA256=${SPZ_GATEKEEPER_ZSTD_SHA256})
+  set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+  set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+  set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(zstd)
+  target_include_directories(spz_gatekeeper_core PUBLIC ${zstd_SOURCE_DIR}/lib)
+  target_link_libraries(spz_gatekeeper_core PUBLIC libzstd_static)
+else()
+  find_package(zstd ${SPZ_GATEKEEPER_ZSTD_VERSION} QUIET)
+  if(zstd_FOUND AND TARGET zstd::libzstd_static)
+    target_link_libraries(spz_gatekeeper_core PUBLIC zstd::libzstd_static)
+  elseif(zstd_FOUND AND TARGET zstd::libzstd_shared)
+    target_link_libraries(spz_gatekeeper_core PUBLIC zstd::libzstd_shared)
+  else()
+    find_library(ZSTD_LIBRARY zstd)
+    find_path(ZSTD_INCLUDE_DIR zstd.h)
+    if(ZSTD_LIBRARY AND ZSTD_INCLUDE_DIR)
+      target_link_libraries(spz_gatekeeper_core PUBLIC ${ZSTD_LIBRARY})
+      target_include_directories(spz_gatekeeper_core PUBLIC ${ZSTD_INCLUDE_DIR})
+    else()
+      include(FetchContent)
+      FetchContent_Declare(zstd URL ${SPZ_GATEKEEPER_ZSTD_URL}
+        URL_HASH SHA256=${SPZ_GATEKEEPER_ZSTD_SHA256})
+      set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+      set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+      set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+      FetchContent_MakeAvailable(zstd)
+      target_include_directories(spz_gatekeeper_core PUBLIC ${zstd_SOURCE_DIR}/lib)
+      target_link_libraries(spz_gatekeeper_core PUBLIC libzstd_static)
+    endif()
+  endif()
+endif()
 
 target_compile_options(spz_gatekeeper_core PRIVATE
   $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>:
