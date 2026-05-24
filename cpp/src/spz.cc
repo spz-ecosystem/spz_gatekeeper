@@ -80,6 +80,52 @@ struct SpzHeader {
   std::uint8_t reserved = 0;
 };
 
+struct SpzHeaderV4 {
+  uint32_t magic          = 0;
+  uint32_t version        = 0;
+  uint32_t num_points     = 0;
+  uint8_t  sh_degree      = 0;
+  uint8_t  fractional_bits = 0;
+  uint8_t  flags          = 0;
+  uint8_t  num_streams    = 0;
+  uint32_t toc_byte_offset = 0;
+  uint8_t  reserved[12]   = {};
+};
+static_assert(sizeof(SpzHeaderV4) == 32, "SpzHeaderV4 must be 32 bytes");
+
+static bool ParseHeaderV4(const std::vector<uint8_t>& raw, SpzHeaderV4* h, std::string* err) {
+  if (raw.size() < 32) {
+    if (err) *err = "SPZ_FORMAT_TOO_SMALL";
+    return false;
+  }
+  std::memcpy(h, raw.data(), sizeof(SpzHeaderV4));
+  if (h->magic != 0x5053474e) {
+    if (err) *err = "SPZ_FORMAT_MAGIC";
+    return false;
+  }
+  if (h->version < 4) {
+    if (err) *err = "SPZ_FORMAT_VERSION";
+    return false;
+  }
+  if (h->num_points == 0) {
+    if (err) *err = "SPZ_FORMAT_NUM_POINTS";
+    return false;
+  }
+  if (h->sh_degree > 4) {
+    if (err) *err = "SPZ_FORMAT_SH_DEGREE";
+    return false;
+  }
+  for (int i = 0; i < 12; i++) {
+    if (h->reserved[i] != 0) {
+      if (err) *err = "SPZ_FORMAT_RESERVED";
+      return false;
+    }
+  }
+  return true;
+}
+
+
+
 static bool DecompressGzip(const std::vector<std::uint8_t>& in, std::vector<std::uint8_t>* out,
                            std::string* err) {
   out->clear();
