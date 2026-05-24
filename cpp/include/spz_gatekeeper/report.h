@@ -78,6 +78,9 @@ struct SpzL2Info {
   std::uint8_t sh_degree = 0;
   std::uint8_t flags = 0;
   std::uint8_t reserved = 0;
+  std::uint8_t  fractional_bits = 0;
+  std::uint8_t  num_streams = 0;
+  std::uint32_t toc_byte_offset = 0;
   std::size_t decompressed_size = 0;
   std::size_t base_payload_size = 0;
   std::size_t trailer_size = 0;

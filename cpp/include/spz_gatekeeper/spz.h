@@ -29,6 +29,7 @@ namespace spz_gatekeeper {
 
 // Official SPZ extension-presence flag.
 // When set (0x02), indicates that extension data is present after the base payload.
+static constexpr std::uint8_t kFlagAntialiased = 0x01;
 static constexpr std::uint8_t kFlagHasExtensions = 0x02;
 
 /// Options for SPZ blob inspection.
