@@ -38,7 +38,7 @@ struct SpzInspectOptions {
   bool strict = true;
 };
 
-/// Inspect a gzipped SPZ blob.
+/// Inspect a raw SPZ blob.
 ///
 /// Performs L2 validation:
 /// - Decompresses gzip data
@@ -46,11 +46,11 @@ struct SpzInspectOptions {
 /// - Validates base payload size
 /// - Parses TLV trailer if the official has-extensions flag is set
 ///
-/// @param gz_spz Compressed SPZ bytes (as stored in a .spz file)
+/// @param raw_spz Raw SPZ bytes (gzip or ZSTD compressed)
 /// @param opt Inspection options (strict/non-strict mode)
 /// @param where Location description for error reporting
 /// @return GateReport with validation results (errors, warnings, L2 info)
-GateReport InspectSpzBlob(const std::vector<std::uint8_t>& gz_spz, const SpzInspectOptions& opt,
+GateReport InspectSpzBlob(const std::vector<std::uint8_t>& raw_spz, const SpzInspectOptions& opt,
                           const std::string& where);
 
 /// Compute SH quantization epsilon for given bit-width.
