@@ -12,6 +12,10 @@ static std::uint32_t ReadU32LE(const std::vector<std::uint8_t>& data, std::size_
          (static_cast<std::uint32_t>(data[off + 3]) << 24);
 }
 
+// T09b (R3): ParseTlvTrailer ILV 字节解析核心逻辑被 ParseHeaderZoneExtensions (spz.cc)
+// 复用。二者共享 [u32 type][u32 byteLength][payload] 格式，仅入参（vector vs raw pointer）
+// 和边界条件（trailer offset vs header zone [32..tocByteOffset)）不同。
+// 全局 TLV→ILV 重命名统一在 R5 执行，本函数保持原名。
 TlvParseResult ParseTlvTrailer(const std::vector<std::uint8_t>& data, std::size_t offset) {
   TlvParseResult r;
   if (offset > data.size()) {

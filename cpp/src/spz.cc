@@ -124,7 +124,59 @@ static bool ParseHeaderV4(const std::vector<uint8_t>& raw, SpzHeaderV4* h, std::
   return true;
 }
 
+static TlvParseResult ParseHeaderZoneExtensions(const std::uint8_t* ext_data, std::size_t ext_size) {
+  TlvParseResult r;
 
+  if (ext_size == 0) {
+    r.ok = true;
+    return r;
+  }
+
+  if (ext_size < 8) {
+    r.ok = false;
+    r.error = "truncated header zone extension (less than 8 bytes)";
+    return r;
+  }
+
+  std::size_t off = 0;
+  while (off < ext_size) {
+    std::size_t remaining = ext_size - off;
+    if (remaining < 8) {
+      r.ok = false;
+      r.error = "truncated ILV header in header zone";
+      return r;
+    }
+
+    std::uint32_t type = static_cast<std::uint32_t>(ext_data[off]) |
+                         (static_cast<std::uint32_t>(ext_data[off + 1]) << 8) |
+                         (static_cast<std::uint32_t>(ext_data[off + 2]) << 16) |
+                         (static_cast<std::uint32_t>(ext_data[off + 3]) << 24);
+    std::uint32_t len = static_cast<std::uint32_t>(ext_data[off + 4]) |
+                        (static_cast<std::uint32_t>(ext_data[off + 5]) << 8) |
+                        (static_cast<std::uint32_t>(ext_data[off + 6]) << 16) |
+                        (static_cast<std::uint32_t>(ext_data[off + 7]) << 24);
+    std::size_t value_off = off + 8;
+
+    if (static_cast<std::size_t>(len) > ext_size - value_off) {
+      r.ok = false;
+      r.error = "truncated ILV value in header zone";
+      return r;
+    }
+
+    TlvRecord rec;
+    rec.type = type;
+    rec.length = len;
+    rec.offset = off;
+    rec.value_data = len == 0 ? nullptr : ext_data + value_off;
+
+    r.records.push_back(rec);
+
+    off = value_off + static_cast<std::size_t>(len);
+  }
+
+  r.ok = true;
+  return r;
+}
 
 static bool DecompressGzip(const std::vector<std::uint8_t>& in, std::vector<std::uint8_t>* out,
                            std::string* err) {
