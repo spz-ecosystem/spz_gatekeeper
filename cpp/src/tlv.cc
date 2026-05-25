@@ -12,10 +12,10 @@ static std::uint32_t ReadU32LE(const std::vector<std::uint8_t>& data, std::size_
          (static_cast<std::uint32_t>(data[off + 3]) << 24);
 }
 
-// T09b (R3): ParseTlvTrailer ILV 字节解析核心逻辑被 ParseHeaderZoneExtensions (spz.cc)
-// 复用。二者共享 [u32 type][u32 byteLength][payload] 格式，仅入参（vector vs raw pointer）
-// 和边界条件（trailer offset vs header zone [32..tocByteOffset)）不同。
-// 全局 TLV→ILV 重命名统一在 R5 执行，本函数保持原名。
+// T09b (R3): ParseTlvTrailer ILV byte parse core logic is reused by ParseHeaderZoneExtensions (spz.cc).
+// They share the [u32 type][u32 byteLength][payload] format; only input (vector vs raw pointer)
+// and boundary conditions (trailer offset vs header zone [32..tocByteOffset)) differ.
+// Global TLV->ILV rename deferred to R5; this function keeps its original name.
 TlvParseResult ParseTlvTrailer(const std::vector<std::uint8_t>& data, std::size_t offset) {
   TlvParseResult r;
   if (offset > data.size()) {
@@ -45,8 +45,61 @@ TlvParseResult ParseTlvTrailer(const std::vector<std::uint8_t>& data, std::size_
     rec.type = type;
     rec.length = len;
     rec.offset = off;
-    // 解析阶段只绑定原始 buffer，避免为每条 TLV 额外分配和 memcpy。
     rec.value_data = len == 0 ? nullptr : data.data() + value_off;
+
+    r.records.push_back(rec);
+
+    off = value_off + static_cast<std::size_t>(len);
+  }
+
+  r.ok = true;
+  return r;
+}
+
+TlvParseResult ParseHeaderZoneExtensions(const std::uint8_t* ext_data, std::size_t ext_size) {
+  TlvParseResult r;
+
+  if (ext_size == 0) {
+    r.ok = true;
+    return r;
+  }
+
+  if (ext_size < 8) {
+    r.ok = false;
+    r.error = "truncated header zone extension (less than 8 bytes)";
+    return r;
+  }
+
+  std::size_t off = 0;
+  while (off < ext_size) {
+    std::size_t remaining = ext_size - off;
+    if (remaining < 8) {
+      r.ok = false;
+      r.error = "truncated ILV header in header zone";
+      return r;
+    }
+
+    std::uint32_t type = static_cast<std::uint32_t>(ext_data[off]) |
+                         (static_cast<std::uint32_t>(ext_data[off + 1]) << 8) |
+                         (static_cast<std::uint32_t>(ext_data[off + 2]) << 16) |
+                         (static_cast<std::uint32_t>(ext_data[off + 3]) << 24);
+    std::uint32_t len = static_cast<std::uint32_t>(ext_data[off + 4]) |
+                        (static_cast<std::uint32_t>(ext_data[off + 5]) << 8) |
+                        (static_cast<std::uint32_t>(ext_data[off + 6]) << 16) |
+                        (static_cast<std::uint32_t>(ext_data[off + 7]) << 24);
+    std::size_t value_off = off + 8;
+
+    if (static_cast<std::size_t>(len) > ext_size - value_off) {
+      r.ok = false;
+      r.error = "truncated ILV value in header zone";
+      return r;
+    }
+
+    TlvRecord rec;
+    rec.type = type;
+    rec.length = len;
+    rec.offset = off;
+    rec.value_data = len == 0 ? nullptr : ext_data + value_off;
 
     r.records.push_back(rec);
 

@@ -27,6 +27,7 @@ namespace spz_gatekeeper {
 namespace {
 
 constexpr std::uint32_t kKnownMaxVersion = 4;
+// R4 semantic: v4 path treats version==4 as normal, version>4 gets warning but continues
 
 // Auto-register built-in Adobe validator for runtime check-spz paths.
 static RegisterValidator<AdobeSafeOrbitCameraValidator> kAutoRegisterAdobeValidator;
@@ -124,59 +125,7 @@ static bool ParseHeaderV4(const std::vector<uint8_t>& raw, SpzHeaderV4* h, std::
   return true;
 }
 
-static TlvParseResult ParseHeaderZoneExtensions(const std::uint8_t* ext_data, std::size_t ext_size) {
-  TlvParseResult r;
-
-  if (ext_size == 0) {
-    r.ok = true;
-    return r;
-  }
-
-  if (ext_size < 8) {
-    r.ok = false;
-    r.error = "truncated header zone extension (less than 8 bytes)";
-    return r;
-  }
-
-  std::size_t off = 0;
-  while (off < ext_size) {
-    std::size_t remaining = ext_size - off;
-    if (remaining < 8) {
-      r.ok = false;
-      r.error = "truncated ILV header in header zone";
-      return r;
-    }
-
-    std::uint32_t type = static_cast<std::uint32_t>(ext_data[off]) |
-                         (static_cast<std::uint32_t>(ext_data[off + 1]) << 8) |
-                         (static_cast<std::uint32_t>(ext_data[off + 2]) << 16) |
-                         (static_cast<std::uint32_t>(ext_data[off + 3]) << 24);
-    std::uint32_t len = static_cast<std::uint32_t>(ext_data[off + 4]) |
-                        (static_cast<std::uint32_t>(ext_data[off + 5]) << 8) |
-                        (static_cast<std::uint32_t>(ext_data[off + 6]) << 16) |
-                        (static_cast<std::uint32_t>(ext_data[off + 7]) << 24);
-    std::size_t value_off = off + 8;
-
-    if (static_cast<std::size_t>(len) > ext_size - value_off) {
-      r.ok = false;
-      r.error = "truncated ILV value in header zone";
-      return r;
-    }
-
-    TlvRecord rec;
-    rec.type = type;
-    rec.length = len;
-    rec.offset = off;
-    rec.value_data = len == 0 ? nullptr : ext_data + value_off;
-
-    r.records.push_back(rec);
-
-    off = value_off + static_cast<std::size_t>(len);
-  }
-
-  r.ok = true;
-  return r;
-}
+// R3 ParseHeaderZoneExtensions: see tlv.h for canonical implementation
 
 static bool DecompressGzip(const std::vector<std::uint8_t>& in, std::vector<std::uint8_t>* out,
                            std::string* err) {
@@ -258,6 +207,7 @@ static bool ParseHeader(const std::vector<std::uint8_t>& decomp, SpzHeader* h, s
   return true;
 }
 
+// Legacy only: v1-v3 gzip single-buffer layout (not used by v4 ZSTD path)
 static std::size_t ComputeBasePayloadSize(const SpzHeader& h, bool* ok) {
   *ok = false;
   if (h.version < 1) return 0;
@@ -548,14 +498,15 @@ static bool BuildNgspBlob(uint32_t num_points, uint8_t sh_degree,
 
 }  // namespace
 
-GateReport InspectSpzBlob(const std::vector<std::uint8_t>& gz_spz, const SpzInspectOptions& opt,
+
+static GateReport InspectSpzBlobLegacy(const std::vector<std::uint8_t>& raw_spz, const SpzInspectOptions& opt,
                           const std::string& where) {
   GateReport rep;
   rep.asset_path = where;
 
   std::vector<std::uint8_t> decomp;
   std::string derr;
-  if (!DecompressGzip(gz_spz, &decomp, &derr)) {
+  if (!DecompressGzip(raw_spz, &decomp, &derr)) {
     AddIssue(&rep, Severity::kError, "L2_GZIP_DECOMPRESS", "failed to gunzip SPZ blob", where);
     return rep;
   }
@@ -694,6 +645,84 @@ GateReport InspectSpzBlob(const std::vector<std::uint8_t>& gz_spz, const SpzInsp
     RebindTlvRecordViews(&rep.spz_l2->tlv_records, rep.spz_l2->tlv_storage,
                          rep.spz_l2->base_payload_size);
   }
+  return rep;
+}
+
+static GateReport InspectSpzBlobV4(const std::vector<std::uint8_t>& raw_spz,
+                                     const SpzInspectOptions& opt,
+                                     const std::string& where) {
+  GateReport rep;
+  rep.asset_path = where;
+
+  SpzHeaderV4 h;
+  std::string herr;
+  if (!ParseHeaderV4(raw_spz, &h, &herr)) {
+    AddIssue(&rep, Severity::kError, "L2_HEADER_V4", "failed to parse v4 header: " + herr, where);
+    return rep;
+  }
+
+  const uint32_t ext_size = (h.toc_byte_offset > 32) ? (h.toc_byte_offset - 32) : 0;
+  SpzL2Info info;
+  info.version = h.version;
+  info.num_points = h.num_points;
+  info.sh_degree = h.sh_degree;
+  info.flags = h.flags;
+  info.num_streams = h.num_streams;
+  info.toc_byte_offset = h.toc_byte_offset;
+
+  if (ext_size > 0) {
+    auto ext_parse = ParseHeaderZoneExtensions(raw_spz.data() + 32, ext_size);
+    if (!ext_parse.ok) {
+      AddIssue(&rep, Severity::kError, "L2_HEADER_ZONE", ext_parse.error, where);
+      return rep;
+    }
+    info.tlv_records = std::move(ext_parse.records);
+  }
+
+  auto toc = ParseToc(raw_spz.data(), raw_spz.size(), h.toc_byte_offset, h.num_streams);
+  if (!toc.ok) {
+    AddIssue(&rep, Severity::kError, "L2_TOC", toc.error, where);
+    return rep;
+  }
+
+  std::vector<uint8_t> ngsp_buf;
+  std::string nserr;
+  if (!DecompressNgspStreams(raw_spz.data(), raw_spz.size(), toc.entries, &ngsp_buf, &nserr)) {
+    AddIssue(&rep, Severity::kError, "L2_NGSP_DECOMPRESS", nserr, where);
+    return rep;
+  }
+  info.decompressed_size = ngsp_buf.size();
+
+  if (h.version > kKnownMaxVersion) {
+    AddIssue(&rep, Severity::kWarning, "L2_VERSION", "version newer than known max", where);
+  }
+
+  rep.spz_l2.emplace(std::move(info));
+  return rep;
+}
+
+GateReport InspectSpzBlob(const std::vector<std::uint8_t>& raw_spz, const SpzInspectOptions& opt,
+                          const std::string& where) {
+  GateReport rep;
+  rep.asset_path = where;
+
+  const size_t raw_size = raw_spz.size();
+  if (raw_size < 4) {
+    AddIssue(&rep, Severity::kError, "SPZ_FORMAT_TOO_SMALL", "SPZ data smaller than 4 bytes", where);
+    return rep;
+  }
+
+  const uint8_t* raw = raw_spz.data();
+
+  if (raw[0] == 0x4e && raw[1] == 0x47 && raw[2] == 0x53 && raw[3] == 0x50) {
+    return InspectSpzBlobV4(raw_spz, opt, where);
+  }
+
+  if (raw[0] == 0x1f && raw[1] == 0x8b) {
+    return InspectSpzBlobLegacy(raw_spz, opt, where);
+  }
+
+  AddIssue(&rep, Severity::kError, "SPZ_FORMAT_UNKNOWN", "unrecognized SPZ format magic bytes", where);
   return rep;
 }
 
