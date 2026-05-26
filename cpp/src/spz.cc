@@ -3,7 +3,7 @@
 
 #include "spz_gatekeeper/spz.h"
 
-#include "spz_gatekeeper/tlv.h"
+#include "spz_gatekeeper/ilv.h"
 #include "spz_gatekeeper/extension_spec_registry.h"
 #include "spz_gatekeeper/extension_validator.h"
 #include "spz_gatekeeper/validator_registry.h"
@@ -32,6 +32,7 @@ constexpr std::uint32_t kKnownMaxVersion = 4;
 // Auto-register built-in Adobe validator for runtime check-spz paths.
 static RegisterValidator<AdobeSafeOrbitCameraValidator> kAutoRegisterAdobeValidator;
 
+
 static bool RegisterBuiltInSpecs() {
   ExtensionSpec adobe_spec;
   adobe_spec.type = kAdobeSafeOrbitCameraType;
@@ -41,11 +42,26 @@ static bool RegisterBuiltInSpecs() {
   adobe_spec.extension_name = "Adobe Safe Orbit Camera";
   adobe_spec.category = "camera";
   adobe_spec.status = "stable";
-  adobe_spec.spec_url = "docs/Implementing_Custom_Extension.md";
+  adobe_spec.spec_url = "extensions/cc/safe-orbit-camera-adobe.h";
   adobe_spec.short_description = "Constrains orbit elevation and minimum radius for safer camera control.";
   adobe_spec.min_spz_version = 1;
   adobe_spec.requires_has_extensions_flag = true;
   ExtensionSpecRegistry::Instance().RegisterSpec(adobe_spec);
+  // T22c (R5): SPZ_ADOBE_coordinate_system registration (validator deferred to R6)
+  ExtensionSpec coord_spec;
+  coord_spec.type = 0xADBE0003u;
+  coord_spec.vendor_id = static_cast<std::uint16_t>(0xADBE0003u >> 16);
+  coord_spec.extension_id = static_cast<std::uint16_t>(0xADBE0003u & 0xFFFFu);
+  coord_spec.vendor_name = "Adobe";
+  coord_spec.extension_name = "Adobe Coordinate System";
+  coord_spec.category = "metadata";
+  coord_spec.status = "draft";
+  coord_spec.spec_url = "extensions/cc/coordinate-system-adobe.h";
+  coord_spec.short_description = "Records the coordinate system in which Gaussian data is physically stored.";
+  coord_spec.min_spz_version = 4;
+  coord_spec.requires_has_extensions_flag = true;
+  ExtensionSpecRegistry::Instance().RegisterSpec(coord_spec);
+
   return true;
 }
 
@@ -125,7 +141,7 @@ static bool ParseHeaderV4(const std::vector<uint8_t>& raw, SpzHeaderV4* h, std::
   return true;
 }
 
-// R3 ParseHeaderZoneExtensions: see tlv.h for canonical implementation
+// R3 ParseHeaderZoneExtensions: see ilv.h for canonical implementation
 
 static bool DecompressGzip(const std::vector<std::uint8_t>& in, std::vector<std::uint8_t>* out,
                            std::string* err) {
@@ -179,7 +195,7 @@ static int32_t DimForDegree(int32_t degree) {
   }
 }
 
-static void RebindTlvRecordViews(std::vector<TlvRecord>* records,
+static void RebindIlvRecordViews(std::vector<IlvRecord>* records,
                                  const std::vector<std::uint8_t>& trailer_storage,
                                  std::size_t trailer_offset) {
   for (auto& record : *records) {
@@ -507,7 +523,7 @@ static GateReport InspectSpzBlobLegacy(const std::vector<std::uint8_t>& raw_spz,
   std::vector<std::uint8_t> decomp;
   std::string derr;
   if (!DecompressGzip(raw_spz, &decomp, &derr)) {
-    AddIssue(&rep, Severity::kError, "L2_GZIP_DECOMPRESS", "failed to gunzip SPZ blob", where);
+    AddIssue(&rep, Severity::kError, "SPZ_DECOMPRESS_GZIP", "failed to gunzip SPZ blob", where);
     return rep;
   }
 
@@ -517,7 +533,7 @@ static GateReport InspectSpzBlobLegacy(const std::vector<std::uint8_t>& raw_spz,
   SpzHeader h;
   std::string herr;
   if (!ParseHeader(decomp, &h, &herr)) {
-    AddIssue(&rep, Severity::kError, "L2_HEADER", "failed to parse SPZ header", where);
+    AddIssue(&rep, Severity::kError, "SPZ_FORMAT_HEADER", "failed to parse SPZ header", where);
     rep.spz_l2 = info;
     return rep;
   }
@@ -530,31 +546,31 @@ static GateReport InspectSpzBlobLegacy(const std::vector<std::uint8_t>& raw_spz,
   info.reserved = h.reserved;
 
   if (h.magic != 0x5053474e) {
-    AddIssue(&rep, Severity::kError, "L2_MAGIC", "SPZ magic mismatch", where);
+    AddIssue(&rep, Severity::kError, "SPZ_FORMAT_MAGIC", "SPZ magic mismatch", where);
   }
   if (h.version < 1) {
-    AddIssue(&rep, Severity::kError, "L2_VERSION", "invalid version", where);
+    AddIssue(&rep, Severity::kError, "SPZ_FORMAT_VERSION", "invalid version", where);
   } else if (h.version > kKnownMaxVersion) {
-    AddIssue(&rep, Severity::kWarning, "L2_VERSION", "version newer than known max", where);
+    AddIssue(&rep, Severity::kWarning, "SPZ_FORMAT_VERSION", "version newer than known max", where);
   }
   if (h.sh_degree > 4) {
-    AddIssue(&rep, Severity::kError, "L2_SH_DEGREE", "unsupported SH degree", where);
+    AddIssue(&rep, Severity::kError, "SPZ_FORMAT_SH_DEGREE", "unsupported SH degree", where);
   }
   if (h.reserved != 0) {
-    AddIssue(&rep, Severity::kError, "L2_RESERVED", "reserved must be 0", where);
+    AddIssue(&rep, Severity::kError, "SPZ_FORMAT_RESERVED", "reserved must be 0", where);
   }
 
   bool base_ok = false;
   std::size_t base = ComputeBasePayloadSize(h, &base_ok);
   info.base_payload_size = base;
   if (!base_ok) {
-    AddIssue(&rep, Severity::kError, "L2_BASE_SIZE", "failed to compute base payload size", where);
+    AddIssue(&rep, Severity::kError, "SPZ_FORMAT_BASE_SIZE", "failed to compute base payload size", where);
     rep.spz_l2 = info;
     return rep;
   }
 
   if (decomp.size() < base) {
-    AddIssue(&rep, Severity::kError, "L2_TRUNCATED", "decompressed data shorter than base payload", where);
+    AddIssue(&rep, Severity::kError, "SPZ_FORMAT_TRUNCATED", "decompressed data shorter than base payload", where);
     rep.spz_l2 = info;
     return rep;
   }
@@ -566,27 +582,27 @@ static GateReport InspectSpzBlobLegacy(const std::vector<std::uint8_t>& raw_spz,
 
   if (declared) {
     if (trailer_size == 0) {
-      AddIssue(&rep, Severity::kError, "L2_EXT_DECLARED_NO_TRAILER", "has-extensions flag is set but no trailer bytes exist", where);
+      AddIssue(&rep, Severity::kError, "SPZ_EXT_DECLARED_NO_DATA", "has-extensions flag is set but no trailer bytes exist", where);
 
       rep.spz_l2 = info;
       return rep;
     }
-    auto tlv = ParseTlvTrailer(decomp, base);
+    auto tlv = ParseIlvRecords(decomp, base);
     if (!tlv.ok) {
       if (opt.strict) {
-        AddIssue(&rep, Severity::kError, "L2_TLV_PARSE", "trailer TLV parse failed: " + tlv.error, where);
+        AddIssue(&rep, Severity::kError, "SPZ_EXT_PARSE", "trailer ILV parse failed: " + tlv.error, where);
         rep.spz_l2 = info;
         return rep;
       }
-      AddIssue(&rep, Severity::kWarning, "L2_TLV_PARSE", "trailer TLV parse failed (ignored in non-strict): " + tlv.error, where);
+      AddIssue(&rep, Severity::kWarning, "SPZ_EXT_PARSE", "trailer ILV parse failed (ignored in non-strict): " + tlv.error, where);
     } else {
       // 只保留一份 trailer backing storage，避免旧实现那种逐条 TLV payload 拷贝。
-      info.tlv_storage.assign(decomp.begin() + static_cast<std::ptrdiff_t>(base), decomp.end());
-      RebindTlvRecordViews(&tlv.records, info.tlv_storage, base);
-      info.tlv_records = std::move(tlv.records);
+      info.ilv_storage.assign(decomp.begin() + static_cast<std::ptrdiff_t>(base), decomp.end());
+      RebindIlvRecordViews(&tlv.records, info.ilv_storage, base);
+      info.ilv_records = std::move(tlv.records);
 
       // 逐条校验扩展；这里直接复用 record 视图，不再回到原始 buffer 重新切片。
-      for (const auto& record : info.tlv_records) {
+      for (const auto& record : info.ilv_records) {
         const auto spec = ExtensionSpecRegistry::Instance().GetSpec(record.type);
         auto validator = ExtensionValidatorRegistry::Instance().GetValidator(record.type);
 
@@ -611,7 +627,7 @@ static GateReport InspectSpzBlobLegacy(const std::vector<std::uint8_t>& raw_spz,
           ext_report.validation_result = valid;
           ext_report.error_message = error;
           if (!valid) {
-            AddIssue(&rep, Severity::kError, "L2_EXT_VALIDATION",
+            AddIssue(&rep, Severity::kError, "SPZ_EXT_VALIDATION",
                      "Extension validation failed: " + ext_report.extension_name + " - " + error, where);
           }
         }
@@ -619,13 +635,13 @@ static GateReport InspectSpzBlobLegacy(const std::vector<std::uint8_t>& raw_spz,
         rep.extension_reports.push_back(ext_report);
 
         if (spec.has_value() && !validator) {
-          AddIssue(&rep, Severity::kWarning, "L2_EXT_REGISTERED_NO_VALIDATOR",
+          AddIssue(&rep, Severity::kWarning, "SPZ_EXT_REGISTERED_NO_VALIDATOR",
                    "Registered extension has no validator: " + ext_report.extension_name, where);
         } else if (!spec.has_value() && validator) {
-          AddIssue(&rep, Severity::kWarning, "L2_EXT_UNREGISTERED_VALIDATOR",
+          AddIssue(&rep, Severity::kWarning, "SPZ_EXT_UNREGISTERED_VALIDATOR",
                    "Validator exists for unregistered extension type: 0x" + ToHexString(record.type), where);
         } else if (!spec.has_value() && !validator) {
-          AddIssue(&rep, Severity::kWarning, "L2_EXT_UNKNOWN",
+          AddIssue(&rep, Severity::kWarning, "SPZ_EXT_UNKNOWN",
                    "Unknown extension type: 0x" + ToHexString(record.type) +
                    " (" + std::to_string(record.length) + " bytes)", where);
         }
@@ -635,14 +651,14 @@ static GateReport InspectSpzBlobLegacy(const std::vector<std::uint8_t>& raw_spz,
 
   } else {
     if (trailer_size > 0) {
-      AddIssue(&rep, Severity::kWarning, "L2_UNDECLARED_TRAILER", "trailing bytes exist but has-extensions flag is not set", where);
+      AddIssue(&rep, Severity::kWarning, "SPZ_EXT_UNDECLARED_TRAILER", "trailing bytes exist but has-extensions flag is not set", where);
 
     }
   }
 
   rep.spz_l2.emplace(std::move(info));
-  if (!rep.spz_l2->tlv_storage.empty()) {
-    RebindTlvRecordViews(&rep.spz_l2->tlv_records, rep.spz_l2->tlv_storage,
+  if (!rep.spz_l2->ilv_storage.empty()) {
+    RebindIlvRecordViews(&rep.spz_l2->ilv_records, rep.spz_l2->ilv_storage,
                          rep.spz_l2->base_payload_size);
   }
   return rep;
@@ -657,7 +673,7 @@ static GateReport InspectSpzBlobV4(const std::vector<std::uint8_t>& raw_spz,
   SpzHeaderV4 h;
   std::string herr;
   if (!ParseHeaderV4(raw_spz, &h, &herr)) {
-    AddIssue(&rep, Severity::kError, "L2_HEADER_V4", "failed to parse v4 header: " + herr, where);
+    AddIssue(&rep, Severity::kError, "SPZ_FORMAT_HEADER", "failed to parse v4 header: " + herr, where);
     return rep;
   }
 
@@ -673,28 +689,28 @@ static GateReport InspectSpzBlobV4(const std::vector<std::uint8_t>& raw_spz,
   if (ext_size > 0) {
     auto ext_parse = ParseHeaderZoneExtensions(raw_spz.data() + 32, ext_size);
     if (!ext_parse.ok) {
-      AddIssue(&rep, Severity::kError, "L2_HEADER_ZONE", ext_parse.error, where);
+      AddIssue(&rep, Severity::kError, "SPZ_FORMAT_EXT_ZONE", ext_parse.error, where);
       return rep;
     }
-    info.tlv_records = std::move(ext_parse.records);
+    info.ilv_records = std::move(ext_parse.records);
   }
 
   auto toc = ParseToc(raw_spz.data(), raw_spz.size(), h.toc_byte_offset, h.num_streams);
   if (!toc.ok) {
-    AddIssue(&rep, Severity::kError, "L2_TOC", toc.error, where);
+    AddIssue(&rep, Severity::kError, "SPZ_TOC_PARSE", toc.error, where);
     return rep;
   }
 
   std::vector<uint8_t> ngsp_buf;
   std::string nserr;
   if (!DecompressNgspStreams(raw_spz.data(), raw_spz.size(), toc.entries, &ngsp_buf, &nserr)) {
-    AddIssue(&rep, Severity::kError, "L2_NGSP_DECOMPRESS", nserr, where);
+    AddIssue(&rep, Severity::kError, "SPZ_NGSP_DECOMPRESS", nserr, where);
     return rep;
   }
   info.decompressed_size = ngsp_buf.size();
 
   if (h.version > kKnownMaxVersion) {
-    AddIssue(&rep, Severity::kWarning, "L2_VERSION", "version newer than known max", where);
+    AddIssue(&rep, Severity::kWarning, "SPZ_FORMAT_VERSION", "version newer than known max", where);
   }
 
   rep.spz_l2.emplace(std::move(info));

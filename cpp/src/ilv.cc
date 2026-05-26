@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 PuJunhan
 
-#include "spz_gatekeeper/tlv.h"
+#include "spz_gatekeeper/ilv.h"
 
 namespace spz_gatekeeper {
 
@@ -12,12 +12,12 @@ static std::uint32_t ReadU32LE(const std::vector<std::uint8_t>& data, std::size_
          (static_cast<std::uint32_t>(data[off + 3]) << 24);
 }
 
-// T09b (R3): ParseTlvTrailer ILV byte parse core logic is reused by ParseHeaderZoneExtensions (spz.cc).
+// T09b (R3): ParseIlvRecords ILV byte parse core logic is reused by ParseHeaderZoneExtensions (spz.cc).
 // They share the [u32 type][u32 byteLength][payload] format; only input (vector vs raw pointer)
 // and boundary conditions (trailer offset vs header zone [32..tocByteOffset)) differ.
 // Global TLV->ILV rename deferred to R5; this function keeps its original name.
-TlvParseResult ParseTlvTrailer(const std::vector<std::uint8_t>& data, std::size_t offset) {
-  TlvParseResult r;
+IlvParseResult ParseIlvRecords(const std::vector<std::uint8_t>& data, std::size_t offset) {
+  IlvParseResult r;
   if (offset > data.size()) {
     r.ok = false;
     r.error = "offset out of range";
@@ -41,7 +41,7 @@ TlvParseResult ParseTlvTrailer(const std::vector<std::uint8_t>& data, std::size_
       return r;
     }
 
-    TlvRecord rec;
+    IlvRecord rec;
     rec.type = type;
     rec.length = len;
     rec.offset = off;
@@ -56,8 +56,8 @@ TlvParseResult ParseTlvTrailer(const std::vector<std::uint8_t>& data, std::size_
   return r;
 }
 
-TlvParseResult ParseHeaderZoneExtensions(const std::uint8_t* ext_data, std::size_t ext_size) {
-  TlvParseResult r;
+IlvParseResult ParseHeaderZoneExtensions(const std::uint8_t* ext_data, std::size_t ext_size) {
+  IlvParseResult r;
 
   if (ext_size == 0) {
     r.ok = true;
@@ -95,7 +95,7 @@ TlvParseResult ParseHeaderZoneExtensions(const std::uint8_t* ext_data, std::size
       return r;
     }
 
-    TlvRecord rec;
+    IlvRecord rec;
     rec.type = type;
     rec.length = len;
     rec.offset = off;

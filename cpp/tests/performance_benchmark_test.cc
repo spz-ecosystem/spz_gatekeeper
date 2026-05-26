@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "spz_gatekeeper/extension_validator.h"
-#include "spz_gatekeeper/tlv.h"
+#include "spz_gatekeeper/ilv.h"
 #include "spz_gatekeeper/validator_registry.h"
 
 namespace {
@@ -51,7 +51,7 @@ int main() {
   const int parse_iters = 1000;
   auto t0 = clock::now();
   for (int i = 0; i < parse_iters; ++i) {
-    auto r = spz_gatekeeper::ParseTlvTrailer(tlv_data, 0);
+    auto r = spz_gatekeeper::ParseIlvRecords(tlv_data, 0);
     if (!r.ok || r.records.size() != 100u) {
       std::cerr << "TLV parse failed" << std::endl;
       return EXIT_FAILURE;

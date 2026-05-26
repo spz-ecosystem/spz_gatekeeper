@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2026 SPZ Gatekeeper Contributors
+# Copyright (c) 2026 PuJunhan
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -109,7 +109,7 @@ set(SPZ_GATEKEEPER_CORE_SOURCES
   src/json_min.cc
   src/report.cc
   src/spz.cc
-  src/tlv.cc
+  src/ilv.cc
 )
 
 # Core library: L2 SPZ validation engine.
@@ -232,7 +232,7 @@ if(BUILD_TESTING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   spz_gatekeeper_add_test(gen_fixture_test tests/gen_fixture_test.cc)
   spz_gatekeeper_add_test(compat_check_test tests/compat_check_test.cc)
   spz_gatekeeper_add_test(audit_summary_test tests/audit_summary_test.cc)
-  spz_gatekeeper_add_test(tlv_multi_record_test tests/tlv_multi_record_test.cc)
+  spz_gatekeeper_add_test(ilv_multi_record_test tests/ilv_multi_record_test.cc)
   spz_gatekeeper_add_test(extension_integration_test tests/extension_integration_test.cc)
   spz_gatekeeper_add_test(sh_quantization_test tests/sh_quantization_test.cc)
 

@@ -23,7 +23,7 @@
 #include <iostream>
 #include <vector>
 
-#include "spz_gatekeeper/tlv.h"
+#include "spz_gatekeeper/ilv.h"
 
 namespace {
 
@@ -78,7 +78,7 @@ void write_u32_le(uint32_t value, std::vector<uint8_t>& out) {
 }
 
 // Helper: Create TLV record
-std::vector<uint8_t> create_tlv_record(uint32_t type, const std::vector<uint8_t>& value) {
+std::vector<uint8_t> create_ilv_record(uint32_t type, const std::vector<uint8_t>& value) {
   std::vector<uint8_t> record;
   write_u32_le(type, record);
   write_u32_le(static_cast<uint32_t>(value.size()), record);
@@ -88,16 +88,16 @@ std::vector<uint8_t> create_tlv_record(uint32_t type, const std::vector<uint8_t>
 
 TEST(test_empty_trailer) {
   std::vector<uint8_t> empty_data;
-  auto result = spz_gatekeeper::ParseTlvTrailer(empty_data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(empty_data, 0);
   
   ASSERT_TRUE(result.ok);
   ASSERT_EQ(result.records.size(), 0u);
 }
 
 TEST(test_single_record) {
-  std::vector<uint8_t> data = create_tlv_record(0x12340001u, {0x01, 0x02, 0x03});
+  std::vector<uint8_t> data = create_ilv_record(0x12340001u, {0x01, 0x02, 0x03});
   
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   ASSERT_TRUE(result.ok);
   ASSERT_EQ(result.records.size(), 1u);
@@ -111,18 +111,18 @@ TEST(test_multiple_records) {
   std::vector<uint8_t> data;
   
   // Record 1: type=0x0001, value={0xAA}
-  auto rec1 = create_tlv_record(0x00010001u, {0xAA});
+  auto rec1 = create_ilv_record(0x00010001u, {0xAA});
   data.insert(data.end(), rec1.begin(), rec1.end());
   
   // Record 2: type=0x0002, value={0xBB, 0xCC}
-  auto rec2 = create_tlv_record(0x00020002u, {0xBB, 0xCC});
+  auto rec2 = create_ilv_record(0x00020002u, {0xBB, 0xCC});
   data.insert(data.end(), rec2.begin(), rec2.end());
   
   // Record 3: type=0x0003, value={0xDD, 0xEE, 0xFF}
-  auto rec3 = create_tlv_record(0x00030003u, {0xDD, 0xEE, 0xFF});
+  auto rec3 = create_ilv_record(0x00030003u, {0xDD, 0xEE, 0xFF});
   data.insert(data.end(), rec3.begin(), rec3.end());
   
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   ASSERT_TRUE(result.ok);
   ASSERT_EQ(result.records.size(), 3u);
@@ -148,11 +148,11 @@ TEST(test_large_number_of_records) {
   
   // Create 100 records
   for (uint32_t i = 0; i < 100; ++i) {
-    auto rec = create_tlv_record(0x00010000u + i, {static_cast<uint8_t>(i)});
+    auto rec = create_ilv_record(0x00010000u + i, {static_cast<uint8_t>(i)});
     data.insert(data.end(), rec.begin(), rec.end());
   }
   
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   ASSERT_TRUE(result.ok);
   ASSERT_EQ(result.records.size(), 100u);
@@ -163,9 +163,9 @@ TEST(test_large_number_of_records) {
 }
 
 TEST(test_zero_length_record) {
-  std::vector<uint8_t> data = create_tlv_record(0x12340001u, {});
+  std::vector<uint8_t> data = create_ilv_record(0x12340001u, {});
   
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   ASSERT_TRUE(result.ok);
   ASSERT_EQ(result.records.size(), 1u);
@@ -176,9 +176,9 @@ TEST(test_zero_length_record) {
 
 TEST(test_large_payload_record) {
   std::vector<uint8_t> large_value(1000, 0xAB);  // 1000 bytes of 0xAB
-  std::vector<uint8_t> data = create_tlv_record(0x12340001u, large_value);
+  std::vector<uint8_t> data = create_ilv_record(0x12340001u, large_value);
 
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
 
   ASSERT_TRUE(result.ok);
   ASSERT_EQ(result.records.size(), 1u);
@@ -193,9 +193,9 @@ TEST(test_large_payload_record) {
 }
 
 TEST(test_copy_value_on_demand) {
-  std::vector<uint8_t> data = create_tlv_record(0x12340001u, {0x10, 0x20, 0x30});
+  std::vector<uint8_t> data = create_ilv_record(0x12340001u, {0x10, 0x20, 0x30});
 
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
 
   ASSERT_TRUE(result.ok);
   ASSERT_EQ(result.records.size(), 1u);
@@ -217,7 +217,7 @@ TEST(test_little_endian_byte_order) {
     0xAA, 0xBB, 0xCC
   };
   
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   ASSERT_TRUE(result.ok);
   ASSERT_EQ(result.records.size(), 1u);
@@ -229,19 +229,19 @@ TEST(test_skip_unknown_type_via_length) {
   std::vector<uint8_t> data;
   
   // Known type (we'll check this)
-  auto rec1 = create_tlv_record(0x00010001u, {0xAA});
+  auto rec1 = create_ilv_record(0x00010001u, {0xAA});
   data.insert(data.end(), rec1.begin(), rec1.end());
   
   // Unknown type with large payload (should be skipped)
   std::vector<uint8_t> unknown_payload(100, 0xFF);
-  auto rec2 = create_tlv_record(0xFFFF0001u, unknown_payload);
+  auto rec2 = create_ilv_record(0xFFFF0001u, unknown_payload);
   data.insert(data.end(), rec2.begin(), rec2.end());
   
   // Another known type
-  auto rec3 = create_tlv_record(0x00010002u, {0xBB});
+  auto rec3 = create_ilv_record(0x00010002u, {0xBB});
   data.insert(data.end(), rec3.begin(), rec3.end());
   
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   ASSERT_TRUE(result.ok);
   ASSERT_EQ(result.records.size(), 3u);  // All 3 records parsed
@@ -257,7 +257,7 @@ TEST(test_truncated_record_insufficient_header) {
   // Only type field (4 bytes), missing length
   std::vector<uint8_t> data = {0x01, 0x00, 0x00, 0x00};
   
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   // Should fail or return partial result
   ASSERT_FALSE(result.ok);
@@ -272,7 +272,7 @@ TEST(test_truncated_record_insufficient_value) {
     0xAA, 0xBB               // Only 2 bytes instead of 16
   };
   
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   ASSERT_FALSE(result.ok);
   ASSERT_TRUE(result.error.find("insufficient") != std::string::npos ||
@@ -281,9 +281,9 @@ TEST(test_truncated_record_insufficient_value) {
 
 TEST(test_backward_compatibility_single_record) {
   // Single record should work as before
-  std::vector<uint8_t> data = create_tlv_record(0x12340001u, {0x01, 0x02, 0x03, 0x04});
+  std::vector<uint8_t> data = create_ilv_record(0x12340001u, {0x01, 0x02, 0x03, 0x04});
   
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   ASSERT_TRUE(result.ok);
   ASSERT_EQ(result.records.size(), 1u);
@@ -312,7 +312,7 @@ TEST(test_offset_calculation_accuracy) {
   data.push_back(0xEE);
   data.push_back(0xFF);
   
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   ASSERT_TRUE(result.ok);
   ASSERT_EQ(result.records.size(), 3u);

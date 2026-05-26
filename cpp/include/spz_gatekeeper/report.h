@@ -55,7 +55,7 @@ struct ByteView {
   const std::uint8_t* end() const { return data_ptr == nullptr ? nullptr : data_ptr + size_bytes; }
 };
 
-struct TlvRecord {
+struct IlvRecord {
   std::uint32_t type = 0;
   std::uint32_t length = 0;
   std::size_t offset = 0;
@@ -84,9 +84,9 @@ struct SpzL2Info {
   std::size_t decompressed_size = 0;
   std::size_t base_payload_size = 0;
   std::size_t trailer_size = 0;
-  std::vector<TlvRecord> tlv_records;
+  std::vector<IlvRecord> ilv_records;
   // 返回报告后需要继续读取 TLV payload 时，由这份 trailer backing storage 保证视图有效。
-  std::vector<std::uint8_t> tlv_storage;
+  std::vector<std::uint8_t> ilv_storage;
 };
 
 struct ExtensionReport {

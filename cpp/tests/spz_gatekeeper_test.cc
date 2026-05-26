@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "spz_gatekeeper/spz.h"
-#include "spz_gatekeeper/tlv.h"
+#include "spz_gatekeeper/ilv.h"
 
 namespace {
 
@@ -73,7 +73,7 @@ int test_tlv_parsing() {
     'd', 'e'                 // value
   };
   
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   if (!result.ok) {
     std::cout << "FAILED (parse error: " << result.error << ")" << std::endl;
@@ -104,7 +104,7 @@ int test_tlv_empty() {
   std::cout << "Test: Empty TLV data... ";
   
   std::vector<std::uint8_t> data;
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   if (!result.ok || !result.records.empty()) {
     std::cout << "FAILED (should handle empty data)" << std::endl;
@@ -124,7 +124,7 @@ int test_tlv_truncated() {
     0x03, 0x00, 0x00, 0x00   // length = 3 (but no value)
   };
   
-  auto result = spz_gatekeeper::ParseTlvTrailer(data, 0);
+  auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
   
   if (result.ok) {
     std::cout << "FAILED (should fail on truncated data)" << std::endl;

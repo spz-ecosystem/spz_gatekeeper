@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 PuJunhan
 /**
  * SPZ Gatekeeper - SPZ Format Legality Checker
  *
@@ -233,7 +235,7 @@ static int SelfTest() {
     SpzInspectOptions opt;
     GateReport rep = InspectSpzBlob(gz.value(), opt, "self-test:noext:notrailer");
     if (rep.HasErrors()) return 11;
-    if (HasIssueCode(rep, "L2_UNDECLARED_TRAILER")) return 12;
+    if (HasIssueCode(rep, "SPZ_EXT_UNDECLARED_TRAILER")) return 12;
   }
 
   {
@@ -242,7 +244,7 @@ static int SelfTest() {
     SpzInspectOptions opt;
     GateReport rep = InspectSpzBlob(gz.value(), opt, "self-test:noext:trailer");
     if (rep.HasErrors()) return 21;
-    if (!HasIssueCode(rep, "L2_UNDECLARED_TRAILER")) return 22;
+    if (!HasIssueCode(rep, "SPZ_EXT_UNDECLARED_TRAILER")) return 22;
   }
 
   {
@@ -252,7 +254,7 @@ static int SelfTest() {
     GateReport rep = InspectSpzBlob(gz.value(), opt, "self-test:ext:trailer");
     if (rep.HasErrors()) return 31;
     if (!rep.spz_l2.has_value()) return 32;
-    if (rep.spz_l2->tlv_records.size() != 1) return 33;
+    if (rep.spz_l2->ilv_records.size() != 1) return 33;
   }
 
   {
@@ -261,7 +263,7 @@ static int SelfTest() {
     SpzInspectOptions opt;
     GateReport rep = InspectSpzBlob(gz.value(), opt, "self-test:ext:notrailer");
     if (!rep.HasErrors()) return 41;
-    if (!HasIssueCode(rep, "L2_EXT_DECLARED_NO_TRAILER")) return 42;
+    if (!HasIssueCode(rep, "SPZ_EXT_DECLARED_NO_DATA")) return 42;
   }
 
   {
@@ -270,7 +272,7 @@ static int SelfTest() {
     SpzInspectOptions opt;
     GateReport rep = InspectSpzBlob(gz.value(), opt, "self-test:v4");
     if (rep.HasErrors()) return 51;
-    if (HasIssueCode(rep, "L2_VERSION")) return 52;
+    if (HasIssueCode(rep, "SPZ_FORMAT_VERSION")) return 52;
   }
 
 
@@ -1593,10 +1595,10 @@ int main(int argc, char** argv) {
         oss << "\"asset_path\":\"" << JsonEscape(path) << "\"";
         oss << ",\"flags\":" << static_cast<unsigned>(rep.spz_l2->flags);
         oss << ",\"trailer_size\":" << rep.spz_l2->trailer_size;
-        oss << ",\"tlv_records\":[";
-        for (std::size_t i = 0; i < rep.spz_l2->tlv_records.size(); ++i) {
+        oss << ",\"ilv_records\":[";
+        for (std::size_t i = 0; i < rep.spz_l2->ilv_records.size(); ++i) {
           if (i) oss << ",";
-          const auto& r = rep.spz_l2->tlv_records[i];
+          const auto& r = rep.spz_l2->ilv_records[i];
           oss << "{";
           oss << "\"type\":" << r.type;
           oss << ",\"length\":" << r.length;
@@ -1618,10 +1620,10 @@ int main(int argc, char** argv) {
 
     const auto& l2 = rep.spz_l2.value();
     std::cout << "flags=" << static_cast<unsigned>(l2.flags) << " trailer_size=" << l2.trailer_size << "\n";
-    if (l2.tlv_records.empty()) {
+    if (l2.ilv_records.empty()) {
       std::cout << "(no TLV records)\n";
     } else {
-      for (const auto& r : l2.tlv_records) {
+      for (const auto& r : l2.ilv_records) {
         std::cout << "type=" << r.type << " len=" << r.length << " off=" << r.offset << "\n";
       }
     }
