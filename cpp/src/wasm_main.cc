@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2026 SPZ Gatekeeper Contributors
+// Copyright (c) 2026 PuJunhan
 
 #include "spz_gatekeeper/audit_summary.h"
 #include "spz_gatekeeper/extension_spec_registry.h"

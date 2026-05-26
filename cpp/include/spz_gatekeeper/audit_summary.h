@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2026 SPZ Gatekeeper Contributors
+// Copyright (c) 2026 PuJunhan
 
 #pragma once
 

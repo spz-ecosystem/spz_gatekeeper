@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2026 SPZ Gatekeeper Contributors
+// Copyright (c) 2026 PuJunhan
 
 #include "spz_gatekeeper/spz.h"
 
@@ -42,7 +42,7 @@ static bool RegisterBuiltInSpecs() {
   adobe_spec.extension_name = "Adobe Safe Orbit Camera";
   adobe_spec.category = "camera";
   adobe_spec.status = "stable";
-  adobe_spec.spec_url = "docs/Implementing_Custom_Extension.md";
+  adobe_spec.spec_url = "extensions/cc/safe-orbit-camera-adobe.h";
   adobe_spec.short_description = "Constrains orbit elevation and minimum radius for safer camera control.";
   adobe_spec.min_spz_version = 1;
   adobe_spec.requires_has_extensions_flag = true;
