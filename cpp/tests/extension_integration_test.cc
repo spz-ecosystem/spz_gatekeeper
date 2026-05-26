@@ -212,11 +212,11 @@ TEST(test_spz_valid_adobe_extension) {
   ASSERT_TRUE(report.extension_reports[0].error_message.empty());
 
   ASSERT_TRUE(report.spz_l2.has_value());
-  ASSERT_EQ(report.spz_l2->tlv_records.size(), 1u);
-  auto payload_view = report.spz_l2->tlv_records[0].ValueView();
+  ASSERT_EQ(report.spz_l2->ilv_records.size(), 1u);
+  auto payload_view = report.spz_l2->ilv_records[0].ValueView();
   ASSERT_EQ(payload_view.size(), adobe_payload.size());
   ASSERT_TRUE(std::memcmp(payload_view.data(), adobe_payload.data(), adobe_payload.size()) == 0);
-  auto payload_copy = report.spz_l2->tlv_records[0].CopyValue();
+  auto payload_copy = report.spz_l2->ilv_records[0].CopyValue();
   ASSERT_EQ(payload_copy.size(), adobe_payload.size());
   ASSERT_TRUE(std::memcmp(payload_copy.data(), adobe_payload.data(), adobe_payload.size()) == 0);
 }
@@ -258,7 +258,7 @@ TEST(test_spz_unknown_extension_type) {
   ASSERT_EQ(report.extension_reports[0].extension_name, "Unknown");
   ASSERT_TRUE(report.extension_reports[0].validation_result);
   ASSERT_TRUE(report.ToJson().find("\"extension_reports\"") != std::string::npos);
-  ASSERT_TRUE(has_issue_code(report, "L2_EXT_UNKNOWN"));
+  ASSERT_TRUE(has_issue_code(report, "SPZ_EXT_UNKNOWN"));
   ASSERT_GT(report.issues.size(), 0u);
 }
 
@@ -284,7 +284,7 @@ TEST(test_spz_registered_extension_without_validator) {
   ASSERT_EQ(report.extension_reports[0].status, "draft");
   ASSERT_EQ(report.extension_reports[0].category, "algorithm");
   ASSERT_TRUE(report.extension_reports[0].validation_result);
-  ASSERT_TRUE(has_issue_code(report, "L2_EXT_REGISTERED_NO_VALIDATOR"));
+  ASSERT_TRUE(has_issue_code(report, "SPZ_EXT_REGISTERED_NO_VALIDATOR"));
 }
 
 TEST(test_spz_unregistered_extension_with_validator) {
@@ -306,7 +306,7 @@ TEST(test_spz_unregistered_extension_with_validator) {
   ASSERT_TRUE(report.extension_reports[0].has_validator);
   ASSERT_EQ(report.extension_reports[0].extension_name, "Unregistered Validator");
   ASSERT_TRUE(report.extension_reports[0].validation_result);
-  ASSERT_TRUE(has_issue_code(report, "L2_EXT_UNREGISTERED_VALIDATOR"));
+  ASSERT_TRUE(has_issue_code(report, "SPZ_EXT_UNREGISTERED_VALIDATOR"));
 }
 
 TEST(test_spz_multiple_extensions) {
@@ -341,7 +341,7 @@ TEST(test_spz_multiple_extensions) {
   ASSERT_FALSE(report.extension_reports[1].has_validator);
   ASSERT_EQ(report.extension_reports[1].extension_name, "Unknown");
   ASSERT_TRUE(report.extension_reports[1].validation_result);
-  ASSERT_TRUE(has_issue_code(report, "L2_EXT_UNKNOWN"));
+  ASSERT_TRUE(has_issue_code(report, "SPZ_EXT_UNKNOWN"));
   ASSERT_GT(report.issues.size(), 0u);
 }
 

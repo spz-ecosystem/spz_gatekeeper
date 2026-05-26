@@ -261,7 +261,7 @@ TEST(test_compat_check_surfaces_unknown_extension_issue_summary) {
   ASSERT_TRUE(result.output.find("\"empty_shell_risk\":true") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"final_verdict\":\"review_required\"") != std::string::npos);
   ASSERT_TRUE(result.output.find("\"release_ready\":false") != std::string::npos);
-  ASSERT_TRUE(result.output.find("L2_EXT_UNKNOWN") != std::string::npos);
+  ASSERT_TRUE(result.output.find("SPZ_EXT_UNKNOWN") != std::string::npos);
 }
 
 

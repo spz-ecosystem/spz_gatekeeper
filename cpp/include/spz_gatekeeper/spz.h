@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 SPZ Gatekeeper Contributors
 /**
  * SPZ Gatekeeper - SPZ Format Validator
  *

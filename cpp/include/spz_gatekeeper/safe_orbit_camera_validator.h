@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 SPZ Gatekeeper Contributors
 /**
  * Adobe Safe Orbit Camera Extension Validator
  *

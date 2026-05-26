@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2026 PuJunhan
+// Copyright (c) 2026 SPZ Gatekeeper Contributors
 
 #include "spz_gatekeeper/report.h"
 
@@ -76,10 +76,10 @@ std::string GateReport::ToJson() const {
     oss << ",\"decompressed_size\":" << l2.decompressed_size;
     oss << ",\"base_payload_size\":" << l2.base_payload_size;
     oss << ",\"trailer_size\":" << l2.trailer_size;
-    oss << ",\"tlv_records\":[";
-    for (std::size_t i = 0; i < l2.tlv_records.size(); ++i) {
+    oss << ",\"ilv_records\":[";
+    for (std::size_t i = 0; i < l2.ilv_records.size(); ++i) {
       if (i) oss << ",";
-      const auto& r = l2.tlv_records[i];
+      const auto& r = l2.ilv_records[i];
       oss << "{";
       oss << "\"type\":" << r.type;
       oss << ",\"length\":" << r.length;

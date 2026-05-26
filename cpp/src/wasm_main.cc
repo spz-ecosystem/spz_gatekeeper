@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2026 PuJunhan
+// Copyright (c) 2026 SPZ Gatekeeper Contributors
 
 #include "spz_gatekeeper/audit_summary.h"
 #include "spz_gatekeeper/extension_spec_registry.h"
@@ -367,16 +367,16 @@ emscripten::val dumpTrailer(const emscripten::val& spz_buffer, bool strict) {
   result.set("flags", static_cast<unsigned>(l2.flags));
   result.set("trailer_size", static_cast<double>(l2.trailer_size));
 
-  emscripten::val tlv_records = emscripten::val::array();
+  emscripten::val ilv_records = emscripten::val::array();
   std::size_t idx = 0;
-  for (const auto& record : l2.tlv_records) {
+  for (const auto& record : l2.ilv_records) {
     emscripten::val item = emscripten::val::object();
     item.set("type", static_cast<double>(record.type));
     item.set("length", static_cast<double>(record.length));
     item.set("offset", static_cast<double>(record.offset));
-    tlv_records.set(static_cast<unsigned>(idx++), item);
+    ilv_records.set(static_cast<unsigned>(idx++), item);
   }
-  result.set("tlv_records", tlv_records);
+  result.set("ilv_records", ilv_records);
   return result;
 }
 

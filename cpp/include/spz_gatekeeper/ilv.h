@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 SPZ Gatekeeper Contributors
 /**
  * TLV (Type-Length-Value) Trailer Parser
  *
@@ -31,7 +33,7 @@ namespace spz_gatekeeper {
 /// TLV layout (little-endian):
 ///   u32 type, u32 length, then `length` bytes value.
 /// Unknown `type` must be skippable for forward compatibility.
-struct TlvParseResult {
+struct IlvParseResult {
   /// Parse success flag.
   bool ok = false;
   
@@ -39,7 +41,7 @@ struct TlvParseResult {
   std::string error;
   
   /// Parsed TLV records (empty if parse failed).
-  std::vector<TlvRecord> records;
+  std::vector<IlvRecord> records;
 };
 
 /// Parse TLV trailer from SPZ decompressed data.
@@ -47,25 +49,25 @@ struct TlvParseResult {
 /// The trailer appears after the standard SPZ fields (positions/alphas/colors/scales/rotations/sh).
 /// Each TLV record has format: [type:u32][length:u32][value:length bytes]
 ///
-/// 说明：解析阶段不会为每条 record 复制 payload；`TlvRecord::ValueView()` 直接指向输入 buffer，
-/// 如果调用方需要独立副本，可调用 `TlvRecord::CopyValue()`。
+/// 说明：解析阶段不会为每条 record 复制 payload；`IlvRecord::ValueView()` 直接指向输入 buffer，
+/// 如果调用方需要独立副本，可调用 `IlvRecord::CopyValue()`。
 ///
 /// @param data Decompressed SPZ data (starting from trailer offset)
 /// @param offset Byte offset where trailer begins
-/// @return TlvParseResult with parsed records or error message
-TlvParseResult ParseTlvTrailer(const std::vector<std::uint8_t>& data, std::size_t offset);
+/// @return IlvParseResult with parsed records or error message
+IlvParseResult ParseIlvRecords(const std::vector<std::uint8_t>& data, std::size_t offset);
 
 /// Parse header-zone ILV extensions from raw SPZ bytes (v4 path).
 ///
 /// In SPZ v4, extensions live in the header zone — `raw[32..tocByteOffset)` —
 /// as plaintext ILV records.  No ZSTD decompression is needed.
 /// The ILV byte format ([u32 type][u32 byteLength][payload]) is identical to
-/// `ParseTlvTrailer`, only the data source and boundary conditions differ.
+/// `ParseIlvRecords`, only the data source and boundary conditions differ.
 ///
 /// @param ext_data Pointer to raw byte at offset 32 (past the 32-byte header).
 /// @param ext_size Number of bytes in the header zone (tocByteOffset - 32).
-/// @return TlvParseResult — value_data pointers reference `ext_data` (zero-copy);
+/// @return IlvParseResult — value_data pointers reference `ext_data` (zero-copy);
 ///         caller must keep the backing buffer alive for the records' lifetime.
-TlvParseResult ParseHeaderZoneExtensions(const std::uint8_t* ext_data, std::size_t ext_size);
+IlvParseResult ParseHeaderZoneExtensions(const std::uint8_t* ext_data, std::size_t ext_size);
 
 }  // namespace spz_gatekeeper

@@ -296,7 +296,7 @@ TEST(test_build_compat_check_audit_json_reports_review_required_for_unknown_exte
   spz_gatekeeper::GateReport strict_report;
   strict_report.asset_path = "fixture_unknown.spz";
   strict_report.issues.push_back({spz_gatekeeper::Severity::kWarning,
-                                  "L2_EXT_UNKNOWN",
+                                  "SPZ_EXT_UNKNOWN",
                                   "unknown extension encountered",
                                   "fixture_unknown.spz"});
 
@@ -318,7 +318,7 @@ TEST(test_build_compat_check_audit_json_reports_review_required_for_unknown_exte
   ASSERT_TRUE(json.find("\"artifact_summary\":{") != std::string::npos);
   ASSERT_TRUE(json.find("\"budgets\":{") != std::string::npos);
   ASSERT_TRUE(json.find("\"next_action\":\"review_artifact\"") != std::string::npos);
-  ASSERT_TRUE(json.find("L2_EXT_UNKNOWN") != std::string::npos);
+  ASSERT_TRUE(json.find("SPZ_EXT_UNKNOWN") != std::string::npos);
 
 }
 
