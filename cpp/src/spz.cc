@@ -31,9 +31,6 @@ constexpr std::uint32_t kKnownMaxVersion = 4;
 
 // Auto-register built-in Adobe validator for runtime check-spz paths.
 static RegisterValidator<AdobeSafeOrbitCameraValidator> kAutoRegisterAdobeValidator;
-// T22c (R5→R6 deferred): SPZ_ADOBE_coordinate_system (0xADBE0003)
-// Registration deferred to R6 — needs SpzAdobeCoordSysValidator class
-// following the RegisterValidator<T> pattern (see safe_orbit_camera_validator.h)
 
 
 static bool RegisterBuiltInSpecs() {
@@ -50,6 +47,21 @@ static bool RegisterBuiltInSpecs() {
   adobe_spec.min_spz_version = 1;
   adobe_spec.requires_has_extensions_flag = true;
   ExtensionSpecRegistry::Instance().RegisterSpec(adobe_spec);
+  // T22c (R5): SPZ_ADOBE_coordinate_system registration (validator deferred to R6)
+  ExtensionSpec coord_spec;
+  coord_spec.type = 0xADBE0003u;
+  coord_spec.vendor_id = static_cast<std::uint16_t>(0xADBE0003u >> 16);
+  coord_spec.extension_id = static_cast<std::uint16_t>(0xADBE0003u & 0xFFFFu);
+  coord_spec.vendor_name = "Adobe";
+  coord_spec.extension_name = "Adobe Coordinate System";
+  coord_spec.category = "metadata";
+  coord_spec.status = "draft";
+  coord_spec.spec_url = "extensions/cc/coordinate-system-adobe.h";
+  coord_spec.short_description = "Records the coordinate system in which Gaussian data is physically stored.";
+  coord_spec.min_spz_version = 4;
+  coord_spec.requires_has_extensions_flag = true;
+  ExtensionSpecRegistry::Instance().RegisterSpec(coord_spec);
+
   return true;
 }
 
