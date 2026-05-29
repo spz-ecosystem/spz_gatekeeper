@@ -320,16 +320,21 @@ static TocParseResult ParseToc(const uint8_t* data, size_t size, uint32_t toc_by
 
 static bool DecompressZstdStream(const uint8_t* src, size_t src_size,
                                  std::vector<uint8_t>* out, std::string* err) {
-  const size_t bound = ZSTD_getFrameContentSize(src, src_size);
-  if (bound == ZSTD_CONTENTSIZE_ERROR) {
+  const uint64_t bound_raw = ZSTD_getFrameContentSize(src, src_size);
+  if (bound_raw == ZSTD_CONTENTSIZE_ERROR) {
     if (err) *err = "SPZ_DECOMPRESS_ZSTD";
     return false;
   }
-  if (bound == ZSTD_CONTENTSIZE_UNKNOWN) {
+  if (bound_raw == ZSTD_CONTENTSIZE_UNKNOWN) {
     if (err) *err = "SPZ_DECOMPRESS_ZSTD";
+    return false;
+  }
+  if (bound_raw > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+    if (err) *err = "SPZ_DECOMPRESS_ZSTD_OVERFLOW";
     return false;
   }
 
+  const size_t bound = static_cast<size_t>(bound_raw);
   out->resize(bound);
   const size_t ret = ZSTD_decompress(out->data(), out->size(), src, src_size);
   if (ZSTD_isError(ret)) {
@@ -349,6 +354,10 @@ static bool DecompressNgspStreams(const uint8_t* data, size_t size,
   uint64_t total = 0;
   for (const auto& entry : toc) {
     total += entry.uncompressed_size;
+  }
+  if (total > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
+    if (err) *err = "SPZ_DECOMPRESS_NGSP_OVERFLOW";
+    return false;
   }
   decomp->clear();
   decomp->reserve(static_cast<size_t>(total));
