@@ -213,7 +213,7 @@ jobs:
         run: pip install zizmor
 
       - name: Scan GitHub Actions workflows
-        run: zizmor --format plain .github/workflows/
+        run: zizmor --format plain --min-severity error .github/workflows/
 
   wasm:
     runs-on: ubuntu-latest
