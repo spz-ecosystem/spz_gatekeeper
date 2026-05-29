@@ -198,6 +198,19 @@ jobs:
           path: build.log
           retention-days: 7
 
+  security-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install zizmor
+        run: pip install zizmor
+
+      - name: Scan GitHub Actions workflows
+        run: zizmor --format plain .github/workflows/
+
   wasm:
     runs-on: ubuntu-latest
     timeout-minutes: 30
