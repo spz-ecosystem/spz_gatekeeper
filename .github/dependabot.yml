@@ -3,12 +3,8 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
-    groups:
-      actions:
-        patterns:
-          - "actions/*"
+      interval: "monthly"
+    open-pull-requests-limit: 3
     commit-message:
       prefix: "ci"
       include: "scope"
