@@ -51,7 +51,13 @@ docs/Adobe_Safe_Orbit_Camera_Spec.md
 docs/Implementing_Custom_Extension.md
 docs/Vendor_ID_Allocation.md
 docs/plans/
+docs/plan-backup/
+docs/agents/
 docs/agent_contract_v1.json
 docs/extension_registry.json
+
+# Runtime state (regenerates on every CLI invocation)
+.gatekeeper.state
+.gatekeeper_monitor_api_tmp.json
 research_report_spz_agent_stack_refresh.md
 research_report_spz_gatekeeper_21_alignment.md
