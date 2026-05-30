@@ -17,9 +17,12 @@ lib/
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
+AGENTS.md
+CLAUDE.md
 
 # OS
 .DS_Store
@@ -32,6 +35,7 @@ test_output/
 # Temporary files
 *.tmp
 *.bak
+_tmp_*
 
 # Internal workspace artifacts
 .trae/

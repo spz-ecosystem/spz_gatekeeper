@@ -1,0 +1,38 @@
+# GitNexus 索引排除 — spz_gatekeeper C++ 项目
+# 排除纯文档、二进制、构建产物，保留所有代码
+
+.git/
+__pycache__/
+*.pyc
+
+# 纯文档（非代码，30+ markdown 计划文档会污染索引）
+docs/
+
+# 根目录文档（README/CHANGELOG 等不参与调用链分析）
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE
+README.md
+README-zh.md
+RELEASE_CHECKLIST.md
+
+# 二进制/图片/补丁
+*.patch
+*.png
+*.ico
+*.zip
+*.rar
+*.exe
+*.json
+
+# 构建产物
+build/
+build_*/
+build-*/
+cmake-build-*/
+bin/
+lib/
+*.o
+*.a
+*.so
+*.dylib

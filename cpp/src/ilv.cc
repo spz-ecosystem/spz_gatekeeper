@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MulanPSL-2.0
 // Copyright (c) 2026 PuJunhan
 
 #include "spz_gatekeeper/ilv.h"

@@ -1,0 +1,159 @@
+{
+  "contract_id": "research_agent_contract_v1",
+  "version": "0.1.0",
+  "status": "draft",
+  "created_at": "2026-05-08",
+  "scope": "通用深度研究集群 — 3 agent (Coordinator + Technical Analyst + Literature Reviewer)",
+  "source_from_engine_py": {
+    "failover_chain": "从 engine.py FAILOVER_CHAIN 移出",
+    "retry_policy": "从 engine.py MODEL_RETRY 移出",
+    "budget_state_machine": "从 engine.py max_turns / Research Coordinator 状态机 合并",
+    "token_monitoring": "从 engine.py _parse_usage 移出",
+    "vision_routing": "从 engine.py resolve_vision_model 移出"
+  },
+  "design_principles": [
+    "coordinator_only_multi_round",
+    "worker_single_round_report",
+    "parallel_analysis_when_independent",
+    "evidence_before_conclusion",
+    "budget_gate_before_subtask"
+  ],
+  "agents": [
+    {
+      "agent_id": "spz-research-coordinator",
+      "display_name": "SPZ Research Coordinator",
+      "category": "controller",
+      "primary_model": "mimo2.5",
+      "fallback_model": "gpt-5.5",
+      "responsibilities": ["研究任务分解", "子任务路由", "预算状态机管理", "结果综合"],
+      "max_rounds": 20,
+      "max_tokens_per_task": 100000,
+      "max_subagents": 5,
+      "max_parallel_tasks": 3,
+      "timeout_minutes": 30
+    },
+    {
+      "agent_id": "spz-technical-analyst",
+      "display_name": "SPZ Technical Analyst",
+      "category": "domain",
+      "primary_model": "mimo2.5",
+      "fallback_model": "deepseek-v4-flash",
+      "responsibilities": ["技术分析", "代码/算法审查", "性能评估"],
+      "max_rounds": 10,
+      "max_tokens_per_task": 50000
+    },
+    {
+      "agent_id": "spz-literature-reviewer",
+      "display_name": "SPZ Literature Reviewer",
+      "category": "domain",
+      "primary_model": "mimo2.5",
+      "fallback_model": "gpt-5.5",
+      "responsibilities": ["文献检索", "论文综述", "引用管理"],
+      "max_rounds": 10,
+      "max_tokens_per_task": 50000
+    }
+  ],
+  "state_machines": {
+    "research_task": {
+      "states": {
+        "INIT": {"next": ["PLANNING"]},
+        "PLANNING": {"next": ["EXECUTING", "PAUSED"]},
+        "EXECUTING": {"next": ["SYNTHESIZING", "PAUSED", "FAILED"]},
+        "SYNTHESIZING": {"next": ["COMPLETED", "REVISION"]},
+        "REVISION": {"next": ["SYNTHESIZING", "COMPLETED"]},
+        "PAUSED": {"next": ["PLANNING", "EXECUTING"]},
+        "FAILED": {"next": ["PLANNING"]},
+        "COMPLETED": {"next": []}
+      }
+    }
+  },
+  "execution_chain": [
+    "spz-research-coordinator",
+    "spz-technical-analyst || spz-literature-reviewer",
+    "spz-research-coordinator (synthesize)",
+    "review_gate"
+  ],
+  "budget_gates": {
+    "profiles": {
+      "coordinator": {
+        "max_tokens_per_task": 100000,
+        "max_rounds": 20,
+        "max_subagents": 5,
+        "max_parallel_tasks": 3,
+        "soft_limit_ratio": 0.8,
+        "hard_limit_action": "synthesize_existing_and_stop"
+      },
+      "technical_analyst": {
+        "max_tokens_per_task": 50000,
+        "max_rounds": 10
+      },
+      "literature_reviewer": {
+        "max_tokens_per_task": 50000,
+        "max_rounds": 10
+      }
+    }
+  },
+  "model_routing_matrix": {
+    "_note": "从 engine.py MODELS + FAILOVER_CHAIN 移出",
+    "controller": {
+      "primary_model": "mimo2.5",
+      "fallback_chain": ["mimo2.5", "gpt-5.5", "gpt-5.5-us", "deepseek-v4-pro", "deepseek-v4-flash"]
+    },
+    "domain_worker": {
+      "primary_model": "mimo2.5",
+      "fallback_chain": ["mimo2.5", "deepseek-v4-flash", "gpt-5.5", "deepseek-v4-pro"]
+    },
+    "failover_policy": {
+      "max_retries": 2,
+      "retryable_errors": ["429", "502", "503", "504", "timeout", "rate_limit", "connection", "server_error", "internal_error", "overloaded", "capacity", "unavailable"],
+      "region_fallback_order": ["hk", "us"],
+      "non_retryable_errors": ["400", "401", "403"]
+    }
+  },
+  "retry_policy": {
+    "default_max_retries": 2,
+    "backoff_strategy": "exponential",
+    "triggers": ["network_error", "http_429", "http_502", "http_503", "http_504", "provider_suggested"]
+  },
+  "budget_monitoring": {
+    "track_fields": ["input_tokens", "output_tokens", "total_tokens", "cache_hit_tokens", "cache_miss_tokens", "reasoning_tokens"],
+    "owner": "spz-research-coordinator",
+    "alert_soft_limit": 0.8,
+    "alert_hard_limit": 1.0
+  },
+  "permission_tiers": {
+    "P0": {"tools": ["search_file", "search_content", "read_file"], "risk": "low"},
+    "P1": {"tools": ["todo_write", "write_to_file"], "risk": "medium"},
+    "P2": {"tools": ["execute_command", "web_search"], "risk": "high", "requires_approval": true},
+    "P3": {"tools": [], "risk": "critical", "blocked": true}
+  },
+  "shared_schemas": {
+    "task_decomposition": {
+      "task_id": "string",
+      "research_question": "string",
+      "subtasks": [{
+        "subtask_id": "string",
+        "description": "string",
+        "assigned_agent": "string",
+        "priority": "high|medium|low",
+        "estimated_tokens": "number",
+        "dependencies": ["subtask_id"]
+      }]
+    },
+    "research_report": {
+      "task_id": "string",
+      "research_question": "string",
+      "executive_summary": "string",
+      "findings": [{"topic": "string", "summary": "string", "confidence": "high|medium|low"}],
+      "conclusions": ["string"],
+      "limitations": ["string"],
+      "references": [{"title": "string", "url": "string"}]
+    },
+    "research_status": {
+      "task_id": "string",
+      "current_state": "string",
+      "progress": {"completed": [], "in_progress": [], "pending": []},
+      "budget_status": {"tokens_used": "number", "tokens_remaining": "number", "rounds_used": "number", "status": "ok|soft_limit|hard_limit"}
+    }
+  }
+}

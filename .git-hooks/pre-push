@@ -1,0 +1,24 @@
+#!/bin/bash
+# Pre-push hook: prevent force push and branch deletion on main/master
+while read local_ref local_sha remote_ref remote_sha; do
+  # Prevent pushing deletion of main/master
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    branch=$(echo "$remote_ref" | sed 's|refs/heads/||')
+    if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
+      echo "ERROR: Cannot delete remote main/master branch!"
+      exit 1
+    fi
+  fi
+  # Prevent non-fast-forward push to main/master
+  if [ "$remote_ref" = "refs/heads/main" ] || [ "$remote_ref" = "refs/heads/master" ]; then
+    if [ "$local_sha" != "0000000000000000000000000000000000000000" ]; then
+      merge_base=$(git merge-base "$local_sha" "$remote_sha" 2>/dev/null)
+      if [ "$merge_base" != "$remote_sha" ]; then
+        echo "ERROR: Non-fast-forward push to main/master is not allowed!"
+        echo "Use a pull request instead."
+        exit 1
+      fi
+    fi
+  fi
+done
+exit 0

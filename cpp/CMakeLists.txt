@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: MulanPSL-2.0
 # Copyright (c) 2026 PuJunhan
 
 cmake_minimum_required(VERSION 3.16)
