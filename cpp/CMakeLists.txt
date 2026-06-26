@@ -166,6 +166,8 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
     "-sEXPORT_ES6=1"
     "-sSINGLE_FILE=1"
     "-sFILESYSTEM=0"
+    "-sASSERTIONS=0"
+    "-sNO_EXIT_RUNTIME=1"
   )
   set_target_properties(spz_gatekeeper-wasm PROPERTIES
     OUTPUT_NAME "spz_gatekeeper_wasm"
@@ -235,6 +237,7 @@ if(BUILD_TESTING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   spz_gatekeeper_add_test(ilv_multi_record_test tests/ilv_multi_record_test.cc)
   spz_gatekeeper_add_test(extension_integration_test tests/extension_integration_test.cc)
   spz_gatekeeper_add_test(sh_quantization_test tests/sh_quantization_test.cc)
+  spz_gatekeeper_add_test(v4_format_test tests/v4_format_test.cc)
 
   if(SPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS)
     spz_gatekeeper_add_test(performance_benchmark_test tests/performance_benchmark_test.cc)
