@@ -46,13 +46,28 @@ jobs:
         run: |
           brew install zlib
 
+      - uses: mamba-org/setup-micromamba@v2
+        if: matrix.os == 'windows-latest'
+        with:
+          init-shell: bash
+          environment-file: .github/environment.yml
+          environment-name: "build"
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.os == 'windows-latest'
+
       - name: Configure CMake (Windows)
         if: matrix.os == 'windows-latest'
+        shell: bash -l {0}
+        env:
+          CC: cl.exe
+          CXX: cl.exe
         run: |
-          cmake -S cpp -B build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DBUILD_TESTING=ON `
-            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF
+          cmake -S cpp -B build -G "Ninja" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF \
+            -DCMAKE_PREFIX_PATH="$CONDA_PREFIX"
 
       - name: Configure CMake (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
