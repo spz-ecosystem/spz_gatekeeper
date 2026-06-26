@@ -219,6 +219,7 @@ if(BUILD_TESTING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   endfunction()
 
   add_test(NAME spz_gatekeeper_self_test COMMAND spz_gatekeeper --self-test)
+  set_tests_properties(spz_gatekeeper_self_test PROPERTIES TIMEOUT 60)
 
   add_executable(spz_gatekeeper_test tests/spz_gatekeeper_test.cc)
   target_link_libraries(spz_gatekeeper_test PRIVATE spz_gatekeeper_core)
