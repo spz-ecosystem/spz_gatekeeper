@@ -101,7 +101,6 @@ jobs:
           if [ -f build.log ]; then
             grep -i "warning" build.log || echo "No warnings found"
           fi
-        shell: bash
 
       - name: Run Tests
         run: |
