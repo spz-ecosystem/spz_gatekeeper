@@ -115,9 +115,8 @@ void test_v4_inspect_bench() {
     std::vector<std::uint8_t> data;
     if (read_file(path, &data) && data.size() > 32) {
       spz_gatekeeper::SpzInspectOptions opt;
-      std::string error;
       auto result = spz_gatekeeper::InspectSpzBlob(data, opt, "test_v4_inspect");
-      if (result.version == 4) {
+      if (result.spz_l2.has_value() && result.spz_l2->version == 4) {
         std::cout << "PASS (bench: " << path << ", " << data.size() << " bytes)\n";
         found = true;
         break;
