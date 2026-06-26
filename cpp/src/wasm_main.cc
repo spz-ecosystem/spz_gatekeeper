@@ -17,8 +17,6 @@
 #include <utility>
 #include <vector>
 #include <zlib.h>
-
-
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
@@ -69,8 +67,6 @@ bool TryInspect(const emscripten::val& input, bool strict, spz_gatekeeper::GateR
     return false;
   }
 }
-
-
 
 const spz_gatekeeper::ExtensionReport* FindExtensionReport(const spz_gatekeeper::GateReport& report,
                                                            std::uint32_t type) {
@@ -140,8 +136,6 @@ static bool ZstdCompress(const std::vector<std::uint8_t>& in, std::vector<std::u
 #endif
 }
 
-
-
 void WriteU32Le(std::vector<std::uint8_t>* bytes, std::uint32_t value) {
   bytes->push_back(static_cast<std::uint8_t>(value & 0xFFu));
   bytes->push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
@@ -207,8 +201,6 @@ std::vector<std::uint8_t> BuildDecompressedSpz(std::uint32_t version, std::uint8
 
 FixtureBlob BuildFixtureBlob(std::uint32_t type, bool invalid_size, const std::string& format = "v3") {
   FixtureBlob fixture;
-  fixture.mode = invalid_size ? "invalid-size" : "valid";
-
   std::vector<std::uint8_t> payload;
   if (type == 0xADBE0002u) {
     payload = BuildAdobeSafeOrbitPayload(invalid_size);
@@ -216,8 +208,6 @@ FixtureBlob BuildFixtureBlob(std::uint32_t type, bool invalid_size, const std::s
     payload = invalid_size ? std::vector<std::uint8_t>{0x00}
                            : std::vector<std::uint8_t>{0x00, 0x00, 0x00, 0x00};
   }
-
-
   const auto trailer = BuildTlvTrailer({{type, payload}});
   int ver = (format == "v4") ? 4 : 3;
   const auto decompressed = BuildDecompressedSpz(ver, spz_gatekeeper::kFlagHasExtensions, &trailer);
@@ -289,8 +279,6 @@ std::string BuildRegistryListJson() {
   return oss.str();
 }
 
-
-
 std::string BuildCompatibilityBoardJson() {
 
   const auto specs = spz_gatekeeper::ExtensionSpecRegistry::Instance().ListSpecs();
@@ -329,8 +317,6 @@ std::string BuildCompatibilityBoardJson() {
     const bool strict_check_pass =
         !strict_valid_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_valid_report);
     const bool non_strict_check_pass = !non_strict_valid_report.HasErrors();
-
-
     oss << "{";
     oss << "\"type\":" << spec.type;
     oss << ",\"vendor_name\":\"" << spz_gatekeeper::JsonEscape(spec.vendor_name) << "\"";
@@ -485,14 +471,10 @@ emscripten::val buildBrowserAuditReport(const emscripten::val& payload) {
   report.performance_budget_wired = payload["performance_budget_wired"].as<bool>();
   return ParseJsonObject(spz_gatekeeper::BuildBrowserWasmAuditJson(report));
 }
-
-
 emscripten::val listRegisteredExtensions() {
 
   return ParseJsonObject(BuildRegistryListJson());
 }
-
-
 emscripten::val describeExtension(double type_value) {
   const auto type = static_cast<std::uint32_t>(type_value);
   const auto spec = spz_gatekeeper::ExtensionSpecRegistry::Instance().GetSpec(type);
