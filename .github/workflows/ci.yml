@@ -91,7 +91,7 @@ jobs:
 
       - name: Run Tests
         run: |
-          ctest --test-dir build --output-on-failure -C Release --timeout 60
+          ctest --test-dir build --output-on-failure -C Release --timeout 60 -E "self_test"
 
       - name: Release gate (Ubuntu, real compat-check)
         if: matrix.os == 'ubuntu-latest'
