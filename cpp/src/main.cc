@@ -136,6 +136,25 @@ static bool GzipCompress(const std::vector<std::uint8_t>& in, std::vector<std::u
   deflateEnd(&strm);
   return ok;
 }
+static bool ZstdCompress(const std::vector<std::uint8_t>& in, std::vector<std::uint8_t>* out,
+                         std::string* err) {
+#if defined(ZSTD_VERSION_NUMBER)
+  std::size_t bound = ZSTD_compressBound(in.size());
+  out->resize(bound);
+  std::size_t ret = ZSTD_compress(out->data(), bound, in.data(), in.size(), 3);
+  if (ZSTD_isError(ret)) {
+    if (err) *err = ZSTD_getErrorName(ret);
+    return false;
+  }
+  out->resize(ret);
+  return true;
+#else
+  if (err) *err = "zstd not available (compiled without zstd)";
+  return false;
+#endif
+}
+
+
 
 static bool HasIssueCode(const spz_gatekeeper::GateReport& rep, const char* code) {
   for (const auto& it : rep.issues) {
@@ -488,7 +507,8 @@ static bool IsSupportedFixtureMode(const std::string& mode) {
   return mode == "valid" || mode == "invalid-size";
 }
 
-static FixtureBlob BuildFixtureBlob(std::uint32_t type, const std::string& mode) {
+static FixtureBlob BuildFixtureBlob(std::uint32_t type, const std::string& mode,
+                                          const std::string& format = "v3") {
   FixtureBlob fixture;
   fixture.mode = mode;
 
@@ -502,7 +522,15 @@ static FixtureBlob BuildFixtureBlob(std::uint32_t type, const std::string& mode)
   }
 
   const auto trailer = BuildTlvTrailer({{type, payload}});
-  const auto decompressed = BuildDecompressedSpz(3, spz_gatekeeper::kFlagHasExtensions, &trailer);
+  int ver = (format == "v4") ? 4 : 3;
+  const auto decompressed = BuildDecompressedSpz(ver, spz_gatekeeper::kFlagHasExtensions, &trailer);
+  if (format == "v4") {
+    std::string zstd_err;
+    if (!ZstdCompress(decompressed, &fixture.bytes, &zstd_err)) {
+      throw std::runtime_error(zstd_err.empty() ? "zstd compression failed" : zstd_err);
+    }
+    return fixture;
+  }
   std::string error;
   if (!GzipCompress(decompressed, &fixture.bytes, &error)) {
     throw std::runtime_error(error.empty() ? "gzip compression failed" : error);
@@ -514,6 +542,7 @@ static int HandleGenFixtureCommand(int argc, char** argv) {
   std::string type_text;
   std::string out_path;
   std::string mode = "valid";
+  std::string format = "v3";
 
   for (int i = 2; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -521,6 +550,8 @@ static int HandleGenFixtureCommand(int argc, char** argv) {
       type_text = argv[++i];
     } else if (arg == "--out" && i + 1 < argc) {
       out_path = argv[++i];
+    } else if (arg == "--format" && i + 1 < argc) {
+      format = argv[++i];
     } else if (arg == "--mode" && i + 1 < argc) {
       mode = argv[++i];
     } else {
@@ -531,13 +562,14 @@ static int HandleGenFixtureCommand(int argc, char** argv) {
 
   std::uint32_t type = 0;
   if (type_text.empty() || out_path.empty() || !ParseExtensionType(type_text, &type) ||
-      !IsSupportedFixtureMode(mode)) {
+      !IsSupportedFixtureMode(mode) ||
+      (format != "v3" && format != "v4")) {
     PrintUsage();
     return 2;
   }
 
   try {
-    const auto fixture = BuildFixtureBlob(type, mode);
+    const auto fixture = BuildFixtureBlob(type, mode, format);
     if (!WriteAllBytes(out_path, fixture.bytes)) {
       std::cerr << "failed to write fixture: " << out_path << "\n";
       return 2;

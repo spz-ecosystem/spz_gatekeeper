@@ -122,6 +122,25 @@ bool GzipCompress(const std::vector<std::uint8_t>& in, std::vector<std::uint8_t>
   deflateEnd(&strm);
   return ok;
 }
+static bool ZstdCompress(const std::vector<std::uint8_t>& in, std::vector<std::uint8_t>* out,
+                         std::string* err) {
+#if defined(ZSTD_VERSION_NUMBER)
+  std::size_t bound = ZSTD_compressBound(in.size());
+  out->resize(bound);
+  std::size_t ret = ZSTD_compress(out->data(), bound, in.data(), in.size(), 3);
+  if (ZSTD_isError(ret)) {
+    if (err) *err = ZSTD_getErrorName(ret);
+    return false;
+  }
+  out->resize(ret);
+  return true;
+#else
+  if (err) *err = "zstd not available (compiled without zstd)";
+  return false;
+#endif
+}
+
+
 
 void WriteU32Le(std::vector<std::uint8_t>* bytes, std::uint32_t value) {
   bytes->push_back(static_cast<std::uint8_t>(value & 0xFFu));
@@ -186,8 +205,9 @@ std::vector<std::uint8_t> BuildDecompressedSpz(std::uint32_t version, std::uint8
   return decomp;
 }
 
-FixtureBlob BuildFixtureBlob(std::uint32_t type, bool invalid_size) {
+FixtureBlob BuildFixtureBlob(std::uint32_t type, bool invalid_size, const std::string& format = "v3") {
   FixtureBlob fixture;
+  fixture.mode = invalid_size ? "invalid-size" : "valid";
 
   std::vector<std::uint8_t> payload;
   if (type == 0xADBE0002u) {
@@ -199,7 +219,15 @@ FixtureBlob BuildFixtureBlob(std::uint32_t type, bool invalid_size) {
 
 
   const auto trailer = BuildTlvTrailer({{type, payload}});
-  const auto decompressed = BuildDecompressedSpz(3, spz_gatekeeper::kFlagHasExtensions, &trailer);
+  int ver = (format == "v4") ? 4 : 3;
+  const auto decompressed = BuildDecompressedSpz(ver, spz_gatekeeper::kFlagHasExtensions, &trailer);
+  if (format == "v4") {
+    std::string zstd_err;
+    if (!ZstdCompress(decompressed, &fixture.bytes, &zstd_err)) {
+      throw std::runtime_error(zstd_err.empty() ? "zstd compression failed" : zstd_err);
+    }
+    return fixture;
+  }
   std::string err;
   if (!GzipCompress(decompressed, &fixture.bytes, &err)) {
     throw std::runtime_error(err.empty() ? "gzip compression failed" : err);
