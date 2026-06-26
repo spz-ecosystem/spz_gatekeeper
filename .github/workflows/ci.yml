@@ -101,6 +101,7 @@ jobs:
           ./build/spz_gatekeeper gen-fixture \
             --type 0xADBE0002 \
             --mode valid \
+            --format v4 \
             --out build/ci-gates/release_valid.spz
           ./build/spz_gatekeeper compat-check build/ci-gates/release_valid.spz --json | tee build/ci-gates/release_gate.json
           python3 - <<'PY'
@@ -128,10 +129,12 @@ jobs:
           ./build/spz_gatekeeper gen-fixture \
             --type 0xADBE0002 \
             --mode valid \
+            --format v4 \
             --out build/ci-gates/challenge_pass.spz
           ./build/spz_gatekeeper gen-fixture \
             --type 0xADBE0002 \
             --mode invalid-size \
+            --format v4 \
             --out build/ci-gates/challenge_block.spz
 
           cat > build/ci-gates/challenge_manifest.json <<'JSON'
@@ -250,6 +253,7 @@ jobs:
           ./build-native/spz_gatekeeper gen-fixture \
             --type 0xADBE0002 \
             --mode valid \
+            --format v4 \
             --out build-wasm/site/synthetic_valid.spz
 
       - name: Verify WASM artifact
