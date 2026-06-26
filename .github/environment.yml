@@ -1,0 +1,8 @@
+name: build
+channels:
+  - conda-forge
+dependencies:
+  - ninja
+  - cmake
+  - zlib
+  - zstd

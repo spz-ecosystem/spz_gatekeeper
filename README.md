@@ -1,5 +1,7 @@
 # SPZ Gatekeeper
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20849212.svg)](https://doi.org/10.5281/zenodo.20849212)
+
 > L2-only SPZ legality checker for validating headers, flags, and TLV trailer extensions without changing baseline SPZ decoding behavior.
 
 `spz_gatekeeper` is a **pure C++17** validator for `.spz` files. It does **not** validate GLB containers, and it does **not** implement compression or rendering. Its job is to audit whether an SPZ file stays compatible with the upstream SPZ packed format while carrying optional vendor extensions.

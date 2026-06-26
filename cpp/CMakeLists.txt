@@ -46,7 +46,7 @@ set(SPZ_GATEKEEPER_ZLIB_VERSION "1.3.2")
 set(SPZ_GATEKEEPER_ZLIB_SHA256
   "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16")
 set(SPZ_GATEKEEPER_ZLIB_URL
-  "https://zlib.net/zlib-${SPZ_GATEKEEPER_ZLIB_VERSION}.tar.gz")
+  "https://github.com/madler/zlib/releases/download/v${SPZ_GATEKEEPER_ZLIB_VERSION}/zlib-${SPZ_GATEKEEPER_ZLIB_VERSION}.tar.gz")
 
 add_library(spz_gatekeeper_zlib INTERFACE)
 if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
@@ -219,6 +219,7 @@ if(BUILD_TESTING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   endfunction()
 
   add_test(NAME spz_gatekeeper_self_test COMMAND spz_gatekeeper --self-test)
+  set_tests_properties(spz_gatekeeper_self_test PROPERTIES TIMEOUT 60)
 
   add_executable(spz_gatekeeper_test tests/spz_gatekeeper_test.cc)
   target_link_libraries(spz_gatekeeper_test PRIVATE spz_gatekeeper_core)
