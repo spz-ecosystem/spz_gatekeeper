@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(spz_gatekeeper
-  VERSION 2.0.0
+  VERSION 2.0.2
   DESCRIPTION "SPZ Gatekeeper - SPZ format legality checker"
   LANGUAGES CXX
 )
@@ -46,7 +46,7 @@ set(SPZ_GATEKEEPER_ZLIB_VERSION "1.3.2")
 set(SPZ_GATEKEEPER_ZLIB_SHA256
   "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16")
 set(SPZ_GATEKEEPER_ZLIB_URL
-  "https://zlib.net/zlib-${SPZ_GATEKEEPER_ZLIB_VERSION}.tar.gz")
+  "https://github.com/madler/zlib/releases/download/v${SPZ_GATEKEEPER_ZLIB_VERSION}/zlib-${SPZ_GATEKEEPER_ZLIB_VERSION}.tar.gz")
 
 add_library(spz_gatekeeper_zlib INTERFACE)
 if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
@@ -166,8 +166,6 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
     "-sEXPORT_ES6=1"
     "-sSINGLE_FILE=1"
     "-sFILESYSTEM=0"
-    "-sASSERTIONS=0"
-    "-sNO_EXIT_RUNTIME=1"
   )
   set_target_properties(spz_gatekeeper-wasm PROPERTIES
     OUTPUT_NAME "spz_gatekeeper_wasm"
@@ -221,6 +219,7 @@ if(BUILD_TESTING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   endfunction()
 
   add_test(NAME spz_gatekeeper_self_test COMMAND spz_gatekeeper --self-test)
+  set_tests_properties(spz_gatekeeper_self_test PROPERTIES TIMEOUT 60)
 
   add_executable(spz_gatekeeper_test tests/spz_gatekeeper_test.cc)
   target_link_libraries(spz_gatekeeper_test PRIVATE spz_gatekeeper_core)
@@ -237,7 +236,6 @@ if(BUILD_TESTING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   spz_gatekeeper_add_test(ilv_multi_record_test tests/ilv_multi_record_test.cc)
   spz_gatekeeper_add_test(extension_integration_test tests/extension_integration_test.cc)
   spz_gatekeeper_add_test(sh_quantization_test tests/sh_quantization_test.cc)
-  spz_gatekeeper_add_test(v4_format_test tests/v4_format_test.cc)
 
   if(SPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS)
     spz_gatekeeper_add_test(performance_benchmark_test tests/performance_benchmark_test.cc)

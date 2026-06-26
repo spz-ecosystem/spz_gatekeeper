@@ -1,5 +1,7 @@
 # SPZ Gatekeeper
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20849212.svg)](https://doi.org/10.5281/zenodo.20849212)
+
 > 仅做 L2 的 SPZ 合法性检查器，用于审计 header、flags 和 TLV trailer 扩展，同时不破坏原始 SPZ 的基础解码行为。
 
 `spz_gatekeeper` 是一个 **纯 C++17** 的 `.spz` 校验工具。它**不**检查 GLB 容器，也**不**实现压缩、渲染或效果评测；它只负责判断一个 SPZ 文件在携带可选厂商扩展时，是否仍保持与上游 SPZ packed format 的兼容性。

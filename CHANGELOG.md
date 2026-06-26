@@ -1,5 +1,23 @@
 # 变更日志
 
+## [v2.0.2] - 2026-06-26
+
+### v4 format support
+- New --format v4 flag for gen-fixture command
+- ZSTD compression integration for v4 fixture blobs
+- 6-category v4 format test suite (v4_format_test.cc)
+- WASM build: ZstdCompress + v4 path support
+
+### CI & build improvements
+- zlib URL switched to GitHub releases (zlib.net unreliable)
+- WASM flags cleanup (removed -sASSERTIONS=0, -sNO_EXIT_RUNTIME=1)
+- Test timeout 60s for self_test (prevents Windows CI hang)
+- v4_format_test excluded from default build (WASM-only)
+
+### Documentation
+- DOI badge added to README.md and README-zh.md
+- Version bumped 2.0.0 -> 2.0.2 in CMakeLists.txt
+
 本文件仅记录当前主线的重要变更，不保留已废弃路线的细节。
 
 ## [v2.0.0] - 2026-03-26
