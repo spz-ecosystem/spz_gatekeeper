@@ -54,6 +54,7 @@
 #include <utility>
 #include <vector>
 #include <zlib.h>
+#include <zstd.h>
 
 #if defined(__linux__) || defined(__APPLE__)
 #include <sys/resource.h>
