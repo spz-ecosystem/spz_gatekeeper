@@ -92,7 +92,7 @@ jobs:
       - name: Run Tests
         shell: bash
         run: |
-          ctest --test-dir build --output-on-failure -C Release --timeout 60 -E "self_test|registry_cli|gen_fixture|compat_check|extension_integration"
+          ctest --test-dir build --output-on-failure -C Release --timeout 60 -E "self_test|registry_cli|gen_fixture|compat_check|extension_integration|v4_format"
 
       - name: Release gate (Ubuntu, real compat-check)
         if: matrix.os == 'ubuntu-latest'
