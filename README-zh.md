@@ -43,6 +43,8 @@
 - 校验 SPZ header：magic、version、点数、SH degree、flags、reserved
 - 校验 base payload 大小与截断情况
 - 校验 base payload 之后的 TLV trailer
+Registered extension: `0xADBE0003` (`Adobe Coordinate System`) — status: draft, validator deferred.
+
 - 校验已知厂商扩展，目前内置 Adobe Safe Orbit Camera（`0xADBE0002`）
 - 对更高版本 SPZ 发出 warning，并继续 best-effort 校验
 
@@ -449,12 +451,10 @@ spz_gatekeeper/
 ```
 
 ## 规划中的扩展
-- `spz-entropy` 规划为 **vendor extension**，不是 core SPZ header 改造。
-- 推荐厂商空间：`0x4E41`（`Niantic`），`extension_id` 暂定 `TBD`，待正式定稿。
 
 ## 相关项目
 - [nianticlabs/spz](https://github.com/nianticlabs/spz) - 上游 SPZ 库
 - [KHR_gaussian_splatting](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_gaussian_splatting) - Khronos 扩展规范
 
 ## 许可证
-MIT，详见 `LICENSE`。
+MulanPSL v2，详见 `LICENSE`。
