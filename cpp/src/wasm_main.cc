@@ -17,8 +17,6 @@
 #include <utility>
 #include <vector>
 #include <zlib.h>
-
-
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
@@ -70,8 +68,6 @@ bool TryInspect(const emscripten::val& input, bool strict, spz_gatekeeper::GateR
   }
 }
 
-
-
 const spz_gatekeeper::ExtensionReport* FindExtensionReport(const spz_gatekeeper::GateReport& report,
                                                            std::uint32_t type) {
   for (const auto& ext : report.extension_reports) {
@@ -121,6 +117,23 @@ bool GzipCompress(const std::vector<std::uint8_t>& in, std::vector<std::uint8_t>
 
   deflateEnd(&strm);
   return ok;
+}
+static bool ZstdCompress(const std::vector<std::uint8_t>& in, std::vector<std::uint8_t>* out,
+                         std::string* err) {
+#if defined(ZSTD_VERSION_NUMBER)
+  std::size_t bound = ZSTD_compressBound(in.size());
+  out->resize(bound);
+  std::size_t ret = ZSTD_compress(out->data(), bound, in.data(), in.size(), 3);
+  if (ZSTD_isError(ret)) {
+    if (err) *err = ZSTD_getErrorName(ret);
+    return false;
+  }
+  out->resize(ret);
+  return true;
+#else
+  if (err) *err = "zstd not available (compiled without zstd)";
+  return false;
+#endif
 }
 
 void WriteU32Le(std::vector<std::uint8_t>* bytes, std::uint32_t value) {
@@ -186,9 +199,8 @@ std::vector<std::uint8_t> BuildDecompressedSpz(std::uint32_t version, std::uint8
   return decomp;
 }
 
-FixtureBlob BuildFixtureBlob(std::uint32_t type, bool invalid_size) {
+FixtureBlob BuildFixtureBlob(std::uint32_t type, bool invalid_size, const std::string& format = "v3") {
   FixtureBlob fixture;
-
   std::vector<std::uint8_t> payload;
   if (type == 0xADBE0002u) {
     payload = BuildAdobeSafeOrbitPayload(invalid_size);
@@ -196,10 +208,16 @@ FixtureBlob BuildFixtureBlob(std::uint32_t type, bool invalid_size) {
     payload = invalid_size ? std::vector<std::uint8_t>{0x00}
                            : std::vector<std::uint8_t>{0x00, 0x00, 0x00, 0x00};
   }
-
-
   const auto trailer = BuildTlvTrailer({{type, payload}});
-  const auto decompressed = BuildDecompressedSpz(3, spz_gatekeeper::kFlagHasExtensions, &trailer);
+  int ver = (format == "v4") ? 4 : 3;
+  const auto decompressed = BuildDecompressedSpz(ver, spz_gatekeeper::kFlagHasExtensions, &trailer);
+  if (format == "v4") {
+    std::string zstd_err;
+    if (!ZstdCompress(decompressed, &fixture.bytes, &zstd_err)) {
+      throw std::runtime_error(zstd_err.empty() ? "zstd compression failed" : zstd_err);
+    }
+    return fixture;
+  }
   std::string err;
   if (!GzipCompress(decompressed, &fixture.bytes, &err)) {
     throw std::runtime_error(err.empty() ? "gzip compression failed" : err);
@@ -261,8 +279,6 @@ std::string BuildRegistryListJson() {
   return oss.str();
 }
 
-
-
 std::string BuildCompatibilityBoardJson() {
 
   const auto specs = spz_gatekeeper::ExtensionSpecRegistry::Instance().ListSpecs();
@@ -301,8 +317,6 @@ std::string BuildCompatibilityBoardJson() {
     const bool strict_check_pass =
         !strict_valid_report.HasErrors() && !spz_gatekeeper::HasWarnings(strict_valid_report);
     const bool non_strict_check_pass = !non_strict_valid_report.HasErrors();
-
-
     oss << "{";
     oss << "\"type\":" << spec.type;
     oss << ",\"vendor_name\":\"" << spz_gatekeeper::JsonEscape(spec.vendor_name) << "\"";
@@ -457,14 +471,10 @@ emscripten::val buildBrowserAuditReport(const emscripten::val& payload) {
   report.performance_budget_wired = payload["performance_budget_wired"].as<bool>();
   return ParseJsonObject(spz_gatekeeper::BuildBrowserWasmAuditJson(report));
 }
-
-
 emscripten::val listRegisteredExtensions() {
 
   return ParseJsonObject(BuildRegistryListJson());
 }
-
-
 emscripten::val describeExtension(double type_value) {
   const auto type = static_cast<std::uint32_t>(type_value);
   const auto spec = spz_gatekeeper::ExtensionSpecRegistry::Instance().GetSpec(type);

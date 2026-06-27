@@ -4,7 +4,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, feature/spz-v2-profile-core, feature/spz-gatekeeper-2.0.2-r1, feature/spz-gatekeeper-2.0.2-r2, feature/spz-gatekeeper-2.0.2-r3, feature/spz-gatekeeper-2.0.2-r4, feature/spz-gatekeeper-2.0.2-r5 ]
+    branches: [ main, feature/spz-v2-profile-core, feature/spz-gatekeeper-2.0.2-r1, feature/spz-gatekeeper-2.0.2-r2, feature/spz-gatekeeper-2.0.2-r3, feature/spz-gatekeeper-2.0.2-r4, feature/spz-gatekeeper-2.0.2-r5, feature/spz-gatekeeper-2.0.2-r6 ]
   pull_request:
     branches: [ main ]
 
@@ -92,7 +92,7 @@ jobs:
       - name: Run Tests
         shell: bash
         run: |
-          ctest --test-dir build --output-on-failure -C Release --timeout 60 -E "self_test|registry_cli|gen_fixture|compat_check|extension_integration"
+          ctest --test-dir build --output-on-failure -C Release --timeout 60 -E "self_test|registry_cli|gen_fixture|compat_check|extension_integration|v4_format"
 
       - name: Release gate (Ubuntu, real compat-check)
         if: matrix.os == 'ubuntu-latest'
@@ -250,6 +250,7 @@ jobs:
           ./build-native/spz_gatekeeper gen-fixture \
             --type 0xADBE0002 \
             --mode valid \
+            --format v4 \
             --out build-wasm/site/synthetic_valid.spz
 
       - name: Verify WASM artifact
