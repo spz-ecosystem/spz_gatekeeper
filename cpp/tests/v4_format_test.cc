@@ -105,9 +105,17 @@ void test_v4_version_detect() {
 // ─── Test 4: v4 InspectSpzBlob (bench data) ───
 void test_v4_inspect_bench() {
   std::cout << "Test: v4 inspect bench data... ";
+  // Use SPZ_BENCH_DIR env var if set, otherwise try relative path
+  std::string bench_dir;
+  const char* env_dir = std::getenv("SPZ_BENCH_DIR");
+  if (env_dir && env_dir[0]) {
+    bench_dir = env_dir;
+  } else {
+    bench_dir = "../../../spz-anime-text2scene-bench";
+  }
   std::vector<std::string> candidates = {
-    "C:/Users/HP/Downloads/spz-anime-text2scene-bench/Winter Forest Cabin/raw/Winter Forest Cabin_v4.spz",
-    "../../../spz-anime-text2scene-bench/Winter Forest Cabin/raw/Winter Forest Cabin_v4.spz",
+    bench_dir + "/Winter Forest Cabin/raw/Winter Forest Cabin_v4.spz",
+    bench_dir + "/chinese_garden/raw/chinese_garden_v4.spz",
   };
 
   bool found = false;

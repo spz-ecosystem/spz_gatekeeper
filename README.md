@@ -225,9 +225,6 @@ spz_gatekeeper --self-test
 - Use `registry show <type>` when you need the full spec-facing fields instead of only the compact board view.
 - Further reading:
   - `docs/extension_registry.json`
-  - `docs/Implementing_Custom_Extension.md`
-  - `docs/plans/2026-03-20-spz-extension-registry-and-selftest-design.md`
-  - `docs/plans/2026-03-20-spz-extension-registry-implementation-plan.md`
 
 ## WASM quality audit modes
 The Web/WASM side now exposes one stable dual-mode contract:
@@ -314,18 +311,6 @@ This compatibility-board snapshot is a maturity view, not the final release gate
 - CI `release/challenge` gate steps are the **release decision path** (runtime audit evidence).
 - `release_ready` in board snapshots must not override the release decision from CI `compat-check` gates.
 
-### v2 remaining gaps (current)
-- No known codepath gap remains in `feature/spz-v2-profile-core` for the v2 gate contract.
-- Current local blocker: re-running `tests/wasm_smoke_test.mjs` in this WSL session still requires Node.js / Playwright / Emscripten to be available locally; CI keeps the browser gate as the source of truth for that step.
-
-### v2 done criteria (must all hold)
-1. `dev/release/challenge` use consistent policy behavior and budget-state semantics.
-2. Browser copy budget and CLI memory budget act as real gates, not passive observations.
-3. `final_verdict/release_ready` are produced by one final aggregation path only.
-4. Challenge manifest output is stable, reproducible, and top-level/item-level consistent.
-5. CI runs real profile-aware gates (not only board snapshots).
-6. README, registry, CLI, and Web report the same boundary and completion semantics.
-
 ### Release quick check (2 minutes)
 ```bash
 ./build/spz_gatekeeper --self-test
@@ -341,8 +326,6 @@ This compatibility-board snapshot is a maturity view, not the final release gate
 Because both browser and CLI run on the user's local machine, the project already has a local dual-end workflow by default. `browser_to_cli_handoff` is optional standardization, not a backend service, and it never replaces the real CLI artifact audit.
 
 Further reading:
-- `docs/plans/2026-03-22-spz-gatekeeper-wasm-audit-modes-design.md`
-- `docs/plans/2026-03-22-spz-gatekeeper-wasm-audit-implementation-plan.md`
 
 ## Extension author quick loop
 ```bash
@@ -372,6 +355,8 @@ Use this loop to confirm, in order, the registered contract, a minimal valid/inv
 - In `--no-strict` mode, TLV parse failures downgrade to warnings
 
 ### Adobe extension
+Registered extension: `0xADBE0003` (`Adobe Coordinate System`) — status: draft, validator deferred.
+
 Built-in validator: `0xADBE0002` (`Adobe Safe Orbit Camera`)
 
 Payload:
@@ -403,7 +388,6 @@ ext type=2914910210 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
       "has_validator": true,
       "status": "stable",
       "category": "camera",
-      "spec_url": "docs/Implementing_Custom_Extension.md",
       "short_description": "Constrains orbit elevation and minimum radius for safer camera control.",
       "validation_result": true,
       "error_message": ""
@@ -459,13 +443,9 @@ spz_gatekeeper/
 └── RELEASE_CHECKLIST.md
 ```
 
-## Planned extensions
-- `spz-entropy` is planned as a **vendor extension**, not a core SPZ header modification.
-- Recommended vendor space: `0x4E41` (`Niantic`) with `extension_id = TBD` until finalized.
-
 ## Related projects
 - [nianticlabs/spz](https://github.com/nianticlabs/spz) - upstream SPZ library
 - [KHR_gaussian_splatting](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_gaussian_splatting) - Khronos extension spec
 
 ## License
-MIT. See `LICENSE`.
+MulanPSL v2. See `LICENSE`.

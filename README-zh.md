@@ -43,6 +43,8 @@
 - 校验 SPZ header：magic、version、点数、SH degree、flags、reserved
 - 校验 base payload 大小与截断情况
 - 校验 base payload 之后的 TLV trailer
+Registered extension: `0xADBE0003` (`Adobe Coordinate System`) — status: draft, validator deferred.
+
 - 校验已知厂商扩展，目前内置 Adobe Safe Orbit Camera（`0xADBE0002`）
 - 对更高版本 SPZ 发出 warning，并继续 best-effort 校验
 
@@ -222,9 +224,6 @@ spz_gatekeeper --self-test
 - 当需要查看完整契约字段，而不是只看成熟度结果时，优先使用 `registry show <type>`。
 - 延伸阅读：
   - `docs/extension_registry.json`
-  - `docs/Implementing_Custom_Extension.md`
-  - `docs/plans/2026-03-20-spz-extension-registry-and-selftest-design.md`
-  - `docs/plans/2026-03-20-spz-extension-registry-implementation-plan.md`
 
 ## WASM 质量审查模式
 Web/WASM 侧现在统一为一套稳定的双模式契约：
@@ -396,7 +395,6 @@ ext type=2914910210 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
       "has_validator": true,
       "status": "stable",
       "category": "camera",
-      "spec_url": "docs/Implementing_Custom_Extension.md",
       "short_description": "Constrains orbit elevation and minimum radius for safer camera control.",
       "validation_result": true,
       "error_message": ""
@@ -453,12 +451,10 @@ spz_gatekeeper/
 ```
 
 ## 规划中的扩展
-- `spz-entropy` 规划为 **vendor extension**，不是 core SPZ header 改造。
-- 推荐厂商空间：`0x4E41`（`Niantic`），`extension_id` 暂定 `TBD`，待正式定稿。
 
 ## 相关项目
 - [nianticlabs/spz](https://github.com/nianticlabs/spz) - 上游 SPZ 库
 - [KHR_gaussian_splatting](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_gaussian_splatting) - Khronos 扩展规范
 
 ## 许可证
-MIT，详见 `LICENSE`。
+MulanPSL v2，详见 `LICENSE`。

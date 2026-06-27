@@ -43,6 +43,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zlib1g-dev libzstd-dev cmake g++
 
+      - name: Clone bench dataset
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          git clone --depth 1 https://github.com/spz-ecosystem/spz-anime-text2scene-bench.git bench-data
+          echo "SPZ_BENCH_DIR=${{ github.workspace }}/bench-data" >> "$GITHUB_ENV"
+
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
@@ -92,7 +98,7 @@ jobs:
       - name: Run Tests
         shell: bash
         run: |
-          ctest --test-dir build --output-on-failure -C Release --timeout 60 -E "self_test|registry_cli|gen_fixture|compat_check|extension_integration|v4_format"
+          ctest --test-dir build --output-on-failure -C Release --timeout 60 -E "self_test|registry_cli|gen_fixture|compat_check|extension_integration"
 
       - name: Release gate (Ubuntu, real compat-check)
         if: matrix.os == 'ubuntu-latest'
