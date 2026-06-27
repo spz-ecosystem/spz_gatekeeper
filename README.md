@@ -183,6 +183,7 @@ spz_gatekeeper compat-board [--json]
 ```bash
 spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --out fixture.spz
 spz_gatekeeper gen-fixture --type 0xADBE0002 --mode invalid-size --out fixture_bad.spz
+spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --format v4 --out fixture_v4.spz
 ```
 
 ### Show extension-development guide
