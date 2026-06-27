@@ -148,7 +148,7 @@ wsl bash -lc "
 ### 依赖
 ```bash
 # Ubuntu / Debian
-sudo apt-get install -y zlib1g-dev
+sudo apt-get install -y zlib1g-dev libzstd-dev
 ```
 
 ## CLI
@@ -424,24 +424,24 @@ ext type=2914910210 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
 spz_gatekeeper/
 ├── cpp/
 │   ├── include/spz_gatekeeper/
+│   │   ├── audit_summary.h
+│   │   ├── extension_spec_registry.h
 │   │   ├── extension_validator.h
+│   │   ├── ilv.h
 │   │   ├── json_min.h
 │   │   ├── report.h
 │   │   ├── safe_orbit_camera_validator.h
 │   │   ├── spz.h
-│   │   ├── tlv.h
 │   │   └── validator_registry.h
-│   ├── extensions/
-│   │   ├── adobe/
-│   │   │   └── safe_orbit_camera_validator.h
-│   │   └── registry/
-│   │       └── validator_registry.h
 │   ├── src/
+│   │   ├── audit_summary.cc
+│   │   ├── extension_spec_registry.cc
+│   │   ├── ilv.cc
 │   │   ├── json_min.cc
 │   │   ├── main.cc
 │   │   ├── report.cc
 │   │   ├── spz.cc
-│   │   └── tlv.cc
+│   │   └── wasm_main.cc
 │   ├── tests/
 │   └── CMakeLists.txt
 ├── docs/
