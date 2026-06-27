@@ -225,9 +225,6 @@ spz_gatekeeper --self-test
 - Use `registry show <type>` when you need the full spec-facing fields instead of only the compact board view.
 - Further reading:
   - `docs/extension_registry.json`
-  - `docs/Implementing_Custom_Extension.md`
-  - `docs/plans/2026-03-20-spz-extension-registry-and-selftest-design.md`
-  - `docs/plans/2026-03-20-spz-extension-registry-implementation-plan.md`
 
 ## WASM quality audit modes
 The Web/WASM side now exposes one stable dual-mode contract:
@@ -341,8 +338,6 @@ This compatibility-board snapshot is a maturity view, not the final release gate
 Because both browser and CLI run on the user's local machine, the project already has a local dual-end workflow by default. `browser_to_cli_handoff` is optional standardization, not a backend service, and it never replaces the real CLI artifact audit.
 
 Further reading:
-- `docs/plans/2026-03-22-spz-gatekeeper-wasm-audit-modes-design.md`
-- `docs/plans/2026-03-22-spz-gatekeeper-wasm-audit-implementation-plan.md`
 
 ## Extension author quick loop
 ```bash
@@ -403,7 +398,6 @@ ext type=2914910210 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
       "has_validator": true,
       "status": "stable",
       "category": "camera",
-      "spec_url": "docs/Implementing_Custom_Extension.md",
       "short_description": "Constrains orbit elevation and minimum radius for safer camera control.",
       "validation_result": true,
       "error_message": ""

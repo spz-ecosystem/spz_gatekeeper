@@ -222,9 +222,6 @@ spz_gatekeeper --self-test
 - 当需要查看完整契约字段，而不是只看成熟度结果时，优先使用 `registry show <type>`。
 - 延伸阅读：
   - `docs/extension_registry.json`
-  - `docs/Implementing_Custom_Extension.md`
-  - `docs/plans/2026-03-20-spz-extension-registry-and-selftest-design.md`
-  - `docs/plans/2026-03-20-spz-extension-registry-implementation-plan.md`
 
 ## WASM 质量审查模式
 Web/WASM 侧现在统一为一套稳定的双模式契约：
@@ -396,7 +393,6 @@ ext type=2914910210 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
       "has_validator": true,
       "status": "stable",
       "category": "camera",
-      "spec_url": "docs/Implementing_Custom_Extension.md",
       "short_description": "Constrains orbit elevation and minimum radius for safer camera control.",
       "validation_result": true,
       "error_message": ""
