@@ -2,7 +2,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20849212.svg)](https://doi.org/10.5281/zenodo.20849212)
 
-> L2-only SPZ legality checker for validating headers, flags, and TLV trailer extensions without changing baseline SPZ decoding behavior.
+> SPZ legality checker for validating headers, flags, and TLV trailer extensions without changing baseline SPZ decoding behavior.
 
 `spz_gatekeeper` is a **pure C++17** validator for `.spz` files. It does **not** validate GLB containers, and it does **not** implement compression or rendering. Its job is to audit whether an SPZ file stays compatible with the upstream SPZ packed format while carrying optional vendor extensions.
 
@@ -61,6 +61,9 @@ Inclusion in, or validation by, this gatekeeper project does not constitute endo
   - `version < 1` => error
   - `version 1..4` => normal validation
   - `version > 4` => warning, continue validation
+- Compression formats:
+  - v3 (default): gzip compression
+  - v4: ZSTD compression (requires libzstd)
 
 ## Web UI
 
@@ -118,7 +121,7 @@ node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-pages/site/synthetic_
 
 Policy: CI/Web smoke uses synthetic fixtures by default; real local assets remain optional and are not required for release gating.
 
-### v2.0.0 WASM audit mode status
+### v2.0.2 WASM audit mode status
 - Browser gate `browser_lightweight_wasm_audit` is enabled in Web UI.
 - Browser report can export `browser_to_cli_handoff` and merge into CLI `compat-check --handoff ... --json`.
 - Final release verdict still comes from local CLI artifact audit (`local_cli_spz_artifact_audit`).
@@ -148,7 +151,7 @@ wsl bash -lc "
 ### Dependency
 ```bash
 # Ubuntu / Debian
-sudo apt-get install -y zlib1g-dev
+sudo apt-get install -y zlib1g-dev libzstd-dev
 ```
 
 ## CLI
@@ -183,6 +186,7 @@ spz_gatekeeper compat-board [--json]
 ```bash
 spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --out fixture.spz
 spz_gatekeeper gen-fixture --type 0xADBE0002 --mode invalid-size --out fixture_bad.spz
+spz_gatekeeper gen-fixture --type 0xADBE0002 --mode valid --format v4 --out fixture_v4.spz
 ```
 
 ### Show extension-development guide
@@ -427,24 +431,24 @@ ext type=2914910210 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
 spz_gatekeeper/
 ├── cpp/
 │   ├── include/spz_gatekeeper/
+│   │   ├── audit_summary.h
+│   │   ├── extension_spec_registry.h
 │   │   ├── extension_validator.h
+│   │   ├── ilv.h
 │   │   ├── json_min.h
 │   │   ├── report.h
 │   │   ├── safe_orbit_camera_validator.h
 │   │   ├── spz.h
-│   │   ├── tlv.h
 │   │   └── validator_registry.h
-│   ├── extensions/
-│   │   ├── adobe/
-│   │   │   └── safe_orbit_camera_validator.h
-│   │   └── registry/
-│   │       └── validator_registry.h
 │   ├── src/
+│   │   ├── audit_summary.cc
+│   │   ├── extension_spec_registry.cc
+│   │   ├── ilv.cc
 │   │   ├── json_min.cc
 │   │   ├── main.cc
 │   │   ├── report.cc
 │   │   ├── spz.cc
-│   │   └── tlv.cc
+│   │   └── wasm_main.cc
 │   ├── tests/
 │   └── CMakeLists.txt
 ├── docs/
