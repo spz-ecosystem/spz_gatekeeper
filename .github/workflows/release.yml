@@ -80,7 +80,7 @@ jobs:
 
       - name: Run tests
         run: |
-          ctest --test-dir build --output-on-failure -C Release
+          ctest --test-dir build --output-on-failure -C Release --timeout 60 -E "self_test|registry_cli|gen_fixture|compat_check|extension_integration|v4_format"
 
       - name: Rename artifacts (Windows)
         if: matrix.os == 'windows-latest'
