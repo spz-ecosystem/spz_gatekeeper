@@ -1,8 +1,6 @@
 name: Pages
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
 
@@ -30,13 +28,13 @@ jobs:
 
       - name: Setup Emscripten SDK
         run: |
-          git clone https://github.com/emscripten-core/emsdk.git --depth 1
+          git clone https://github.com/emscripten-core/emsdk.git --depth 1      
           ./emsdk/emsdk install 3.1.56
           ./emsdk/emsdk activate 3.1.56
-          echo "${GITHUB_WORKSPACE}/emsdk" >> "$GITHUB_PATH"
-          echo "${GITHUB_WORKSPACE}/emsdk/upstream/emscripten" >> "$GITHUB_PATH"
-          echo "EMSDK=${GITHUB_WORKSPACE}/emsdk" >> "$GITHUB_ENV"
-          echo "EM_CONFIG=${GITHUB_WORKSPACE}/emsdk/.emscripten" >> "$GITHUB_ENV"
+          echo ${GITHUB_WORKSPACE}/emsdk >> $GITHUB_PATH
+          echo ${GITHUB_WORKSPACE}/emsdk/upstream/emscripten >> $GITHUB_PATH
+          echo EMSDK=${GITHUB_WORKSPACE}/emsdk >> $GITHUB_ENV
+          echo EM_CONFIG=${GITHUB_WORKSPACE}/emsdk/.emscripten >> $GITHUB_ENV
 
       - name: Configure CMake (Emscripten)
         run: |
@@ -56,15 +54,11 @@ jobs:
           mkdir -p site
           cp -R build-pages/site/. site/
 
-
-
       - name: Setup Pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
-
-
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
 
