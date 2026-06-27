@@ -1,119 +1,146 @@
 {
-  "audit_contract": {
-    "audit_profile": "spz",
-    "browser_audit_mode": "browser_lightweight_wasm_audit",
-    "cli_audit_mode": "local_cli_spz_artifact_audit",
-    "optional_handoff": "browser_to_cli_handoff",
-    "scope": {
-      "audits_spz": true,
-      "audits_glb": false,
-      "audits_spz2glb": false,
-      "browser_input": "standard_zip_audit_bundle",
-      "cli_input": "real_spz_artifact"
-    },
-    "user_flow": [
-      "upload_zip_bundle_in_browser",
-      "optional_export_browser_to_cli_handoff",
-      "run_cli_compat_check_on_real_spz",
-      "optional_merge_handoff_into_json_report",
-      "cli_verdict_is_final"
-    ]
-  },
-  "v2_closure": {
-    "boundary": {
-      "maturity_board": "compat-board and compatibility_board snapshot",
-      "release_gate": "CI release/challenge gate driven by compat-check runtime audits",
-      "rule": "board release_ready must not override CI gate verdict"
-    },
-    "remaining_gaps": [],
-    "done_criteria": [
-      "dev_release_challenge_policy_and_budget_state_semantics_are_consistent",
-      "browser_copy_budget_and_cli_memory_budget_are_blocking_gates",
-      "final_verdict_and_release_ready_are_produced_by_one_final_aggregation_path",
-      "challenge_manifest_output_is_stable_reproducible_and_top_item_consistent",
-      "ci_runs_real_profile_aware_gates_not_only_board_snapshots",
-      "readme_registry_cli_web_share_the_same_boundary_and_completion_semantics"
-    ],
-    "auxiliary_outputs": [
-      "browser_report_copy_breakdown_by_stage",
-      "challenge_batch_challenge_stats",
-      "challenge_batch_visualization_hints"
-    ],
-    "verification_status": {
-      "cpp_cli_tests": "passed_in_wsl",
-      "ci_profile_aware_gate": "configured",
-      "local_wasm_smoke": "blocked_in_current_wsl_env_missing_node_playwright_emscripten"
-    },
-    "release_gate_contract": {
-      "release_gate": {
-        "entry": "compat-check <file.spz> --json",
-        "must_pass": [
-          "exit_code_is_zero",
-          "policy_mode_is_release",
-          "critical_budgets_present_peak_memory_mb_and_memory_growth_count"
+    "audit_contract": {
+        "audit_profile": "spz",
+        "browser_audit_mode": "browser_lightweight_wasm_audit",
+        "cli_audit_mode": "local_cli_spz_artifact_audit",
+        "optional_handoff": "browser_to_cli_handoff",
+        "scope": {
+            "audits_spz": true,
+            "audits_glb": false,
+            "audits_spz2glb": false,
+            "browser_input": "standard_zip_audit_bundle",
+            "cli_input": "real_spz_artifact"
+        },
+        "user_flow": [
+            "upload_zip_bundle_in_browser",
+            "optional_export_browser_to_cli_handoff",
+            "run_cli_compat_check_on_real_spz",
+            "optional_merge_handoff_into_json_report",
+            "cli_verdict_is_final"
         ]
-      },
-      "challenge_gate": {
-        "entry": "compat-check --manifest <manifest.json> --json",
-        "must_pass": [
-          "policy_mode_is_challenge",
-          "summary_total_matches_manifest_items",
-          "grouped_summary_present"
-        ]
-      }
-    }
-  },
-  "registry": {
-    "count": 1,
-    "extensions": [
-      {
-        "type": 2914910210,
-        "vendor_id": 44478,
-        "extension_id": 2,
-        "vendor_name": "Adobe",
-        "extension_name": "Adobe Safe Orbit Camera",
-        "category": "camera",
-        "status": "stable",
-        "spec_url": "docs/Implementing_Custom_Extension.md",
-        "short_description": "Constrains orbit elevation and minimum radius for safer camera control.",
-        "min_spz_version": 1,
-        "requires_has_extensions_flag": true,
-        "has_validator": true
-      }
-    ]
-  },
-  "compatibility_board": {
-    "count": 1,
-    "extensions": [
-      {
-        "type": 2914910210,
-        "vendor_name": "Adobe",
-        "extension_name": "Adobe Safe Orbit Camera",
-        "status": "stable",
-        "has_spec": true,
-        "has_validator": true,
-        "fixture_valid_pass": true,
-        "fixture_invalid_pass": true,
-        "strict_check_pass": true,
-        "non_strict_check_pass": true,
-        "final_verdict": "review_required",
-        "release_ready": false,
-        "wasm_quality_gate": {
-          "coverage_level": "baseline",
-          "validator_coverage_ok": true,
-          "empty_shell_risk": false,
-          "api_surface_wired": true,
-          "browser_smoke_wired": true,
-          "empty_shell_guard_wired": true,
-          "warning_budget_wired": false,
-          "copy_budget_wired": false,
-          "memory_budget_wired": false,
-          "performance_budget_wired": false,
-          "artifact_audit_wired": false,
-          "release_ready": false
+    },
+    "v2_closure": {
+        "boundary": {
+            "maturity_board": "compat-board and compatibility_board snapshot",
+            "release_gate": "CI release/challenge gate driven by compat-check runtime audits",
+            "rule": "board release_ready must not override CI gate verdict"
+        },
+        "remaining_gaps": [],
+        "done_criteria": [
+            "dev_release_challenge_policy_and_budget_state_semantics_are_consistent",
+            "browser_copy_budget_and_cli_memory_budget_are_blocking_gates",
+            "final_verdict_and_release_ready_are_produced_by_one_final_aggregation_path",
+            "challenge_manifest_output_is_stable_reproducible_and_top_item_consistent",
+            "ci_runs_real_profile_aware_gates_not_only_board_snapshots",
+            "readme_registry_cli_web_share_the_same_boundary_and_completion_semantics"
+        ],
+        "auxiliary_outputs": [
+            "browser_report_copy_breakdown_by_stage",
+            "challenge_batch_challenge_stats",
+            "challenge_batch_visualization_hints"
+        ],
+        "verification_status": {
+            "cpp_cli_tests": "passed_in_wsl",
+            "ci_profile_aware_gate": "configured",
+            "local_wasm_smoke": "blocked_in_current_wsl_env_missing_node_playwright_emscripten"
+        },
+        "release_gate_contract": {
+            "release_gate": {
+                "entry": "compat-check <file.spz> --json",
+                "must_pass": [
+                    "exit_code_is_zero",
+                    "policy_mode_is_release",
+                    "critical_budgets_present_peak_memory_mb_and_memory_growth_count"
+                ]
+            },
+            "challenge_gate": {
+                "entry": "compat-check --manifest <manifest.json> --json",
+                "must_pass": [
+                    "policy_mode_is_challenge",
+                    "summary_total_matches_manifest_items",
+                    "grouped_summary_present"
+                ]
+            }
         }
-
-      }
-    ]
-  }
+    },
+    "registry": {
+        "count": 2,
+        "extensions": [
+            {
+                "type": 2914910210,
+                "vendor_id": 44478,
+                "extension_id": 2,
+                "vendor_name": "Adobe",
+                "extension_name": "Adobe Safe Orbit Camera",
+                "category": "camera",
+                "status": "stable",
+                "spec_url": "extensions/cc/safe-orbit-camera-adobe.h",
+                "short_description": "Constrains orbit elevation and minimum radius for safer camera control.",
+                "min_spz_version": 1,
+                "requires_has_extensions_flag": true,
+                "has_validator": true
+            },
+            {
+                "type": 2914910211,
+                "vendor_id": 44478,
+                "extension_id": 3,
+                "vendor_name": "Adobe",
+                "extension_name": "Adobe Coordinate System",
+                "category": "metadata",
+                "status": "draft",
+                "spec_url": "extensions/cc/coordinate-system-adobe.h",
+                "short_description": "Records the coordinate system in which Gaussian data is physically stored.",
+                "min_spz_version": 1,
+                "requires_has_extensions_flag": true,
+                "has_validator": false
+            }
+        ]
+    },
+    "compatibility_board": {
+        "count": 2,
+        "extensions": [
+            {
+                "type": 2914910210,
+                "vendor_name": "Adobe",
+                "extension_name": "Adobe Safe Orbit Camera",
+                "status": "stable",
+                "has_spec": true,
+                "has_validator": true,
+                "fixture_valid_pass": true,
+                "fixture_invalid_pass": true,
+                "strict_check_pass": true,
+                "non_strict_check_pass": true,
+                "final_verdict": "review_required",
+                "release_ready": false,
+                "wasm_quality_gate": {
+                    "coverage_level": "baseline",
+                    "validator_coverage_ok": true,
+                    "empty_shell_risk": false,
+                    "api_surface_wired": true,
+                    "browser_smoke_wired": true,
+                    "empty_shell_guard_wired": true,
+                    "warning_budget_wired": false,
+                    "copy_budget_wired": false,
+                    "memory_budget_wired": false,
+                    "performance_budget_wired": false,
+                    "artifact_audit_wired": false,
+                    "release_ready": false
+                }
+            },
+            {
+                "type": 2914910211,
+                "vendor_name": "Adobe",
+                "extension_name": "Adobe Coordinate System",
+                "status": "draft",
+                "has_spec": true,
+                "has_validator": false,
+                "fixture_valid_pass": false,
+                "fixture_invalid_pass": false,
+                "strict_check_pass": false,
+                "non_strict_check_pass": false,
+                "final_verdict": "review_required",
+                "release_ready": false
+            }
+        ]
+    }
 }
