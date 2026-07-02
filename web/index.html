@@ -687,11 +687,33 @@
     }
 
     function renderManifest(report) {
-      // GateReport (inspectSpz) 无 bundle manifest
+      // GateReport (inspectSpz): 显示扩展注册表 + 兼容看板
       if (report.ok !== undefined) {
-        setStackList(extensionsList, [
-          '<div class="stack-item"><div class="stack-item-title">SPZ 文件验证</div><div class="stack-item-body">直接 .spz 验证，无 bundle manifest。</div></div>'
-        ]);
+        const meta = report._spzMeta || {};
+        const registry = meta.registry || { count: 0, extensions: [] };
+        const compatBoard = meta.compatBoard || { count: 0, extensions: [] };
+        const extItems = registry.extensions.map(ext => `
+          <div class="stack-item">
+            <div class="stack-item-title">${escapeHtml(ext.extension_name || 'unknown')} · 0x${(ext.type || 0).toString(16)}</div>
+            <div class="stack-item-meta">vendor=${escapeHtml(ext.vendor_name || 'unknown')} · status=${escapeHtml(ext.status || 'unknown')} · category=${escapeHtml(ext.category || 'n/a')}</div>
+            <div class="stack-item-body">${escapeHtml(ext.short_description || '')}${ext.has_validator ? '<br><strong>✓ 有验证器</strong>' : '<br><em>无验证器</em>'}</div>
+          </div>
+        `);
+
+        const compatItems = compatBoard.extensions.map(ext => `
+          <div class="stack-item">
+            <div class="stack-item-title">${escapeHtml(ext.extension_name || 'unknown')}</div>
+            <div class="stack-item-meta">valid=${ext.fixture_valid_pass ? '✅' : '❌'} · invalid=${ext.fixture_invalid_pass ? '✅' : '❌'} · strict=${ext.strict_check_pass ? '✅' : '❌'}</div>
+          </div>
+        `);
+
+        const sections = [
+          `<div class="stack-item"><div class="stack-item-title">扩展注册表</div><div class="stack-item-body">已注册 ${registry.count} 个扩展</div></div>`,
+          ...extItems,
+          `<div class="stack-item"><div class="stack-item-title">兼容看板</div><div class="stack-item-body">${compatBoard.count} 个扩展已测试</div></div>`,
+          ...compatItems
+        ];
+        setStackList(extensionsList, sections);
         return;
       }
       const manifest = report.manifest_summary || {};
@@ -719,14 +741,27 @@
     }
 
     function renderBudgets(report) {
-      // GateReport (inspectSpz) 无 budgets
+      // GateReport (inspectSpz): 显示 trailer + compat summary
       if (report.ok !== undefined) {
-        const issueSeverity = report.issues && report.issues.length > 0
-          ? report.issues.map(i => i.severity).filter(Boolean).join(', ')
-          : 'ok';
-        setStackList(budgetsList, [
-          '<div class="stack-item"><div class="stack-item-title">验证结果</div><div class="stack-item-meta">status=' + (report.ok ? 'pass' : 'error') + '</div><div class="stack-item-body">severity: ' + (issueSeverity || 'none') + '</div></div>'
-        ]);
+        const meta = report._spzMeta || {};
+        const trailer = meta.trailer;
+        const compatSummary = meta.compatSummary;
+
+        const items = [];
+        if (trailer) {
+          items.push(`<div class="stack-item"><div class="stack-item-title">SPZ Trailer</div><div class="stack-item-meta">flags=0x${(trailer.flags || 0).toString(16)} · trailer_size=${trailer.trailer_size || 0}</div></div>`);
+          const ilvRecords = trailer.ilv_records || [];
+          ilvRecords.forEach(rec => {
+            items.push(`<div class="stack-item"><div class="stack-item-title">ILV · 0x${(rec.type || 0).toString(16)}</div><div class="stack-item-meta">length=${rec.length || 0} · offset=${rec.offset || 0}</div></div>`);
+          });
+        }
+        if (compatSummary) {
+          items.push(`<div class="stack-item"><div class="stack-item-title">兼容摘要</div><div class="stack-item-body"><strong>audit_profile:</strong> ${escapeHtml(compatSummary.audit_profile || 'n/a')}<br><strong>verdict:</strong> ${escapeHtml(compatSummary.verdict || 'n/a')}<br><strong>next_action:</strong> ${escapeHtml(compatSummary.next_action || 'n/a')}<br><strong>release_ready:</strong> ${escapeHtml(String(compatSummary.release_ready ?? 'n/a'))}</div></div>`);
+        }
+        if (items.length === 0) {
+          items.push('<div class="stack-item"><div class="stack-item-title">SPZ 验证</div><div class="stack-item-body">直接 .spz 验证，无 bundle budgets。</div></div>');
+        }
+        setStackList(budgetsList, items);
         return;
       }
       const budgetItems = Object.entries(report.budgets || {}).map(([name, budget]) => `
@@ -787,7 +822,7 @@
       registryCountBadge.textContent = runtimeStatus.available ? 'WASM+JS' : 'JS ONLY';
       setStackList(registryList, [
         `<div class="stack-item"><div class="stack-item-title">WASM Gate: ${escapeHtml(runtimeStatus.mode)}</div><div class="stack-item-body"><strong>Runtime Available:</strong> ${escapeHtml(String(runtimeStatus.available))}<br><strong>Engine:</strong> ${escapeHtml(runtimeStatus.runtime_engine)}</div></div>`,
-        '<div class="stack-item"><div class="stack-item-title">Policy</div><div class="stack-item-body">浏览器端只做标准 zip 审查包轻量门禁，不审 `GLB`、不审 `spz2glb`；真实 `.spz` 成品仍需进入本地 CLI 深审，最终以 CLI 结论为准。</div></div>'
+        '<div class="stack-item"><div class="stack-item-title">Policy</div><div class="stack-item-body">浏览器端支持直接上传 `.spz` 进行结构校验（inspectSpz），或上传标准 zip 审查包（auditWasmBundle）。SPZ 验证结果通过 handoff JSON 与本地 CLI 深审合并。最终以 CLI 结论为准。</div></div>'
 
       ]);
       registryEmpty.classList.add('hidden');
@@ -818,8 +853,18 @@
 
         let report;
         if (isSpz) {
-          // 直接 .spz 文件 → inspectSpz 验证
+          // .spz 模式: 多维度验证
           report = await wasmModule.inspectSpz(bytes, false);
+
+          // 并行获取 trailer + registry + compat 数据
+          const [trailerData, extensionsData, compatBoard, compatSummary] = await Promise.all([
+            wasmModule.dumpTrailer(bytes, false).catch(() => null),
+            wasmModule.listRegisteredExtensions().catch(() => ({ count: 0, extensions: [] })),
+            wasmModule.getCompatibilityBoard().catch(() => ({ count: 0, extensions: [] })),
+            wasmModule.inspectCompatSummary(bytes).catch(() => null)
+          ]);
+
+          report._spzMeta = { trailer: trailerData, registry: extensionsData, compatBoard, compatSummary };
           lastAuditReport = report;
           lastAuditFileName = file.name;
           setHandoffButtonState(false);
