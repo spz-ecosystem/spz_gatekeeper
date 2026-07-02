@@ -687,6 +687,13 @@
     }
 
     function renderManifest(report) {
+      // GateReport (inspectSpz) 无 bundle manifest
+      if (report.ok !== undefined) {
+        setStackList(extensionsList, [
+          '<div class="stack-item"><div class="stack-item-title">SPZ 文件验证</div><div class="stack-item-body">直接 .spz 验证，无 bundle manifest。</div></div>'
+        ]);
+        return;
+      }
       const manifest = report.manifest_summary || {};
       const entryItems = (report.bundle_entries || []).map(entry => `
         <div class="stack-item">
@@ -712,6 +719,16 @@
     }
 
     function renderBudgets(report) {
+      // GateReport (inspectSpz) 无 budgets
+      if (report.ok !== undefined) {
+        const issueSeverity = report.issues && report.issues.length > 0
+          ? report.issues.map(i => i.severity).filter(Boolean).join(', ')
+          : 'ok';
+        setStackList(budgetsList, [
+          '<div class="stack-item"><div class="stack-item-title">验证结果</div><div class="stack-item-meta">status=' + (report.ok ? 'pass' : 'error') + '</div><div class="stack-item-body">severity: ' + (issueSeverity || 'none') + '</div></div>'
+        ]);
+        return;
+      }
       const budgetItems = Object.entries(report.budgets || {}).map(([name, budget]) => `
         <div class="stack-item">
           <div class="stack-item-title">Budget · ${escapeHtml(name)}</div>
