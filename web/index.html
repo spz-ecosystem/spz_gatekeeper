@@ -650,7 +650,13 @@
     }
 
     function formatVerdict(report) {
-
+      // GateReport 格式 (inspectSpz): ok + issues
+      if (report.ok !== undefined) {
+        return report.ok
+          ? { state: 'pass', label: 'PASS' }
+          : { state: 'error', label: 'BLOCK' };
+      }
+      // auditWasmBundle 格式: verdict
       const verdict = String(report?.verdict || 'block').toLowerCase();
       if (verdict === 'pass') {
         return { state: 'pass', label: 'PASS' };
@@ -750,8 +756,9 @@
     function renderSummary(file, report) {
       const verdict = formatVerdict(report);
       const summary = report.summary || {};
+      const issueCount = report.issues ? report.issues.length : (summary.issue_count ?? 0);
       summaryTitle.textContent = file.name;
-      summaryMeta.textContent = `${formatBytes(file.size)} · entries ${summary.file_count ?? 0} · issues ${summary.issue_count ?? 0} · next ${report.next_action || 'n/a'}`;
+      summaryMeta.textContent = `${formatBytes(file.size)} · entries ${summary.file_count ?? 0} · issues ${issueCount} · next ${report.next_action || 'n/a'}`;
       summaryBadge.textContent = verdict.label;
       summaryBadge.className = `badge ${verdict.state}`;
     }
