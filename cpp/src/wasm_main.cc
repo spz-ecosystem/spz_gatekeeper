@@ -22,7 +22,7 @@
 
 namespace {
 
-constexpr std::size_t kMaxSpzBytes = 512u * 1024u * 1024u;
+constexpr std::size_t kMaxSpzBytes = 30u * 1024u * 1024u;
 
 struct FixtureBlob {
   std::vector<std::uint8_t> bytes;

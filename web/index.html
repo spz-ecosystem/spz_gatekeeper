@@ -465,7 +465,7 @@
           </svg>
         </div>
         <div class="upload-main-text">点击或拖拽标准 WASM 审查包 `.zip` 至此</div>
-        <div class="upload-sub-text">浏览器端只做 `browser_lightweight_wasm_audit`：只审标准 zip 审查包，不审 `GLB`、不审 `spz2glb`，也不直接替代真实 `.spz` 成品的本地 CLI 深审。</div>
+        <div class="upload-sub-text">浏览器端只做 `browser_lightweight_wasm_audit`：只审标准 zip 审查包，不审 `GLB`、不审 `spz2glb`，也不直接替代真实 `.spz` 成品的本地 CLI 深审。上限 30MB，≥24MB 可能较慢。</div>
         <div class="loading-status" id="loadingStatus">
           <div class="loading-spinner"></div>
           <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -776,7 +776,18 @@
         return;
       }
 
-      setEngineStatus('ready', `正在审查 ${file.name} ...`);
+      // 前端文件大小限制（30MB 硬上限，24MB 告警线）
+      const kMaxBytes = 30 * 1024 * 1024;
+      const kWarnBytes = 24 * 1024 * 1024;
+      if (file.size >= kMaxBytes) {
+        setEngineStatus('error', `文件过大（${(file.size / 1024 / 1024).toFixed(1)}MB），超过 30MB 硬上限`);
+        return;
+      }
+      if (file.size >= kWarnBytes) {
+        setEngineStatus('ready', `⚠️ 文件较大（${(file.size / 1024 / 1024).toFixed(1)}MB），处理速度可能较慢`);
+      } else {
+        setEngineStatus('ready', `正在审查 ${file.name} ...`);
+      }
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
         const report = await wasmModule.auditWasmBundle(bytes, file.name);

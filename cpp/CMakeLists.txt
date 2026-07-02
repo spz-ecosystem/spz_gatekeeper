@@ -156,16 +156,18 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
   add_executable(spz_gatekeeper-wasm src/wasm_main.cc)
   target_link_libraries(spz_gatekeeper-wasm PRIVATE spz_gatekeeper_core)
   target_link_options(spz_gatekeeper-wasm PRIVATE
-    "-O3"
+    "-Oz"
     "--bind"
     "--no-entry"
     "-sMODULARIZE=1"
     "-sEXPORT_NAME=createSpzGatekeeperModule"
     "-sALLOW_MEMORY_GROWTH=1"
+    "-sMAXIMUM_MEMORY=512MB"
     "-sENVIRONMENT=web"
     "-sEXPORT_ES6=1"
     "-sSINGLE_FILE=1"
     "-sFILESYSTEM=0"
+    "--closure 1"
   )
   set_target_properties(spz_gatekeeper-wasm PROPERTIES
     OUTPUT_NAME "spz_gatekeeper_wasm"

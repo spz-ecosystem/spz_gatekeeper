@@ -276,6 +276,9 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Run WASM browser smoke test
+        # T54: 边界测试 — kMaxSpzBytes=30MB + 前端 24MB/30MB 检查
+        # 30MB+ 大文件 smoketest 不在 CI 执行（生成 24-31MB 文件耗时）
+        # 验证方式: frontend index.html 硬上限拒绝 + WASM kMaxSpzBytes 双重防线
         run: |
           python3 -m http.server 4173 --directory build-wasm/site > wasm-http.log 2>&1 &
           SERVER_PID=$!
