@@ -167,7 +167,6 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
     "-sEXPORT_ES6=1"
     "-sSINGLE_FILE=1"
     "-sFILESYSTEM=0"
-    "--closure 1"
   )
   set_target_properties(spz_gatekeeper-wasm PROPERTIES
     OUTPUT_NAME "spz_gatekeeper_wasm"
