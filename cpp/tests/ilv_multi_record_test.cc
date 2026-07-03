@@ -1,8 +1,8 @@
 /**
- * TLV Multi-Record Parser - Unit Tests
+ * ILV Multi-Record Parser - Unit Tests
  *
- * Comprehensive tests for TLV parser supporting multiple records.
- * Validates correct parsing of 0, 1, and multiple TLV records.
+ * Comprehensive tests for ILV parser supporting multiple records.
+ * Validates correct parsing of 0, 1, and multiple ILV records.
  *
  * Test Coverage:
  * - Empty trailer (0 records)
@@ -15,7 +15,7 @@
  *
  * @author PuJunhan
  * @copyright Copyright (c) 2026 PuJunhan
- * @license MIT
+ * @license MulanPSL-2.0
  */
 
 #include <cstdlib>
@@ -77,7 +77,7 @@ void write_u32_le(uint32_t value, std::vector<uint8_t>& out) {
   out.push_back((value >> 24) & 0xFF);
 }
 
-// Helper: Create TLV record
+// Helper: Create ILV record
 std::vector<uint8_t> create_ilv_record(uint32_t type, const std::vector<uint8_t>& value) {
   std::vector<uint8_t> record;
   write_u32_le(type, record);
@@ -207,7 +207,7 @@ TEST(test_copy_value_on_demand) {
 }
 
 TEST(test_little_endian_byte_order) {
-  // Manually create little-endian TLV
+  // Manually create little-endian ILV
   std::vector<uint8_t> data = {
     // Type: 0x12345678 (little-endian)
     0x78, 0x56, 0x34, 0x12,
@@ -326,7 +326,7 @@ TEST(test_offset_calculation_accuracy) {
 }  // namespace
 
 int main() {
-  std::cout << "=== TLV Multi-Record Parser Tests ===" << std::endl;
+  std::cout << "=== ILV Multi-Record Parser Tests ===" << std::endl;
   std::cout << std::endl;
   
   RUN_TEST(test_empty_trailer);

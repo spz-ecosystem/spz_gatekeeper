@@ -32,7 +32,7 @@
  *
  * @author PuJunhan
  * @copyright Copyright (c) 2026 PuJunhan
- * @license MIT
+ * @license MulanPSL-2.0
  */
 
 #ifndef SPZ_EXTENSION_VALIDATOR_REGISTRY_H_

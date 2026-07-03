@@ -6,7 +6,7 @@
  * Core SPZ validation interface for L2 verification:
  * - SPZ header validation (magic, version, flags)
  * - Official has-extensions flag (0x02) checking
- * - TLV trailer parsing and validation
+ * - ILV trailer parsing and validation
  * - Backward compatibility verification
  *
  * This module validates compatibility with the official SPZ packed format
@@ -15,7 +15,7 @@
  *
  * @author PuJunhan
  * @copyright Copyright (c) 2026 PuJunhan
- * @license MIT
+ * @license MulanPSL-2.0
  */
 
 #pragma once
@@ -36,7 +36,7 @@ static constexpr std::uint8_t kFlagHasExtensions = 0x02;
 
 /// Options for SPZ blob inspection.
 struct SpzInspectOptions {
-  /// Strict mode: if true, TLV parse failures are errors; otherwise warnings.
+  /// Strict mode: if true, ILV parse failures are errors; otherwise warnings.
   bool strict = true;
 };
 
@@ -46,7 +46,7 @@ struct SpzInspectOptions {
 /// - Decompresses gzip data
 /// - Parses SPZ header (magic, version, flags, etc.)
 /// - Validates base payload size
-/// - Parses TLV trailer if the official has-extensions flag is set
+/// - Parses ILV trailer if the official has-extensions flag is set
 ///
 /// @param raw_spz Raw SPZ bytes (gzip or ZSTD compressed)
 /// @param opt Inspection options (strict/non-strict mode)

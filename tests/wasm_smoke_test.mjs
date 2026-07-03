@@ -504,6 +504,93 @@ async function runSmoke() {
       throw new Error(`页面状态异常: ${statusClasses}`);
     }
 
+    async function evaluateSpzAudit(page, buffer, fileName, options = {}) {
+      return page.evaluate(async ({ bytes, name, options: auditOptions }) => {
+        const moduleFactory = (await import('./spz_gatekeeper.js')).default;
+        const wasm = await moduleFactory();
+        const spzBytes = new Uint8Array(bytes);
+        const report = await wasm.inspectSpz(spzBytes, auditOptions.strict ?? false);
+
+        const [trailerData, extensionsData, compatBoard, compatSummary] = await Promise.all([
+          wasm.dumpTrailer(spzBytes, auditOptions.strict ?? false).catch(() => null),
+          wasm.listRegisteredExtensions().catch(() => ({ count: 0, extensions: [] })),
+          wasm.getCompatibilityBoard().catch(() => ({ count: 0, extensions: [] })),
+          wasm.inspectCompatSummary(spzBytes).catch(() => null),
+        ]);
+
+        report._spzMeta = { trailer: trailerData, registry: extensionsData, compatBoard, compatSummary };
+        return report;
+      }, { bytes: Array.from(buffer), name: fileName, options });
+    }
+
+    async function fetchSpzFile(page, baseUrl, fileName) {
+      const url = new URL(fileName, baseUrl).toString();
+      const response = await page.request.get(url, { timeout: 30000 });
+      if (!response.ok()) {
+        throw new Error(`下载 ${fileName} 失败: ${response.status()} ${response.statusText()}`);
+      }
+      return Buffer.from(await response.body());
+    }
+
+    const spzV3Buffer = await fetchSpzFile(page, baseUrl, 'bench_v3.spz');
+    const spzV3Audit = await evaluateSpzAudit(page, spzV3Buffer, 'bench_v3.spz');
+    if (typeof spzV3Audit.ok !== 'boolean') {
+      throw new Error('SPZ v3 inspectSpz 返回格式异常: 缺少 ok 字段');
+    }
+    if (!spzV3Audit._spzMeta) {
+      throw new Error('SPZ v3 缺少 _spzMeta 元数据');
+    }
+    if (!spzV3Audit._spzMeta.trailer) {
+      throw new Error('SPZ v3 dumpTrailer 返回空');
+    }
+    if (!spzV3Audit._spzMeta.registry || typeof spzV3Audit._spzMeta.registry.count !== 'number') {
+      throw new Error('SPZ v3 listRegisteredExtensions 返回格式异常');
+    }
+    if (!spzV3Audit._spzMeta.compatBoard || typeof spzV3Audit._spzMeta.compatBoard.count !== 'number') {
+      throw new Error('SPZ v3 getCompatibilityBoard 返回格式异常');
+    }
+    if (!Array.isArray(spzV3Audit.issues)) {
+      throw new Error('SPZ v3 inspectSpz issues 不是数组');
+    }
+
+    const spzV4Buffer = await fetchSpzFile(page, baseUrl, 'bench_v4.spz');
+    const spzV4Audit = await evaluateSpzAudit(page, spzV4Buffer, 'bench_v4.spz');
+    if (typeof spzV4Audit.ok !== 'boolean') {
+      throw new Error('SPZ v4 inspectSpz 返回格式异常: 缺少 ok 字段');
+    }
+    if (!spzV4Audit._spzMeta || !spzV4Audit._spzMeta.trailer) {
+      throw new Error('SPZ v4 dumpTrailer 返回空');
+    }
+    if (!Array.isArray(spzV4Audit.issues)) {
+      throw new Error('SPZ v4 inspectSpz issues 不是数组');
+    }
+
+    await page.setInputFiles('#fileInput', {
+      name: 'bench_v3.spz',
+      mimeType: 'application/octet-stream',
+      buffer: spzV3Buffer,
+    });
+    await page.waitForSelector('#resultContent:not(.hidden)', { timeout: 15000 });
+    await page.waitForFunction(() => {
+      const badge = document.getElementById('summaryBadge');
+      return badge && badge.textContent && badge.textContent.trim() !== '';
+    }, { timeout: 15000 });
+
+    const summaryTitle = await page.$eval('#summaryTitle', (el) => el.textContent);
+    if (!summaryTitle || summaryTitle.includes('n/a')) {
+      throw new Error('SPZ v3 上传后 summary title 异常或包含 n/a');
+    }
+
+    const extensionsListText = await page.$eval('#extensionsList', (el) => el.textContent);
+    if (!extensionsListText || extensionsListText.includes('n/a')) {
+      throw new Error('SPZ v3 上传后扩展列表异常或包含 n/a');
+    }
+
+    const trailerListText = await page.$eval('#trailerList', (el) => el.textContent);
+    if (!trailerListText || trailerListText.includes('n/a')) {
+      throw new Error('SPZ v3 上传后 trailer 列表异常或包含 n/a');
+    }
+
     console.log(`WASM smoke PASS: ${baseUrl}`);
   } catch (error) {
     await page.screenshot({ path: 'wasm-smoke-failure.png', fullPage: true });

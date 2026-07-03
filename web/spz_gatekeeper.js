@@ -764,9 +764,7 @@ async function auditWasmBundle(input, fileName = 'bundle.zip', runtime = null, o
 
 
 function createUnavailableMethod(method) {
-  return () => {
-    throw new Error(`${method} is unavailable in browser_lightweight_wasm_audit mode`);
-  };
+  return () => Promise.reject(new Error(`${method} is unavailable in browser_lightweight_wasm_audit mode`));
 }
 
 export default async function createSpzGatekeeperModule() {
@@ -783,8 +781,8 @@ export default async function createSpzGatekeeperModule() {
     dumpTrailer: runtime?.dumpTrailer?.bind(runtime) ?? createUnavailableMethod('dumpTrailer'),
     inspectSpzText: runtime?.inspectSpzText?.bind(runtime) ?? createUnavailableMethod('inspectSpzText'),
     inspectCompatSummary: runtime?.inspectCompatSummary?.bind(runtime) ?? createUnavailableMethod('inspectCompatSummary'),
-    listRegisteredExtensions: runtime?.listRegisteredExtensions?.bind(runtime) ?? (() => ({ count: 0, extensions: [] })),
-    describeExtension: runtime?.describeExtension?.bind(runtime) ?? ((type) => ({ error: 'runtime unavailable', type })),
-    getCompatibilityBoard: runtime?.getCompatibilityBoard?.bind(runtime) ?? (() => ({ count: 0, extensions: [] })),
+    listRegisteredExtensions: runtime?.listRegisteredExtensions?.bind(runtime) ?? (() => Promise.resolve({ count: 0, extensions: [] })),
+    describeExtension: runtime?.describeExtension?.bind(runtime) ?? ((type) => Promise.resolve({ error: 'runtime unavailable', type })),
+    getCompatibilityBoard: runtime?.getCompatibilityBoard?.bind(runtime) ?? (() => Promise.resolve({ count: 0, extensions: [] })),
   };
 }

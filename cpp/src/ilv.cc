@@ -15,7 +15,7 @@ static std::uint32_t ReadU32LE(const std::vector<std::uint8_t>& data, std::size_
 // T09b (R3): ParseIlvRecords ILV byte parse core logic is reused by ParseHeaderZoneExtensions (spz.cc).
 // They share the [u32 type][u32 byteLength][payload] format; only input (vector vs raw pointer)
 // and boundary conditions (trailer offset vs header zone [32..tocByteOffset)) differ.
-// Global TLV->ILV rename deferred to R5; this function keeps its original name.
+// Global TLV->ILV rename completed; this function uses the ILV naming convention.
 IlvParseResult ParseIlvRecords(const std::vector<std::uint8_t>& data, std::size_t offset) {
   IlvParseResult r;
   if (offset > data.size()) {
@@ -29,7 +29,7 @@ IlvParseResult ParseIlvRecords(const std::vector<std::uint8_t>& data, std::size_
     std::size_t remaining = data.size() - off;
     if (remaining < 8) {
       r.ok = false;
-      r.error = "truncated TLV header";
+      r.error = "truncated ILV header";
       return r;
     }
     std::uint32_t type = ReadU32LE(data, off);
@@ -37,7 +37,7 @@ IlvParseResult ParseIlvRecords(const std::vector<std::uint8_t>& data, std::size_
     std::size_t value_off = off + 8;
     if (static_cast<std::size_t>(len) > data.size() - value_off) {
       r.ok = false;
-      r.error = "truncated TLV value - insufficient data";
+      r.error = "truncated ILV value - insufficient data";
       return r;
     }
 

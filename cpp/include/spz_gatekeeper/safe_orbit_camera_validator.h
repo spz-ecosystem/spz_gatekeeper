@@ -22,7 +22,7 @@
  *
  * @author PuJunhan
  * @copyright Copyright (c) 2026 PuJunhan
- * @license MIT
+ * @license MulanPSL-2.0
  */
 
 #ifndef SPZ_ADOBE_SAFE_ORBIT_CAMERA_VALIDATOR_H_

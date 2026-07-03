@@ -1,23 +1,5 @@
 // SPDX-License-Identifier: MulanPSL-2.0
 // Copyright (c) 2026 PuJunhan
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
 
 #pragma once
 
@@ -61,7 +43,7 @@ struct IlvRecord {
   std::size_t offset = 0;
   const std::uint8_t* value_data = nullptr;
 
-  // TLV payload 默认只保留零拷贝视图；只有调用方显式需要独立字节时才复制。
+  // ILV payload 默认只保留零拷贝视图；只有调用方显式需要独立字节时才复制。
   ByteView ValueView() const { return ByteView{value_data, static_cast<std::size_t>(length)}; }
   std::vector<std::uint8_t> CopyValue() const {
     if (value_data == nullptr || length == 0) {
@@ -85,7 +67,7 @@ struct SpzL2Info {
   std::size_t base_payload_size = 0;
   std::size_t trailer_size = 0;
   std::vector<IlvRecord> ilv_records;
-  // 返回报告后需要继续读取 TLV payload 时，由这份 trailer backing storage 保证视图有效。
+  // 返回报告后需要继续读取 ILV payload 时，由这份 trailer backing storage 保证视图有效。
   std::vector<std::uint8_t> ilv_storage;
 };
 
