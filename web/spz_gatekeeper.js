@@ -777,12 +777,26 @@ export default async function createSpzGatekeeperModule() {
     buildBrowserToCliHandoff,
     getRuntimeStatus: () => runtimeStatus,
 
-    inspectSpz: runtime?.inspectSpz?.bind(runtime) ?? createUnavailableMethod('inspectSpz'),
-    dumpTrailer: runtime?.dumpTrailer?.bind(runtime) ?? createUnavailableMethod('dumpTrailer'),
-    inspectSpzText: runtime?.inspectSpzText?.bind(runtime) ?? createUnavailableMethod('inspectSpzText'),
-    inspectCompatSummary: runtime?.inspectCompatSummary?.bind(runtime) ?? createUnavailableMethod('inspectCompatSummary'),
-    listRegisteredExtensions: runtime?.listRegisteredExtensions?.bind(runtime) ?? (() => Promise.resolve({ count: 0, extensions: [] })),
-    describeExtension: runtime?.describeExtension?.bind(runtime) ?? ((type) => Promise.resolve({ error: 'runtime unavailable', type })),
-    getCompatibilityBoard: runtime?.getCompatibilityBoard?.bind(runtime) ?? (() => Promise.resolve({ count: 0, extensions: [] })),
+    inspectSpz: runtime?.inspectSpz
+      ? ((...args) => Promise.resolve(runtime.inspectSpz(...args)))
+      : createUnavailableMethod('inspectSpz'),
+    dumpTrailer: runtime?.dumpTrailer
+      ? ((...args) => Promise.resolve(runtime.dumpTrailer(...args)))
+      : createUnavailableMethod('dumpTrailer'),
+    inspectSpzText: runtime?.inspectSpzText
+      ? ((...args) => Promise.resolve(runtime.inspectSpzText(...args)))
+      : createUnavailableMethod('inspectSpzText'),
+    inspectCompatSummary: runtime?.inspectCompatSummary
+      ? ((...args) => Promise.resolve(runtime.inspectCompatSummary(...args)))
+      : createUnavailableMethod('inspectCompatSummary'),
+    listRegisteredExtensions: runtime?.listRegisteredExtensions
+      ? ((...args) => Promise.resolve(runtime.listRegisteredExtensions(...args)))
+      : (() => Promise.resolve({ count: 0, extensions: [] })),
+    describeExtension: runtime?.describeExtension
+      ? ((...args) => Promise.resolve(runtime.describeExtension(...args)))
+      : ((type) => Promise.resolve({ error: 'runtime unavailable', type })),
+    getCompatibilityBoard: runtime?.getCompatibilityBoard
+      ? ((...args) => Promise.resolve(runtime.getCompatibilityBoard(...args)))
+      : (() => Promise.resolve({ count: 0, extensions: [] })),
   };
 }
