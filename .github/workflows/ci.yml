@@ -251,7 +251,7 @@ jobs:
             -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF
           cmake --build build-native --parallel
 
-      - name: Generate synthetic fixture for browser smoke
+      - name: Generate synthetic fixtures for browser smoke
         run: |
           mkdir -p build-wasm/site
           ./build-native/spz_gatekeeper gen-fixture \
@@ -259,12 +259,13 @@ jobs:
             --mode valid \
             --format v4 \
             --out build-wasm/site/synthetic_valid.spz
-
-      - name: Clone bench dataset for real SPZ file testing
-        run: |
-          git clone --depth 1 https://github.com/spz-ecosystem/spz-anime-text2scene-bench.git bench-data
-          cp bench-data/classroom_anim/raw/classroom_anim_v3.spz build-wasm/site/bench_v3.spz
-          cp bench-data/classroom_anim/raw/classroom_anim_v4.spz build-wasm/site/bench_v4.spz
+          ./build-native/spz_gatekeeper gen-fixture \
+            --type 0xADBE0002 \
+            --mode valid \
+            --format v3 \
+            --out build-wasm/site/synthetic_v3.spz
+          cp tests/fixtures/classroom_anime_v4.spz build-wasm/site/real_v4.spz
+          cp tests/fixtures/classroom_anime_v3.spz build-wasm/site/real_v3.spz
           ls -lh build-wasm/site/*.spz
 
       - name: Verify WASM artifact
@@ -272,8 +273,9 @@ jobs:
           test -f build-wasm/site/spz_gatekeeper.js
           test -f build-wasm/site/index.html
           test -f build-wasm/site/synthetic_valid.spz
-          test -f build-wasm/site/bench_v3.spz
-          test -f build-wasm/site/bench_v4.spz
+          test -f build-wasm/site/synthetic_v3.spz
+          test -f build-wasm/site/real_v4.spz
+          test -f build-wasm/site/real_v3.spz
 
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
