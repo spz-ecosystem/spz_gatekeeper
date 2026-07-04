@@ -46,14 +46,14 @@ std::vector<uint8_t> make_tlv_100_records() {
 int main() {
   using clock = std::chrono::high_resolution_clock;
 
-  // Benchmark 1: TLV parse 100 records
+  // Benchmark 1: ILV parse 100 records
   const auto tlv_data = make_tlv_100_records();
   const int parse_iters = 1000;
   auto t0 = clock::now();
   for (int i = 0; i < parse_iters; ++i) {
     auto r = spz_gatekeeper::ParseIlvRecords(tlv_data, 0);
     if (!r.ok || r.records.size() != 100u) {
-      std::cerr << "TLV parse failed" << std::endl;
+      std::cerr << "ILV parse failed" << std::endl;
       return EXIT_FAILURE;
     }
   }
@@ -81,7 +81,7 @@ int main() {
   auto q1 = clock::now();
   const double lookup_us = std::chrono::duration<double, std::micro>(q1 - q0).count() / lookup_iters;
 
-  std::cout << "BENCH_TLV_PARSE_100_EXT_MS=" << parse_ms << std::endl;
+  std::cout << "BENCH_ILV_PARSE_100_EXT_MS=" << parse_ms << std::endl;
   std::cout << "BENCH_REGISTRY_LOOKUP_US=" << lookup_us << std::endl;
 
   // Gate targets from checklist.

@@ -504,6 +504,96 @@ async function runSmoke() {
       throw new Error(`页面状态异常: ${statusClasses}`);
     }
 
+    async function evaluateSpzAudit(page, buffer, fileName, options = {}) {
+      return page.evaluate(async ({ bytes, name, options: auditOptions }) => {
+        const moduleFactory = (await import('./spz_gatekeeper.js')).default;
+        const wasm = await moduleFactory();
+        const spzBytes = new Uint8Array(bytes);
+        const report = await wasm.inspectSpz(spzBytes, auditOptions.strict ?? false);
+
+        const [trailerData, extensionsData, compatBoard, compatSummary] = await Promise.all([
+          wasm.dumpTrailer(spzBytes, auditOptions.strict ?? false).catch(() => null),
+          wasm.listRegisteredExtensions().catch(() => ({ count: 0, extensions: [] })),
+          wasm.getCompatibilityBoard().catch(() => ({ count: 0, extensions: [] })),
+          wasm.inspectCompatSummary(spzBytes).catch(() => null),
+        ]);
+
+        report._spzMeta = { trailer: trailerData, registry: extensionsData, compatBoard, compatSummary };
+        return report;
+      }, { bytes: Array.from(buffer), name: fileName, options });
+    }
+
+    async function fetchSpzFile(page, baseUrl, fileName) {
+      const url = new URL(fileName, baseUrl).toString();
+      const response = await page.request.get(url, { timeout: 30000 });
+      if (!response.ok()) {
+        throw new Error(`下载 ${fileName} 失败: ${response.status()} ${response.statusText()}`);
+      }
+      return Buffer.from(await response.body());
+    }
+
+    const spzV3Buffer = await fetchSpzFile(page, baseUrl, 'synthetic_v3.spz');
+    const spzV4Buffer = await fetchSpzFile(page, baseUrl, 'synthetic_valid.spz');
+    const realV3Buffer = await fetchSpzFile(page, baseUrl, 'real_v3.spz');
+    const realV4Buffer = await fetchSpzFile(page, baseUrl, 'real_v4.spz');
+
+    const testCases = [
+      { name: 'synthetic_v3', buffer: spzV3Buffer },
+      { name: 'synthetic_v4', buffer: spzV4Buffer },
+      { name: 'real_classroom_anime_v3', buffer: realV3Buffer },
+      { name: 'real_classroom_anime_v4', buffer: realV4Buffer },
+    ];
+
+    for (const tc of testCases) {
+      console.log(`  Testing SPZ file: ${tc.name}`);
+      const audit = await evaluateSpzAudit(page, tc.buffer, `${tc.name}.spz`);
+      if (typeof audit.ok !== 'boolean') {
+        throw new Error(`${tc.name} inspectSpz 返回格式异常: 缺少 ok 字段`);
+      }
+      if (!audit._spzMeta) {
+        throw new Error(`${tc.name} 缺少 _spzMeta 元数据`);
+      }
+      if (!audit._spzMeta.trailer) {
+        throw new Error(`${tc.name} dumpTrailer 返回空`);
+      }
+      if (!audit._spzMeta.registry || typeof audit._spzMeta.registry.count !== 'number') {
+        throw new Error(`${tc.name} listRegisteredExtensions 返回格式异常`);
+      }
+      if (!audit._spzMeta.compatBoard || typeof audit._spzMeta.compatBoard.count !== 'number') {
+        throw new Error(`${tc.name} getCompatibilityBoard 返回格式异常`);
+      }
+      if (!Array.isArray(audit.issues)) {
+        throw new Error(`${tc.name} inspectSpz issues 不是数组`);
+      }
+      console.log(`    PASS: api=${audit.ok}, issues=${audit.issues.length}, extensions=${audit._spzMeta.registry.count}`);
+    }
+
+    await page.setInputFiles('#fileInput', {
+      name: 'real_v4.spz',
+      mimeType: 'application/octet-stream',
+      buffer: realV4Buffer,
+    });
+    await page.waitForSelector('#resultContent:not(.hidden)', { timeout: 15000 });
+    await page.waitForFunction(() => {
+      const badge = document.getElementById('summaryBadge');
+      return badge && badge.textContent && badge.textContent.trim() !== '';
+    }, { timeout: 15000 });
+
+    const summaryTitle = await page.$eval('#summaryTitle', (el) => el.textContent);
+    if (!summaryTitle || summaryTitle.includes('n/a')) {
+      throw new Error('真实 SPZ v4 上传后 summary title 异常或包含 n/a');
+    }
+
+    const extensionsListText = await page.$eval('#extensionsList', (el) => el.textContent);
+    if (!extensionsListText || extensionsListText.includes('n/a')) {
+      throw new Error('真实 SPZ v4 上传后扩展列表异常或包含 n/a');
+    }
+
+    const trailerListText = await page.$eval('#trailerList', (el) => el.textContent);
+    if (!trailerListText || trailerListText.includes('n/a')) {
+      throw new Error('真实 SPZ v4 上传后 trailer 列表异常或包含 n/a');
+    }
+
     console.log(`WASM smoke PASS: ${baseUrl}`);
   } catch (error) {
     await page.screenshot({ path: 'wasm-smoke-failure.png', fullPage: true });

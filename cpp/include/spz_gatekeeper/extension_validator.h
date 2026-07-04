@@ -8,11 +8,11 @@
  * this interface to validate its specific payload format.
  *
  * Extension validators are used by the SPZ Gatekeeper to verify
- * the legality of TLV (Type-Length-Value) trailer records.
+ * the legality of ILV (Indexed-Length-Value) trailer records.
  *
  * @author PuJunhan
  * @copyright Copyright (c) 2026 PuJunhan
- * @license MIT
+ * @license MulanPSL-2.0
  */
 
 #pragma once

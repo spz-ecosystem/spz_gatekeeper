@@ -605,7 +605,7 @@ static GateReport InspectSpzBlobLegacy(const std::vector<std::uint8_t>& raw_spz,
       }
       AddIssue(&rep, Severity::kWarning, "SPZ_EXT_PARSE", "trailer ILV parse failed (ignored in non-strict): " + tlv.error, where);
     } else {
-      // 只保留一份 trailer backing storage，避免旧实现那种逐条 TLV payload 拷贝。
+      // 只保留一份 trailer backing storage，避免旧实现那种逐条 ILV payload 拷贝。
       info.ilv_storage.assign(decomp.begin() + static_cast<std::ptrdiff_t>(base), decomp.end());
       RebindIlvRecordViews(&tlv.records, info.ilv_storage, base);
       info.ilv_records = std::move(tlv.records);

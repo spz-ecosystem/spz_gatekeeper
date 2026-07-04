@@ -1,0 +1,5 @@
+docs: update batch8 plan standing plan meta-routing for F8.1 + git-workflow
+
+- batch8 plan: META updated to 2026-06-27, add R-T5.6+ F8.1 phase mapping
+- MPR standing plan: RED expanded to 9 phases (HINT/HOOK/PY)
+- meta-routing-protocol: add git-workflow repo route, F8.1 push routing table

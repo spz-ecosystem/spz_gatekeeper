@@ -7,9 +7,9 @@
  * with the original SPZ packed format and vendor-extension mechanism.
  *
  * Features:
- * - L2 Validation: SPZ file format layer (header, flags, TLV trailer)
+ * - L2 Validation: SPZ file format layer (header, flags, ILV trailer)
  * - Official has-extensions flag (0x02) validation
- * - TLV (Type-Length-Value) trailer format verification
+ * - ILV (Indexed-Length-Value) trailer format verification
  * - Development guide for vendor extensions
  *
  * Usage:
@@ -28,7 +28,7 @@
  *
  * @author PuJunhan
  * @copyright Copyright (c) 2026 PuJunhan
- * @license MIT
+ * @license MulanPSL-2.0
  */
 
 #include "spz_gatekeeper/audit_summary.h"
@@ -310,7 +310,7 @@ static void PrintGuide(bool json) {
     "goal": "Make your vendor extension pass spz_gatekeeper L2 validation",
     "steps": [
       "1. Set the official has-extensions flag: flags |= 0x02",
-      "2. Append TLV records after the base payload",
+      "2. Append ILV records after the base payload",
       "3. Validate: spz_gatekeeper check-spz your.spz",
       "4. Test compatibility: spz_info your.spz && spz_to_ply your.spz"
     ]
@@ -334,7 +334,7 @@ static void PrintGuide(bool json) {
 
   std::cout << "Quick Start:\n";
   std::cout << "  1. Set the official has-extensions flag: flags |= 0x02\n";
-  std::cout << "  2. Append TLV records after the base payload\n";
+  std::cout << "  2. Append ILV records after the base payload\n";
   std::cout << "  3. Validate: spz_gatekeeper check-spz your.spz\n";
   std::cout << "  4. Test compatibility: spz_info your.spz && spz_to_ply your.spz\n";
   std::cout << "\nPublic docs:\n";
@@ -1489,11 +1489,11 @@ static void PrintUsage() {
   std::cerr << "  spz_gatekeeper --help\n\n";
   std::cerr << "Commands:\n";
   std::cerr << "  check-spz     Validate one SPZ file (L2 validation)\n";
-  std::cerr << "  dump-trailer  Show trailer TLV records\n";
+  std::cerr << "  dump-trailer  Show trailer ILV records\n";
   std::cerr << "  registry      List registered extensions or inspect one entry\n";
   std::cerr << "  compat-check  Run local_cli_spz_artifact_audit for real .spz assets\n";
   std::cerr << "  compat-board  Show compatibility maturity board for registered extensions\n";
-  std::cerr << "  gen-fixture   Generate a minimal SPZ fixture with one TLV record\n";
+  std::cerr << "  gen-fixture   Generate a minimal SPZ fixture with one ILV record\n";
   std::cerr << "  guide         Show vendor extension development guide\n";
 
   std::cerr << "  --self-test   Run built-in self-tests\n";
@@ -1654,7 +1654,7 @@ int main(int argc, char** argv) {
     const auto& l2 = rep.spz_l2.value();
     std::cout << "flags=" << static_cast<unsigned>(l2.flags) << " trailer_size=" << l2.trailer_size << "\n";
     if (l2.ilv_records.empty()) {
-      std::cout << "(no TLV records)\n";
+      std::cout << "(no ILV records)\n";
     } else {
       for (const auto& r : l2.ilv_records) {
         std::cout << "type=" << r.type << " len=" << r.length << " off=" << r.offset << "\n";

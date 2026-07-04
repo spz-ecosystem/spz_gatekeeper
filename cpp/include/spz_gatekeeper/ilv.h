@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MulanPSL-2.0
 // Copyright (c) 2026 PuJunhan
 /**
- * TLV (Type-Length-Value) Trailer Parser
+ * ILV (Indexed-Length-Value) Trailer Parser
  *
  * Parses the SPZ vendor extension stream records used by
  * `KHR_gaussian_splatting_compression_spz_2` payloads:
@@ -9,12 +9,12 @@
  * - Length: uint32_t (4 bytes, little-endian)
  * - Value: uint8_t[length] (variable)
  *
- * TLV format enables skippable extension data that maintains
+ * ILV format enables skippable extension data that maintains
  * backward compatibility with original SPZ tools.
  *
  * @author PuJunhan
  * @copyright Copyright (c) 2026 PuJunhan
- * @license MIT
+ * @license MulanPSL-2.0
  */
 
 #pragma once
@@ -28,9 +28,9 @@
 
 namespace spz_gatekeeper {
 
-/// TLV (Type-Length-Value) parse result.
+/// ILV (Indexed-Length-Value) parse result.
 ///
-/// TLV layout (little-endian):
+/// ILV layout (little-endian):
 ///   u32 type, u32 length, then `length` bytes value.
 /// Unknown `type` must be skippable for forward compatibility.
 struct IlvParseResult {
@@ -40,14 +40,14 @@ struct IlvParseResult {
   /// Error message (if ok == false).
   std::string error;
   
-  /// Parsed TLV records (empty if parse failed).
+  /// Parsed ILV records (empty if parse failed).
   std::vector<IlvRecord> records;
 };
 
-/// Parse TLV trailer from SPZ decompressed data.
+/// Parse ILV trailer from SPZ decompressed data.
 ///
 /// The trailer appears after the standard SPZ fields (positions/alphas/colors/scales/rotations/sh).
-/// Each TLV record has format: [type:u32][length:u32][value:length bytes]
+/// Each ILV record has format: [type:u32][length:u32][value:length bytes]
 ///
 /// 说明：解析阶段不会为每条 record 复制 payload；`IlvRecord::ValueView()` 直接指向输入 buffer，
 /// 如果调用方需要独立副本，可调用 `IlvRecord::CopyValue()`。

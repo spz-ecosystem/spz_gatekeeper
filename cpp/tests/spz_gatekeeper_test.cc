@@ -40,7 +40,7 @@ std::vector<std::uint8_t> BuildDecompressedV3(std::uint8_t flags, bool with_trai
   decomp.insert(decomp.end(), 9 + 1 + 3 + 3 + 4, 0);
 
   if (with_trailer) {
-    // TLV trailer: type=1, len=3, value=abc
+    // ILV trailer: type=1, len=3, value=abc
     write_u32(&decomp, 1);
     write_u32(&decomp, 3);
     decomp.push_back('a');
@@ -61,8 +61,8 @@ bool HasIssueCode(const spz_gatekeeper::GateReport& rep, const char* code) {
 }  // namespace
 
 int test_tlv_parsing() {
-  // Test: TLV parsing
-  std::cout << "Test: TLV parsing... ";
+  // Test: ILV parsing
+  std::cout << "Test: ILV parsing... ";
   
   std::vector<std::uint8_t> data = {
     0x01, 0x00, 0x00, 0x00,  // type = 1
@@ -100,8 +100,8 @@ int test_tlv_parsing() {
 }
 
 int test_tlv_empty() {
-  // Test: Empty TLV data
-  std::cout << "Test: Empty TLV data... ";
+  // Test: Empty ILV data
+  std::cout << "Test: Empty ILV data... ";
   
   std::vector<std::uint8_t> data;
   auto result = spz_gatekeeper::ParseIlvRecords(data, 0);
@@ -116,8 +116,8 @@ int test_tlv_empty() {
 }
 
 int test_tlv_truncated() {
-  // Test: Truncated TLV
-  std::cout << "Test: Truncated TLV... ";
+  // Test: Truncated ILV
+  std::cout << "Test: Truncated ILV... ";
   
   std::vector<std::uint8_t> data = {
     0x01, 0x00, 0x00, 0x00,  // type = 1
