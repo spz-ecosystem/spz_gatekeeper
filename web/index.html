@@ -761,7 +761,7 @@
         if (items.length === 0) {
           items.push('<div class="stack-item"><div class="stack-item-title">SPZ 验证</div><div class="stack-item-body">直接 .spz 验证，无 bundle budgets。</div></div>');
         }
-        setStackList(budgetsList, items);
+        setStackList(trailerList, items);
         return;
       }
       const budgetItems = Object.entries(report.budgets || {}).map(([name, budget]) => `
