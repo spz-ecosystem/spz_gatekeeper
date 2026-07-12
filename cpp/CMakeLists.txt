@@ -228,6 +228,7 @@ if(BUILD_TESTING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
 
   spz_gatekeeper_add_test(extension_validator_test tests/extension_validator_test.cc)
   spz_gatekeeper_add_test(adobe_extension_test tests/adobe_extension_test.cc)
+  spz_gatekeeper_add_test(coordinate_system_extension_test tests/coordinate_system_extension_test.cc)
   spz_gatekeeper_add_test(validator_registry_test tests/validator_registry_test.cc)
   spz_gatekeeper_add_test(extension_spec_registry_test tests/extension_spec_registry_test.cc)
   spz_gatekeeper_add_test(registry_cli_test tests/registry_cli_test.cc)
