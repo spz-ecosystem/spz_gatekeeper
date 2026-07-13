@@ -8,7 +8,7 @@
 #include "spz_gatekeeper/extension_validator.h"
 #include "spz_gatekeeper/validator_registry.h"
 #include "spz_gatekeeper/safe_orbit_camera_validator.h"
-
+#include "spz_gatekeeper/coordinate_system_validator.h"
 
 #include <zlib.h>
 #include <zstd.h>
@@ -29,8 +29,9 @@ namespace {
 constexpr std::uint32_t kKnownMaxVersion = 4;
 // R4 semantic: v4 path treats version==4 as normal, version>4 gets warning but continues
 
-// Auto-register built-in Adobe validator for runtime check-spz paths.
+// Auto-register built-in Adobe validators for runtime check-spz paths.
 static RegisterValidator<AdobeSafeOrbitCameraValidator> kAutoRegisterAdobeValidator;
+static RegisterValidator<AdobeCoordinateSystemValidator> kAutoRegisterCoordinateSystemValidator;
 
 
 static bool RegisterBuiltInSpecs() {
