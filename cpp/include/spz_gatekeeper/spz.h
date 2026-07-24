@@ -40,20 +40,25 @@ struct SpzInspectOptions {
   bool strict = true;
 };
 
-/// Inspect a raw SPZ blob.
-///
-/// Performs L2 validation:
-/// - Decompresses gzip data
-/// - Parses SPZ header (magic, version, flags, etc.)
-/// - Validates base payload size
-/// - Parses ILV trailer if the official has-extensions flag is set
-///
-/// @param raw_spz Raw SPZ bytes (gzip or ZSTD compressed)
-/// @param opt Inspection options (strict/non-strict mode)
-/// @param where Location description for error reporting
-/// @return GateReport with validation results (errors, warnings, L2 info)
-GateReport InspectSpzBlob(const std::vector<std::uint8_t>& raw_spz, const SpzInspectOptions& opt,
-                          const std::string& where);
+  /// Performs L2 validation on a raw SPZ blob (pointer + size overload).
+  ///
+  /// Zero-copy entry point for WASM: reads directly from the provided buffer
+  /// without copying. The caller owns the backing memory for the duration.
+  /// Shares the same L2 validation logic as the vector overload.
+  ///
+  /// @param data Pointer to raw SPZ bytes (gzip or ZSTD compressed)
+  /// @param size Number of bytes available at @p data
+  /// @param opt Inspection options (strict/non-strict mode)
+  /// @param where Location description for error reporting
+  /// @return GateReport with validation results (errors, warnings, L2 info)
+  GateReport InspectSpzBlob(const std::uint8_t* data, std::size_t size,
+                            const SpzInspectOptions& opt,
+                            const std::string& where);
+
+  /// Performs L2 validation on a raw SPZ blob (vector overload, compatibility).
+  /// Delegates to the pointer overload.
+  GateReport InspectSpzBlob(const std::vector<std::uint8_t>& raw_spz, const SpzInspectOptions& opt,
+                            const std::string& where);
 
 /// Compute SH quantization epsilon for given bit-width.
 /// Formula: epsilon = 2.0 / ((1 << bits) - 1)

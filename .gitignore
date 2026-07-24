@@ -5,6 +5,8 @@ build_*/
 build-*/
 cmake-build-*/
 web/spz_gatekeeper.wasm
+web/spz_gatekeeper_wasm.js
+web/*.spz
 cpp/compile_commands.json
 bin/
 lib/
