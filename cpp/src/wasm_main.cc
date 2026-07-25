@@ -200,6 +200,8 @@ std::vector<std::uint8_t> BuildCoordinateSystemPayload(bool invalid_size, std::u
   payload[1] = static_cast<std::uint8_t>((value >> 8) & 0xFFu);
   payload[2] = static_cast<std::uint8_t>((value >> 16) & 0xFFu);
   payload[3] = static_cast<std::uint8_t>((value >> 24) & 0xFFu);
+  return payload;
+}
 
 
 std::vector<std::uint8_t> BuildDecompressedSpz(std::uint32_t version, std::uint8_t flags,
