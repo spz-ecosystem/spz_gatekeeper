@@ -924,21 +924,35 @@
     }
 
     async function initializeWasm() {
-      try {
-        const wasmEntry = './spz_gatekeeper.js';
-        const probe = await fetch(wasmEntry, { cache: 'no-store' });
-        if (!probe.ok) {
-          throw new Error('未检测到浏览器轻审入口 spz_gatekeeper.js');
-        }
+      const maxAttempts = 3;
+      const delays = [0, 3000, 6000];
 
-        const moduleFactory = (await withTimeout(import(wasmEntry), 8000, '加载浏览器轻审入口超时')).default;
-        wasmModule = await withTimeout(moduleFactory(), 15000, '浏览器轻审引擎初始化超时');
-        setEngineStatus('ready', 'WASM 引擎就绪 · 浏览器轻审模式已启用');
-        renderRuntimeViewer();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setEngineStatus('error', `轻审引擎加载失败：${message}`);
-        registryEmpty.textContent = `轻审模式未就绪：${message}`;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          if (attempt > 1) {
+            setEngineStatus('loading', `轻审引擎加载重试 (${attempt}/${maxAttempts})...`);
+            await new Promise(r => setTimeout(r, delays[attempt - 1]));
+          }
+
+          const wasmEntry = './spz_gatekeeper.js';
+          const probe = await fetch(wasmEntry, { cache: 'no-store' });
+          if (!probe.ok) {
+            throw new Error('未检测到浏览器轻审入口 spz_gatekeeper.js');
+          }
+
+          const moduleFactory = (await withTimeout(import(wasmEntry), 8000, '加载浏览器轻审入口超时')).default;
+          wasmModule = await withTimeout(moduleFactory(), 15000, '浏览器轻审引擎初始化超时');
+          setEngineStatus('ready', 'WASM 引擎就绪 · 浏览器轻审模式已启用');
+          renderRuntimeViewer();
+          return;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(`[WASM init] Attempt ${attempt}/${maxAttempts} failed: ${message}`);
+          if (attempt === maxAttempts) {
+            setEngineStatus('error', `轻审引擎加载失败：${message}`);
+            registryEmpty.textContent = `轻审模式未就绪：${message}`;
+          }
+        }
       }
     }
 
