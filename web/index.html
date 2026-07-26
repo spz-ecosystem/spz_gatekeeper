@@ -830,15 +830,19 @@
     }
 
     async function inspectSpzWithPtr(bytes, strict) {
-      // Zero-copy path: write to WASM heap directly, avoiding ToBytes copy.
-      // Falls back to inspectSpz (vector path) if the ptr entry or _malloc is unavailable.
-      if (!wasmModule.inspectSpzPtr || typeof wasmModule._malloc !== 'function') {
+      // Zero-copy path: allocate on WASM heap, set bytes, call inspectSpzPtr, free.
+      // Avoids the intermediate std::vector<uint8_t> copy in the vector path.
+      if (typeof wasmModule._malloc !== 'function' || typeof wasmModule._free !== 'function') {
+        console.warn('[inspectSpzWithPtr] _malloc/_free not available, fallback to vector path');
         return wasmModule.inspectSpz(bytes, strict);
       }
-      const ptr = wasmModule._malloc(bytes.byteLength);
+      const data = new Uint8Array(bytes);
+      const size = data.length;
+      const ptr = wasmModule._malloc(size);
+      if (!ptr) throw new Error('WASM malloc failed');
       try {
-        wasmModule.HEAPU8.set(bytes, ptr);
-        return await wasmModule.inspectSpzPtr(ptr, bytes.byteLength, strict);
+        wasmModule.HEAPU8.set(data, ptr);
+        return await wasmModule.inspectSpzPtr(ptr, size, strict);
       } finally {
         wasmModule._free(ptr);
       }
