@@ -831,8 +831,8 @@
 
     async function inspectSpzWithPtr(bytes, strict) {
       // Zero-copy path: write to WASM heap directly, avoiding ToBytes copy.
-      // Falls back to inspectSpz (vector path) if the ptr entry is unavailable.
-      if (!wasmModule.inspectSpzPtr) {
+      // Falls back to inspectSpz (vector path) if the ptr entry or _malloc is unavailable.
+      if (!wasmModule.inspectSpzPtr || typeof wasmModule._malloc !== 'function') {
         return wasmModule.inspectSpz(bytes, strict);
       }
       const ptr = wasmModule._malloc(bytes.byteLength);
@@ -942,6 +942,16 @@
 
           const moduleFactory = (await withTimeout(import(wasmEntry), 8000, '加载浏览器轻审入口超时')).default;
           wasmModule = await withTimeout(moduleFactory(), 15000, '浏览器轻审引擎初始化超时');
+
+          // Diagnostic: check _malloc availability
+          const hasMalloc = typeof wasmModule._malloc === 'function';
+          const hasFree = typeof wasmModule._free === 'function';
+          const hasPtr = typeof wasmModule.inspectSpzPtr === 'function';
+          console.log(`[WASM init] _malloc=${hasMalloc} _free=${hasFree} inspectSpzPtr=${hasPtr}`);
+          if (!hasMalloc) {
+            console.warn('[WASM init] _malloc not available, zero-copy path will fallback to vector path');
+          }
+
           setEngineStatus('ready', 'WASM 引擎就绪 · 浏览器轻审模式已启用');
           renderRuntimeViewer();
           return;
