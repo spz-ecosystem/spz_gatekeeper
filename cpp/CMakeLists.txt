@@ -153,10 +153,14 @@ endif()
 if(SPZ_GATEKEEPER_BUILD_WASM)
   set(SPZ_GATEKEEPER_WASM_SITE_DIR "${CMAKE_CURRENT_BINARY_DIR}/site")
 
+  # WASM build profile: compat (default) | perf-lite
+  set(SPZ_GATEKEEPER_WASM_PROFILE "compat" CACHE STRING "WASM build profile")
+  set_property(CACHE SPZ_GATEKEEPER_WASM_PROFILE PROPERTY STRINGS compat perf-lite)
+
   add_executable(spz_gatekeeper-wasm src/wasm_main.cc)
   target_link_libraries(spz_gatekeeper-wasm PRIVATE spz_gatekeeper_core)
-  target_link_options(spz_gatekeeper-wasm PRIVATE
-    "-Oz"
+
+  set(SPZ_GATEKEEPER_WASM_LINK_OPTS
     "--bind"
     "--no-entry"
     "-sMODULARIZE=1"
@@ -167,11 +171,33 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
     "-sEXPORT_ES6=1"
     "-sSINGLE_FILE=1"
     "-sFILESYSTEM=0"
+    "-sEXPORTED_FUNCTIONS=_malloc,_free"
+    "-sEXPORTED_RUNTIME_METHODS=HEAPU8"
   )
+
+  if(SPZ_GATEKEEPER_WASM_PROFILE STREQUAL "perf-lite")
+    list(APPEND SPZ_GATEKEEPER_WASM_LINK_OPTS "-O3")
+  else()
+    list(APPEND SPZ_GATEKEEPER_WASM_LINK_OPTS "-Oz")
+  endif()
+
+  target_link_options(spz_gatekeeper-wasm PRIVATE ${SPZ_GATEKEEPER_WASM_LINK_OPTS})
   set_target_properties(spz_gatekeeper-wasm PROPERTIES
     OUTPUT_NAME "spz_gatekeeper_wasm"
     RUNTIME_OUTPUT_DIRECTORY "${SPZ_GATEKEEPER_WASM_SITE_DIR}"
   )
+
+  # Optional: wasm-objdump export audit
+  find_program(WASM_OBJDUMP wasm-objdump)
+  if(WASM_OBJDUMP)
+    add_custom_target(spz_gatekeeper_wasm_audit
+      COMMAND ${WASM_OBJDUMP} -x $<TARGET_FILE:spz_gatekeeper-wasm>
+              > "${SPZ_GATEKEEPER_WASM_SITE_DIR}/wasm-exports.txt"
+      COMMAND ${CMAKE_COMMAND} -E echo "WASM exports written to ${SPZ_GATEKEEPER_WASM_SITE_DIR}/wasm-exports.txt"
+      DEPENDS spz_gatekeeper-wasm
+      COMMENT "Audit WASM export symbols via wasm-objdump"
+    )
+  endif()
 
   add_custom_command(
     OUTPUT "${SPZ_GATEKEEPER_WASM_SITE_DIR}/index.html"
