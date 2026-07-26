@@ -38,6 +38,7 @@ REQUIRED_SYMBOLS=(
 STRICT=false
 SKIP_BUILD=false
 SKIP_SMOKE=false
+AUTO_FIX=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -45,6 +46,7 @@ while [ $# -gt 0 ]; do
     --skip-build) SKIP_BUILD=true; shift ;;
     --skip-smoke) SKIP_SMOKE=true; shift ;;
     --build-dir) BUILD_DIR="$2"; shift 2 ;;
+    --auto-fix) AUTO_FIX=true; shift ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -53,8 +55,9 @@ SITE_DIR="${BUILD_DIR}/site"
 WASM_JS="${SITE_DIR}/spz_gatekeeper_wasm.js"
 
 fail() {
-  python3 -c "import json,sys; print(json.dumps({'ok':False,'stage':sys.argv[1],'exit_code':int(sys.argv[2]),'message':sys.argv[3],'logs':[]}, ensure_ascii=False))" "$1" "$2" "$3"
-  exit "$2"
+  local stage="$1" code="$2" msg="$3" hint="${4:-}"
+  python3 -c "import json,sys; print(json.dumps({'ok':False,'stage':sys.argv[1],'exit_code':int(sys.argv[2]),'message':sys.argv[3],'hint':sys.argv[4],'logs':[]}, ensure_ascii=False))" "$stage" "$code" "$msg" "$hint"
+  exit "$code"
 }
 
 pass() {
@@ -73,13 +76,57 @@ check_environment() {
   command -v python3 >/dev/null 2>&1 || missing+=("python3")
 
   if [ ${#missing[@]} -gt 0 ]; then
-    fail "P0_ENV" 2 "Missing tools: ${missing[*]}"
+    # Auto-fix: try installing missing tools
+    if [ "${AUTO_FIX}" = "true" ]; then
+      local fixed=false
+      for tool in "${missing[@]}"; do
+        case "$tool" in
+          wasm-objdump)
+            if command -v apt-get >/dev/null 2>&1; then
+              echo "Auto-fix: installing wabt (provides wasm-objdump)..." >&2
+              sudo apt-get update -qq && sudo apt-get install -y -qq wabt && fixed=true
+            fi
+            ;;
+          emcc)
+            echo "Auto-fix: emcc requires emsdk — run: git clone https://github.com/emscripten-core/emsdk && ./emsdk install ${EMSDK_VERSION} && ./emsdk activate ${EMSDK_VERSION}" >&2
+            ;;
+          node)
+            if command -v apt-get >/dev/null 2>&1; then
+              echo "Auto-fix: installing nodejs..." >&2
+              sudo apt-get update -qq && sudo apt-get install -y -qq nodejs && fixed=true
+            fi
+            ;;
+        esac
+      done
+      if [ "${fixed}" = "true" ]; then
+        # Re-check after auto-fix
+        missing=()
+        command -v emcc >/dev/null 2>&1 || missing+=("emcc")
+        command -v wasm-objdump >/dev/null 2>&1 || missing+=("wasm-objdump")
+        command -v node >/dev/null 2>&1 || missing+=("node")
+        command -v python3 >/dev/null 2>&1 || missing+=("python3")
+      fi
+    fi
+
+    if [ ${#missing[@]} -gt 0 ]; then
+      local hint=""
+      for tool in "${missing[@]}"; do
+        case "$tool" in
+          emcc)        hint+="emcc: git clone https://github.com/emscripten-core/emsdk && ./emsdk install ${EMSDK_VERSION} && ./emsdk activate ${EMSDK_VERSION}; " ;;
+          wasm-objdump) hint+="wasm-objdump: sudo apt-get install -y wabt  (Ubuntu)  OR  brew install wabt  (macOS); " ;;
+          node)        hint+="node: sudo apt-get install -y nodejs  OR  https://nodejs.org; " ;;
+          python3)     hint+="python3: sudo apt-get install -y python3; " ;;
+        esac
+      done
+      fail "P0_ENV" 2 "Missing tools: ${missing[*]}" "${hint}"
+    fi
   fi
 
   local active_version
   active_version="$(emcc --version | head -n1 | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
   if [ "${active_version}" != "${EMSDK_VERSION}" ]; then
-    fail "P0_ENV" 2 "emsdk version mismatch: expected ${EMSDK_VERSION}, got ${active_version:-unknown}"
+    fail "P0_ENV" 2 "emsdk version mismatch: expected ${EMSDK_VERSION}, got ${active_version:-unknown}" \
+      "Run: ./emsdk install ${EMSDK_VERSION} && ./emsdk activate ${EMSDK_VERSION}"
   fi
 }
 
@@ -93,11 +140,11 @@ check_build() {
       -DBUILD_TESTING=OFF \
       -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF \
       -DSPZ_GATEKEEPER_BUILD_WASM=ON >/dev/null 2>&1; then
-    fail "P1_BUILD" 3 "emcmake configuration failed"
+    fail "P1_BUILD" 3 "emcmake configuration failed" "Check CMake output: emcmake cmake -S cpp -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Release"
   fi
 
   if ! emmake cmake --build "${BUILD_DIR}" --parallel >/dev/null 2>&1; then
-    fail "P1_BUILD" 3 "emmake build failed"
+    fail "P1_BUILD" 3 "emmake build failed" "Check compiler errors in C++ source files"
   fi
 }
 
@@ -107,7 +154,7 @@ check_build() {
 check_symbols() {
   local exports_file="${BUILD_DIR}/wasm-exports.txt"
   if ! wasm-objdump -x "${WASM_JS}" > "${exports_file}" 2>&1; then
-    fail "P2_SYMBOL" 4 "wasm-objdump failed"
+    fail "P2_SYMBOL" 4 "wasm-objdump failed" "Ensure wasm-objdump is installed: sudo apt-get install -y wabt"
   fi
 
   local missing=()
@@ -118,7 +165,7 @@ check_symbols() {
   done
 
   if [ ${#missing[@]} -gt 0 ]; then
-    fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}"
+    fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}" "Add to CMakeLists.txt: -sEXPORTED_FUNCTIONS=_malloc,_free  and  -sEXPORTED_RUNTIME_METHODS=HEAPU8"
   fi
 }
 
@@ -127,13 +174,13 @@ check_symbols() {
 # ---------------------------------------------------------------------------
 check_artifact() {
   if [ ! -f "${WASM_JS}" ]; then
-    fail "P3_ARTIFACT" 5 "WASM artifact not found: ${WASM_JS}"
+    fail "P3_ARTIFACT" 5 "WASM artifact not found: ${WASM_JS}" "Run build first: emcmake cmake -S cpp -B ${BUILD_DIR} && emmake cmake --build ${BUILD_DIR}"
   fi
 
   local size
   size="$(stat -c%s "${WASM_JS}" 2>/dev/null || stat -f%z "${WASM_JS}" 2>/dev/null || echo 0)"
   if [ "${size}" -lt "${WASM_MIN_BYTES}" ] || [ "${size}" -gt "${WASM_MAX_BYTES}" ]; then
-    fail "P3_ARTIFACT" 5 "WASM artifact size ${size} bytes out of range [${WASM_MIN_BYTES}, ${WASM_MAX_BYTES}]"
+    fail "P3_ARTIFACT" 5 "WASM artifact size ${size} bytes out of range [${WASM_MIN_BYTES}, ${WASM_MAX_BYTES}]" "Check -Oz/-O3 flag and -sSINGLE_FILE=1 in CMakeLists.txt"
   fi
 }
 
@@ -142,12 +189,12 @@ check_artifact() {
 # ---------------------------------------------------------------------------
 check_frontend() {
   if [ ! -f "${HTML_FILE}" ]; then
-    fail "P4_FRONTEND" 6 "Frontend file not found: ${HTML_FILE}"
+    fail "P4_FRONTEND" 6 "Frontend file not found: ${HTML_FILE}" "Ensure web/index.html exists in the project"
   fi
 
   # Ensure fallback inspectSpz is still referenced for older WASM builds.
   if ! grep -qE "inspectSpz\b" "${HTML_FILE}"; then
-    fail "P4_FRONTEND" 6 "Fallback inspectSpz not referenced in web/index.html"
+    fail "P4_FRONTEND" 6 "Fallback inspectSpz not referenced in web/index.html" "Keep inspectSpz fallback for backward compatibility"
   fi
 
   # If the frontend uses _malloc/_free (zero-copy path), verify they are exported.
