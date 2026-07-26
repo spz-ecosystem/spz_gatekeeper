@@ -84,7 +84,11 @@ check_environment() {
           wasm-objdump)
             if command -v apt-get >/dev/null 2>&1; then
               echo "Auto-fix: installing wabt (provides wasm-objdump)..." >&2
-              sudo apt-get update -qq && sudo apt-get install -y -qq wabt && fixed=true
+              if sudo apt-get update -qq && sudo apt-get install -y -qq wabt; then
+                fixed=true
+              else
+                echo "Auto-fix: wabt installation failed" >&2
+              fi
             fi
             ;;
           emcc)
@@ -93,7 +97,11 @@ check_environment() {
           node)
             if command -v apt-get >/dev/null 2>&1; then
               echo "Auto-fix: installing nodejs..." >&2
-              sudo apt-get update -qq && sudo apt-get install -y -qq nodejs && fixed=true
+              if sudo apt-get update -qq && sudo apt-get install -y -qq nodejs; then
+                fixed=true
+              else
+                echo "Auto-fix: nodejs installation failed" >&2
+              fi
             fi
             ;;
         esac
