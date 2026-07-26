@@ -255,6 +255,9 @@ jobs:
         run: |
           emmake cmake --build build-wasm --parallel
 
+      - name: Install wabt (for wasm-objdump)
+        run: sudo apt-get update && sudo apt-get install -y wabt
+
       - name: Run WASM pre-check (post-build)
         # P1/P5 already covered by Build WASM and the Playwright smoke test below.
         # This step adds P2 symbol export check, P3 artifact size check, and P4 frontend consistency.
