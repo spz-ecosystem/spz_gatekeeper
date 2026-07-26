@@ -934,8 +934,8 @@
             await new Promise(r => setTimeout(r, delays[attempt - 1]));
           }
 
-          const wasmEntry = './spz_gatekeeper.js';
-          const probe = await fetch(wasmEntry, { cache: 'no-store' });
+          const wasmEntry = './spz_gatekeeper.js?v=' + Date.now();
+          const probe = await fetch('./spz_gatekeeper.js', { cache: 'no-store' });
           if (!probe.ok) {
             throw new Error('未检测到浏览器轻审入口 spz_gatekeeper.js');
           }
