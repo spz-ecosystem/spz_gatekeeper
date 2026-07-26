@@ -255,11 +255,15 @@ jobs:
         run: |
           emmake cmake --build build-wasm --parallel
 
+      - name: Install WASM pre-check dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq wabt
+
       - name: Run WASM pre-check (post-build)
         # P1/P5 already covered by Build WASM and the Playwright smoke test below.
         # This step adds P2 symbol export check, P3 artifact size check, and P4 frontend consistency.
-        # --auto-fix: if wasm-objdump is missing, auto-install wabt.
-        run: bash scripts/wasm-pre-check.sh --skip-build --skip-smoke --build-dir build-wasm --auto-fix
+        run: bash scripts/wasm-pre-check.sh --skip-build --skip-smoke --build-dir build-wasm
 
       - name: Build native fixture generator (Ubuntu)
         run: |
