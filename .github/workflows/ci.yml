@@ -258,7 +258,7 @@ jobs:
       - name: Run WASM pre-check (post-build)
         # P1/P5 already covered by Build WASM and the Playwright smoke test below.
         # This step adds P2 symbol export check, P3 artifact size check, and P4 frontend consistency.
-        run: bash scripts/wasm-pre-check.sh --skip-build --skip-smoke
+        run: bash scripts/wasm-pre-check.sh --skip-build --skip-smoke --build-dir build-wasm
 
       - name: Build native fixture generator (Ubuntu)
         run: |
