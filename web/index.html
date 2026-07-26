@@ -829,6 +829,21 @@
       registryContent.classList.remove('hidden');
     }
 
+    async function inspectSpzWithPtr(bytes, strict) {
+      // Zero-copy path: write to WASM heap directly, avoiding ToBytes copy.
+      // Falls back to inspectSpz (vector path) if the ptr entry is unavailable.
+      if (!wasmModule.inspectSpzPtr) {
+        return wasmModule.inspectSpz(bytes, strict);
+      }
+      const ptr = wasmModule._malloc(bytes.byteLength);
+      try {
+        wasmModule.HEAPU8.set(bytes, ptr);
+        return await wasmModule.inspectSpzPtr(ptr, bytes.byteLength, strict);
+      } finally {
+        wasmModule._free(ptr);
+      }
+    }
+
     async function handleFile(file) {
       if (!wasmModule) {
         setEngineStatus('error', '轻审引擎仍未就绪，无法执行 bundle 审查');
@@ -854,7 +869,7 @@
         let report;
         if (isSpz) {
           // .spz 模式: 多维度验证
-          report = await wasmModule.inspectSpz(bytes, false);
+          report = await inspectSpzWithPtr(bytes, false);
 
           // 并行获取 trailer + registry + compat 数据
           const [trailerData, extensionsData, compatBoard, compatSummary] = await Promise.all([

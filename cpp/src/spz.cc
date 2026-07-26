@@ -111,12 +111,12 @@ struct SpzHeaderV4 {
 };
 static_assert(sizeof(SpzHeaderV4) == 32, "SpzHeaderV4 must be 32 bytes");
 
-static bool ParseHeaderV4(const std::vector<uint8_t>& raw, SpzHeaderV4* h, std::string* err) {
-  if (raw.size() < 32) {
+static bool ParseHeaderV4(const uint8_t* raw, size_t raw_size, SpzHeaderV4* h, std::string* err) {
+  if (raw_size < 32) {
     if (err) *err = "SPZ_FORMAT_TOO_SMALL";
     return false;
   }
-  std::memcpy(h, raw.data(), sizeof(SpzHeaderV4));
+  std::memcpy(h, raw, sizeof(SpzHeaderV4));
   if (h->magic != 0x5053474e) {
     if (err) *err = "SPZ_FORMAT_MAGIC";
     return false;
@@ -351,7 +351,7 @@ static bool DecompressZstdStream(const uint8_t* src, size_t src_size,
 
 static bool DecompressNgspStreams(const uint8_t* data, size_t size,
                                   const std::vector<TocEntry>& toc,
-                                  std::vector<uint8_t>* decomp, std::string* err) {
+                                  std::size_t* decompressed_size, std::string* err) {
   uint64_t total = 0;
   for (const auto& entry : toc) {
     total += entry.uncompressed_size;
@@ -360,8 +360,7 @@ static bool DecompressNgspStreams(const uint8_t* data, size_t size,
     if (err) *err = "SPZ_DECOMPRESS_NGSP_OVERFLOW";
     return false;
   }
-  decomp->clear();
-  decomp->reserve(static_cast<size_t>(total));
+  *decompressed_size = 0;
 
 #if defined(__EMSCRIPTEN__)
   for (const auto& entry : toc) {
@@ -369,7 +368,7 @@ static bool DecompressNgspStreams(const uint8_t* data, size_t size,
     if (!DecompressZstdStream(data + entry.compressed_offset,
                                static_cast<size_t>(entry.compressed_size), &buf, err))
       return false;
-    decomp->insert(decomp->end(), buf.begin(), buf.end());
+    *decompressed_size += buf.size();
   }
 #else
   bool fallback = false;
@@ -377,22 +376,23 @@ static bool DecompressNgspStreams(const uint8_t* data, size_t size,
       std::thread::hardware_concurrency() >= 2 && toc.size() > 1;
 
   if (try_parallel) {
-    std::vector<std::future<std::vector<uint8_t>>> futures;
+    std::vector<std::future<std::size_t>> futures;
     try {
       for (const auto& entry : toc) {
         futures.push_back(std::async(std::launch::async,
-          [&entry, data]() -> std::vector<uint8_t> {
+          [&entry, data]() -> std::size_t {
             std::vector<uint8_t> buf;
             std::string ignored;
-            DecompressZstdStream(data + entry.compressed_offset,
-                                  static_cast<size_t>(entry.compressed_size), &buf, &ignored);
-            return buf;
+            if (!DecompressZstdStream(data + entry.compressed_offset,
+                                       static_cast<size_t>(entry.compressed_size), &buf, &ignored))
+              return 0;
+            return buf.size();
           }));
       }
       for (auto& f : futures) {
-        auto result = f.get();
-        if (result.empty()) return false;
-        decomp->insert(decomp->end(), result.begin(), result.end());
+        const auto stream_size = f.get();
+        if (stream_size == 0) return false;
+        *decompressed_size += stream_size;
       }
     } catch (const std::system_error&) {
       fallback = true;
@@ -404,7 +404,7 @@ static bool DecompressNgspStreams(const uint8_t* data, size_t size,
       if (!DecompressZstdStream(data + entry.compressed_offset,
                                  static_cast<size_t>(entry.compressed_size), &buf, err))
         return false;
-      decomp->insert(decomp->end(), buf.begin(), buf.end());
+      *decompressed_size += buf.size();
     }
   }
 #endif
@@ -525,14 +525,14 @@ static bool BuildNgspBlob(uint32_t num_points, uint8_t sh_degree,
 }  // namespace
 
 
-static GateReport InspectSpzBlobLegacy(const std::vector<std::uint8_t>& raw_spz, const SpzInspectOptions& opt,
+static GateReport InspectSpzBlobLegacy(const std::uint8_t* raw_spz, std::size_t raw_spz_size, const SpzInspectOptions& opt,
                           const std::string& where) {
   GateReport rep;
   rep.asset_path = where;
 
   std::vector<std::uint8_t> decomp;
   std::string derr;
-  if (!DecompressGzip(raw_spz, &decomp, &derr)) {
+  if (!DecompressGzip(std::vector<std::uint8_t>(raw_spz, raw_spz + raw_spz_size), &decomp, &derr)) {
     AddIssue(&rep, Severity::kError, "SPZ_DECOMPRESS_GZIP", "failed to gunzip SPZ blob", where);
     return rep;
   }
@@ -674,7 +674,7 @@ static GateReport InspectSpzBlobLegacy(const std::vector<std::uint8_t>& raw_spz,
   return rep;
 }
 
-static GateReport InspectSpzBlobV4(const std::vector<std::uint8_t>& raw_spz,
+static GateReport InspectSpzBlobV4(const std::uint8_t* raw_spz, std::size_t raw_spz_size,
                                      const SpzInspectOptions& opt,
                                      const std::string& where) {
   GateReport rep;
@@ -682,7 +682,7 @@ static GateReport InspectSpzBlobV4(const std::vector<std::uint8_t>& raw_spz,
 
   SpzHeaderV4 h;
   std::string herr;
-  if (!ParseHeaderV4(raw_spz, &h, &herr)) {
+  if (!ParseHeaderV4(raw_spz, raw_spz_size, &h, &herr)) {
     AddIssue(&rep, Severity::kError, "SPZ_FORMAT_HEADER", "failed to parse v4 header: " + herr, where);
     return rep;
   }
@@ -697,7 +697,7 @@ static GateReport InspectSpzBlobV4(const std::vector<std::uint8_t>& raw_spz,
   info.toc_byte_offset = h.toc_byte_offset;
 
   if (ext_size > 0) {
-    auto ext_parse = ParseHeaderZoneExtensions(raw_spz.data() + 32, ext_size);
+    auto ext_parse = ParseHeaderZoneExtensions(raw_spz + 32, ext_size);
     if (!ext_parse.ok) {
       AddIssue(&rep, Severity::kError, "SPZ_FORMAT_EXT_ZONE", ext_parse.error, where);
       return rep;
@@ -705,19 +705,19 @@ static GateReport InspectSpzBlobV4(const std::vector<std::uint8_t>& raw_spz,
     info.ilv_records = std::move(ext_parse.records);
   }
 
-  auto toc = ParseToc(raw_spz.data(), raw_spz.size(), h.toc_byte_offset, h.num_streams);
+  auto toc = ParseToc(raw_spz, raw_spz_size, h.toc_byte_offset, h.num_streams);
   if (!toc.ok) {
     AddIssue(&rep, Severity::kError, "SPZ_TOC_PARSE", toc.error, where);
     return rep;
   }
 
-  std::vector<uint8_t> ngsp_buf;
+  std::size_t ngsp_decompressed_size = 0;
   std::string nserr;
-  if (!DecompressNgspStreams(raw_spz.data(), raw_spz.size(), toc.entries, &ngsp_buf, &nserr)) {
+  if (!DecompressNgspStreams(raw_spz, raw_spz_size, toc.entries, &ngsp_decompressed_size, &nserr)) {
     AddIssue(&rep, Severity::kError, "SPZ_NGSP_DECOMPRESS", nserr, where);
     return rep;
   }
-  info.decompressed_size = ngsp_buf.size();
+  info.decompressed_size = ngsp_decompressed_size;
 
   if (h.version > kKnownMaxVersion) {
     AddIssue(&rep, Severity::kWarning, "SPZ_FORMAT_VERSION", "version newer than known max", where);
@@ -727,29 +727,32 @@ static GateReport InspectSpzBlobV4(const std::vector<std::uint8_t>& raw_spz,
   return rep;
 }
 
-GateReport InspectSpzBlob(const std::vector<std::uint8_t>& raw_spz, const SpzInspectOptions& opt,
+GateReport InspectSpzBlob(const std::uint8_t* data, std::size_t size,
+                          const SpzInspectOptions& opt,
                           const std::string& where) {
   GateReport rep;
   rep.asset_path = where;
 
-  const size_t raw_size = raw_spz.size();
-  if (raw_size < 4) {
+  if (size < 4) {
     AddIssue(&rep, Severity::kError, "SPZ_FORMAT_TOO_SMALL", "SPZ data smaller than 4 bytes", where);
     return rep;
   }
 
-  const uint8_t* raw = raw_spz.data();
-
-  if (raw[0] == 0x4e && raw[1] == 0x47 && raw[2] == 0x53 && raw[3] == 0x50) {
-    return InspectSpzBlobV4(raw_spz, opt, where);
+  if (data[0] == 0x4e && data[1] == 0x47 && data[2] == 0x53 && data[3] == 0x50) {
+    return InspectSpzBlobV4(data, size, opt, where);
   }
 
-  if (raw[0] == 0x1f && raw[1] == 0x8b) {
-    return InspectSpzBlobLegacy(raw_spz, opt, where);
+  if (data[0] == 0x1f && data[1] == 0x8b) {
+    return InspectSpzBlobLegacy(data, size, opt, where);
   }
 
   AddIssue(&rep, Severity::kError, "SPZ_FORMAT_UNKNOWN", "unrecognized SPZ format magic bytes", where);
   return rep;
+}
+
+GateReport InspectSpzBlob(const std::vector<std::uint8_t>& raw_spz, const SpzInspectOptions& opt,
+                          const std::string& where) {
+  return InspectSpzBlob(raw_spz.data(), raw_spz.size(), opt, where);
 }
 
 double sh_epsilon(int bits) {

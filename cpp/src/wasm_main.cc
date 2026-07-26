@@ -68,6 +68,22 @@ bool TryInspect(const emscripten::val& input, bool strict, spz_gatekeeper::GateR
   }
 }
 
+bool TryInspectPtr(std::uintptr_t ptr, std::size_t size, bool strict, spz_gatekeeper::GateReport* rep,
+                   std::string* err) {
+  try {
+    spz_gatekeeper::SpzInspectOptions opt;
+    opt.strict = strict;
+    *rep = spz_gatekeeper::InspectSpzBlob(reinterpret_cast<const std::uint8_t*>(ptr), size, opt, "<wasm>");
+    return true;
+  } catch (const std::exception& ex) {
+    *err = ex.what();
+    return false;
+  } catch (...) {
+    *err = "unknown wasm exception";
+    return false;
+  }
+}
+
 const spz_gatekeeper::ExtensionReport* FindExtensionReport(const spz_gatekeeper::GateReport& report,
                                                            std::uint32_t type) {
   for (const auto& ext : report.extension_reports) {
@@ -175,6 +191,19 @@ std::vector<std::uint8_t> BuildAdobeSafeOrbitPayload(bool invalid_size) {
   return payload;
 }
 
+std::vector<std::uint8_t> BuildCoordinateSystemPayload(bool invalid_size, std::uint32_t value = 0x04) {
+  if (invalid_size) {
+    return std::vector<std::uint8_t>{0x00};
+  }
+  std::vector<std::uint8_t> payload(4);
+  payload[0] = static_cast<std::uint8_t>(value & 0xFFu);
+  payload[1] = static_cast<std::uint8_t>((value >> 8) & 0xFFu);
+  payload[2] = static_cast<std::uint8_t>((value >> 16) & 0xFFu);
+  payload[3] = static_cast<std::uint8_t>((value >> 24) & 0xFFu);
+  return payload;
+}
+
+
 std::vector<std::uint8_t> BuildDecompressedSpz(std::uint32_t version, std::uint8_t flags,
                                                const std::vector<std::uint8_t>* trailer) {
   std::vector<std::uint8_t> decomp;
@@ -204,12 +233,15 @@ FixtureBlob BuildFixtureBlob(std::uint32_t type, bool invalid_size, const std::s
   std::vector<std::uint8_t> payload;
   if (type == 0xADBE0002u) {
     payload = BuildAdobeSafeOrbitPayload(invalid_size);
+  } else if (type == 0xADBE0003u) {
+    payload = BuildCoordinateSystemPayload(invalid_size, 0x04);
   } else {
     payload = invalid_size ? std::vector<std::uint8_t>{0x00}
                            : std::vector<std::uint8_t>{0x00, 0x00, 0x00, 0x00};
   }
   const auto trailer = BuildTlvTrailer({{type, payload}});
-  int ver = (format == "v4") ? 4 : 3;
+  const bool is_coord_type = (type == 0xADBE0003u);
+  int ver = (format == "v4" || is_coord_type) ? 4 : 3;
   const auto decompressed = BuildDecompressedSpz(ver, spz_gatekeeper::kFlagHasExtensions, &trailer);
   if (format == "v4") {
     std::string zstd_err;
@@ -337,6 +369,22 @@ std::string BuildCompatibilityBoardJson() {
 
   oss << "]}";
   return oss.str();
+}
+
+emscripten::val inspectSpzPtr(std::uintptr_t ptr, std::size_t size, bool strict) {
+  spz_gatekeeper::GateReport rep;
+  std::string err;
+  if (!TryInspectPtr(ptr, size, strict, &rep, &err)) {
+    emscripten::val out = emscripten::val::object();
+    out.set("ok", false);
+    out.set("strict", strict);
+    out.set("error", err);
+    return out;
+  }
+  emscripten::val result = ParseJsonObject(rep.ToJson());
+  result.set("ok", !rep.HasErrors());
+  result.set("strict", strict);
+  return result;
 }
 
 emscripten::val inspectSpz(const emscripten::val& spz_buffer, bool strict) {
@@ -494,6 +542,7 @@ emscripten::val getCompatibilityBoard() {
 
 EMSCRIPTEN_BINDINGS(spz_gatekeeper_module) {
   emscripten::function("inspectSpz", &inspectSpz);
+    emscripten::function("inspectSpzPtr", &inspectSpzPtr, emscripten::allow_raw_pointers());
   emscripten::function("dumpTrailer", &dumpTrailer);
   emscripten::function("inspectSpzText", &inspectSpzText);
   emscripten::function("inspectCompatSummary", &inspectCompatSummary);

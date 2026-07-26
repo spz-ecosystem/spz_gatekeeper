@@ -780,6 +780,9 @@ export default async function createSpzGatekeeperModule() {
     inspectSpz: runtime?.inspectSpz
       ? ((...args) => Promise.resolve().then(() => runtime.inspectSpz(...args)))
       : createUnavailableMethod('inspectSpz'),
+    inspectSpzPtr: runtime?.inspectSpzPtr
+      ? ((ptr, size, strict) => Promise.resolve().then(() => runtime.inspectSpzPtr(ptr, size, strict)))
+      : createUnavailableMethod('inspectSpzPtr'),
     dumpTrailer: runtime?.dumpTrailer
       ? ((...args) => Promise.resolve().then(() => runtime.dumpTrailer(...args)))
       : createUnavailableMethod('dumpTrailer'),
