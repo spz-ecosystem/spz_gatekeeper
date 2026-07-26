@@ -1,0 +1,260 @@
+#!/usr/bin/env bash
+# WASM pre-check for spz_gatekeeper.
+# Run locally before pushing WASM-related changes to CI.
+# Exit codes:
+#   0  pass
+#   1  usage/internal error
+#   2  P0 environment
+#   3  P1 build
+#   4  P2 symbol exports
+#   5  P3 artifact
+#   6  P4 frontend
+#   7  P5 smoke test
+#   8  P6 workflow lint
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+BUILD_DIR="${PROJECT_DIR}/build-pages"
+SITE_DIR="${BUILD_DIR}/site"
+WASM_JS="${SITE_DIR}/spz_gatekeeper_wasm.js"
+HTML_FILE="${PROJECT_DIR}/web/index.html"
+
+EMSDK_VERSION="3.1.56"
+WASM_MIN_BYTES=$((2 * 1024 * 1024))
+WASM_MAX_BYTES=$((15 * 1024 * 1024))
+
+REQUIRED_SYMBOLS=(
+  "inspectSpz"
+  "inspectSpzPtr"
+  "dumpTrailer"
+  "auditWasmBundle"
+  "listRegisteredExtensions"
+  "getCompatibilityBoard"
+  "inspectCompatSummary"
+  "_malloc"
+  "_free"
+)
+
+STRICT=false
+SKIP_BUILD=false
+SKIP_SMOKE=false
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --strict) STRICT=true; shift ;;
+    --skip-build) SKIP_BUILD=true; shift ;;
+    --skip-smoke) SKIP_SMOKE=true; shift ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+fail() {
+  python3 -c "import json,sys; print(json.dumps({'ok':False,'stage':sys.argv[1],'exit_code':int(sys.argv[2]),'message':sys.argv[3],'logs':[]}, ensure_ascii=False))" "$1" "$2" "$3"
+  exit "$2"
+}
+
+pass() {
+  python3 -c "import json; print(json.dumps({'ok':True,'stage':'P6_WORKFLOW','exit_code':0,'message':'WASM pre-check passed','logs':[]}, ensure_ascii=False))"
+  exit 0
+}
+
+# ---------------------------------------------------------------------------
+# P0: Environment
+# ---------------------------------------------------------------------------
+check_environment() {
+  local missing=()
+  command -v emcc >/dev/null 2>&1 || missing+=("emcc")
+  command -v wasm-objdump >/dev/null 2>&1 || missing+=("wasm-objdump")
+  command -v node >/dev/null 2>&1 || missing+=("node")
+  command -v python3 >/dev/null 2>&1 || missing+=("python3")
+
+  if [ ${#missing[@]} -gt 0 ]; then
+    fail "P0_ENV" 2 "Missing tools: ${missing[*]}"
+  fi
+
+  local active_version
+  active_version="$(emcc --version | head -n1 | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+  if [ "${active_version}" != "${EMSDK_VERSION}" ]; then
+    fail "P0_ENV" 2 "emsdk version mismatch: expected ${EMSDK_VERSION}, got ${active_version:-unknown}"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# P1: Build
+# ---------------------------------------------------------------------------
+check_build() {
+  rm -rf "${BUILD_DIR}"
+  if ! emcmake cmake -S "${PROJECT_DIR}/cpp" -B "${BUILD_DIR}" \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_TESTING=OFF \
+      -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF \
+      -DSPZ_GATEKEEPER_BUILD_WASM=ON >/dev/null 2>&1; then
+    fail "P1_BUILD" 3 "emcmake configuration failed"
+  fi
+
+  if ! emmake cmake --build "${BUILD_DIR}" --parallel >/dev/null 2>&1; then
+    fail "P1_BUILD" 3 "emmake build failed"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# P2: Symbol exports
+# ---------------------------------------------------------------------------
+check_symbols() {
+  local exports_file="${BUILD_DIR}/wasm-exports.txt"
+  if ! wasm-objdump -x "${WASM_JS}" > "${exports_file}" 2>&1; then
+    fail "P2_SYMBOL" 4 "wasm-objdump failed"
+  fi
+
+  local missing=()
+  for sym in "${REQUIRED_SYMBOLS[@]}"; do
+    if ! grep -qE "\\b${sym}\\b" "${exports_file}"; then
+      missing+=("${sym}")
+    fi
+  done
+
+  if [ ${#missing[@]} -gt 0 ]; then
+    fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# P3: Artifact
+# ---------------------------------------------------------------------------
+check_artifact() {
+  if [ ! -f "${WASM_JS}" ]; then
+    fail "P3_ARTIFACT" 5 "WASM artifact not found: ${WASM_JS}"
+  fi
+
+  local size
+  size="$(stat -c%s "${WASM_JS}" 2>/dev/null || stat -f%z "${WASM_JS}" 2>/dev/null || echo 0)"
+  if [ "${size}" -lt "${WASM_MIN_BYTES}" ] || [ "${size}" -gt "${WASM_MAX_BYTES}" ]; then
+    fail "P3_ARTIFACT" 5 "WASM artifact size ${size} bytes out of range [${WASM_MIN_BYTES}, ${WASM_MAX_BYTES}]"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# P4: Frontend consistency
+# ---------------------------------------------------------------------------
+check_frontend() {
+  if [ ! -f "${HTML_FILE}" ]; then
+    fail "P4_FRONTEND" 6 "Frontend file not found: ${HTML_FILE}"
+  fi
+
+  # Ensure fallback inspectSpz is still referenced for older WASM builds.
+  if ! grep -qE "inspectSpz\b" "${HTML_FILE}"; then
+    fail "P4_FRONTEND" 6 "Fallback inspectSpz not referenced in web/index.html"
+  fi
+
+  # If the frontend uses _malloc/_free (zero-copy path), verify they are exported.
+  if grep -qE "wasmModule\._malloc\b" "${HTML_FILE}"; then
+    if ! grep -qE "\\b_malloc\\b" "${BUILD_DIR}/wasm-exports.txt" 2>/dev/null; then
+      fail "P4_FRONTEND" 6 "Frontend uses wasmModule._malloc but it is not exported"
+    fi
+  fi
+  if grep -qE "wasmModule\._free\b" "${HTML_FILE}"; then
+    if ! grep -qE "\\b_free\\b" "${BUILD_DIR}/wasm-exports.txt" 2>/dev/null; then
+      fail "P4_FRONTEND" 6 "Frontend uses wasmModule._free but it is not exported"
+    fi
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# P5: Smoke test
+# ---------------------------------------------------------------------------
+check_smoke() {
+  local port=4173
+  local server_pid
+  python3 -m http.server "${port}" --directory "${SITE_DIR}" >/dev/null 2>&1 &
+  server_pid=$!
+  trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
+
+  local ready=false
+  for _ in $(seq 1 20); do
+    if curl -fsS "http://127.0.0.1:${port}/index.html" >/dev/null 2>&1; then
+      ready=true
+      break
+    fi
+    sleep 1
+  done
+
+  if [ "${ready}" != "true" ]; then
+    fail "P5_SMOKE" 7 "Local HTTP server did not become ready"
+  fi
+
+  # Minimal runtime sanity: the module can be instantiated.
+  if ! node -e "
+const createModule = require('${WASM_JS}');
+createModule().then(m => {
+  if (typeof m.inspectSpz !== 'function' && typeof m.inspectSpzPtr !== 'function') {
+    process.exit(1);
+  }
+  process.exit(0);
+}).catch(() => process.exit(1));
+" >/dev/null 2>&1; then
+    fail "P5_SMOKE" 7 "WASM module failed to instantiate or missing expected exports"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# P6: Workflow lint
+# ---------------------------------------------------------------------------
+check_workflow() {
+  if git -C "${PROJECT_DIR}" diff --quiet -- .github/workflows/ 2>/dev/null && \
+     git -C "${PROJECT_DIR}" diff --cached --quiet -- .github/workflows/ 2>/dev/null; then
+    # No workflow changes; skip lint in non-strict mode.
+    if [ "${STRICT}" != "true" ]; then
+      return 0
+    fi
+  fi
+
+  local missing=()
+  command -v actionlint >/dev/null 2>&1 || missing+=("actionlint")
+  command -v zizmor >/dev/null 2>&1 || missing+=("zizmor")
+
+  if [ ${#missing[@]} -gt 0 ]; then
+    if [ "${STRICT}" = "true" ]; then
+      fail "P6_WORKFLOW" 8 "Strict mode requires tools: ${missing[*]}"
+    fi
+    # In default mode, only warn.
+    return 0
+  fi
+
+  local had_error=false
+  for wf in "${PROJECT_DIR}/.github/workflows/"*.yml "${PROJECT_DIR}/.github/workflows/"*.yaml; do
+    [ -e "${wf}" ] || continue
+    if ! actionlint "${wf}" >/dev/null 2>&1; then
+      had_error=true
+    fi
+    if ! zizmor "${wf}" >/dev/null 2>&1; then
+      had_error=true
+    fi
+  done
+
+  if [ "${had_error}" = "true" ]; then
+    fail "P6_WORKFLOW" 8 "actionlint or zizmor reported issues"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+main() {
+  cd "${PROJECT_DIR}"
+  check_environment
+  if [ "${SKIP_BUILD}" != "true" ]; then
+    check_build
+  fi
+  check_symbols
+  check_artifact
+  check_frontend
+  if [ "${SKIP_SMOKE}" != "true" ]; then
+    check_smoke
+  fi
+  check_workflow
+  pass
+}
+
+main "$@"

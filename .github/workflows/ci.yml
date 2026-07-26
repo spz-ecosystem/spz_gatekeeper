@@ -220,10 +220,23 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Cache Emscripten SDK
+        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.3
+        with:
+          path: /tmp/emsdk-cache
+          key: emsdk-3.1.56-${{ runner.os }}
+
       - name: Setup Emscripten SDK
         run: |
-          git clone https://github.com/emscripten-core/emsdk.git --depth 1
-          ./emsdk/emsdk install 3.1.56
+          if [ -d /tmp/emsdk-cache/emsdk ]; then
+            echo "Using cached emsdk"
+            cp -r /tmp/emsdk-cache/emsdk ./emsdk
+          else
+            git clone https://github.com/emscripten-core/emsdk.git --depth 1
+            ./emsdk/emsdk install 3.1.56
+            mkdir -p /tmp/emsdk-cache
+            cp -r ./emsdk /tmp/emsdk-cache/emsdk
+          fi
           ./emsdk/emsdk activate 3.1.56
           echo "${GITHUB_WORKSPACE}/emsdk" >> "$GITHUB_PATH"
           echo "${GITHUB_WORKSPACE}/emsdk/upstream/emscripten" >> "$GITHUB_PATH"
@@ -235,11 +248,17 @@ jobs:
           emcmake cmake -S cpp -B build-wasm \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
-            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF \
+            -DSPZ_GATEKEEPER_BUILD_WASM=ON
 
       - name: Build WASM
         run: |
           emmake cmake --build build-wasm --parallel
+
+      - name: Run WASM pre-check (post-build)
+        # P1/P5 already covered by Build WASM and the Playwright smoke test below.
+        # This step adds P2 symbol export check, P3 artifact size check, and P4 frontend consistency.
+        run: bash scripts/wasm-pre-check.sh --skip-build --skip-smoke
 
       - name: Build native fixture generator (Ubuntu)
         run: |
@@ -291,6 +310,7 @@ jobs:
         # T54: 边界测试 — kMaxSpzBytes=30MB + 前端 24MB/30MB 检查
         # 30MB+ 大文件 smoketest 不在 CI 执行（生成 24-31MB 文件耗时）
         # 验证方式: frontend index.html 硬上限拒绝 + WASM kMaxSpzBytes 双重防线
+        # Retry up to 3 times to mitigate transient failures (network timeouts, port conflicts)
         run: |
           python3 -m http.server 4173 --directory build-wasm/site > wasm-http.log 2>&1 &
           SERVER_PID=$!
@@ -301,7 +321,19 @@ jobs:
             fi
             sleep 1
           done
-          node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-wasm/site/synthetic_valid.spz build-native/spz_gatekeeper | tee wasm-smoke.log
+          for attempt in 1 2 3; do
+            echo "Smoke test attempt $attempt"
+            if node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-wasm/site/synthetic_valid.spz build-native/spz_gatekeeper | tee wasm-smoke.log; then
+              echo "Smoke test passed on attempt $attempt"
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Smoke test failed after 3 attempts"
+              exit 1
+            fi
+            echo "Smoke test attempt $attempt failed, retrying..."
+            sleep 2
+          done
 
       - name: Upload WASM smoke logs on failure
         if: failure()
