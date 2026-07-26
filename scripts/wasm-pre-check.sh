@@ -17,8 +17,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUILD_DIR="${PROJECT_DIR}/build-pages"
-SITE_DIR="${BUILD_DIR}/site"
-WASM_JS="${SITE_DIR}/spz_gatekeeper_wasm.js"
 HTML_FILE="${PROJECT_DIR}/web/index.html"
 
 EMSDK_VERSION="3.1.56"
@@ -46,9 +44,13 @@ while [ $# -gt 0 ]; do
     --strict) STRICT=true; shift ;;
     --skip-build) SKIP_BUILD=true; shift ;;
     --skip-smoke) SKIP_SMOKE=true; shift ;;
+    --build-dir) BUILD_DIR="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
+
+SITE_DIR="${BUILD_DIR}/site"
+WASM_JS="${SITE_DIR}/spz_gatekeeper_wasm.js"
 
 fail() {
   python3 -c "import json,sys; print(json.dumps({'ok':False,'stage':sys.argv[1],'exit_code':int(sys.argv[2]),'message':sys.argv[3],'logs':[]}, ensure_ascii=False))" "$1" "$2" "$3"
