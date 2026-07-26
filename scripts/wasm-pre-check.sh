@@ -162,7 +162,26 @@ check_build() {
 # ---------------------------------------------------------------------------
 check_symbols() {
   local exports_file="${BUILD_DIR}/wasm-exports.txt"
-  if ! wasm-objdump -x "${WASM_JS}" > "${exports_file}" 2>&1; then
+  local wasm_bin="${BUILD_DIR}/wasm-binary.wasm"
+
+  # SINGLE_FILE=1 embeds WASM as data:application/octet-stream;base64,<data>
+  # Extract and decode it so wasm-objdump can parse the binary.
+  if python3 -c "
+import base64, re, sys
+with open('${WASM_JS}', 'r') as f: content = f.read()
+m = re.search(r'wasmBinaryFile=\"data:application/octet-stream;base64,([A-Za-z0-9+/=]+)\"', content)
+if m:
+    with open('${wasm_bin}', 'wb') as out: out.write(base64.b64decode(m.group(1)))
+    sys.exit(0)
+sys.exit(1)
+" 2>/dev/null && [ -f "${wasm_bin}" ]; then
+    WASM_BINARY="${wasm_bin}"
+  else
+    # Fallback: try the JS file directly (may work with non-SINGLE_FILE builds)
+    WASM_BINARY="${WASM_JS}"
+  fi
+
+  if ! wasm-objdump -x "${WASM_BINARY}" > "${exports_file}" 2>&1; then
     fail "P2_SYMBOL" 4 "wasm-objdump failed" "Ensure wasm-objdump is installed: sudo apt-get install -y wabt"
   fi
 
