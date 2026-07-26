@@ -86,6 +86,9 @@ check_environment() {
             if apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq wabt >/dev/null 2>&1; then
               fixed=true
               echo "Auto-fix: wabt installed successfully" >&2
+            elif add-apt-repository -y universe >/dev/null 2>&1 && apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq wabt >/dev/null 2>&1; then
+              fixed=true
+              echo "Auto-fix: wabt installed successfully (after enabling universe)" >&2
             else
               echo "Auto-fix: wabt installation failed" >&2
             fi
