@@ -82,26 +82,24 @@ check_environment() {
       for tool in "${missing[@]}"; do
         case "$tool" in
           wasm-objdump)
-            if command -v apt-get >/dev/null 2>&1; then
-              echo "Auto-fix: installing wabt (provides wasm-objdump)..." >&2
-              if sudo apt-get update -qq && sudo apt-get install -y -qq wabt; then
-                fixed=true
-              else
-                echo "Auto-fix: wabt installation failed" >&2
-              fi
+            echo "Auto-fix: installing wabt (provides wasm-objdump)..." >&2
+            if apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq wabt >/dev/null 2>&1; then
+              fixed=true
+              echo "Auto-fix: wabt installed successfully" >&2
+            else
+              echo "Auto-fix: wabt installation failed" >&2
             fi
             ;;
           emcc)
             echo "Auto-fix: emcc requires emsdk — run: git clone https://github.com/emscripten-core/emsdk && ./emsdk install ${EMSDK_VERSION} && ./emsdk activate ${EMSDK_VERSION}" >&2
             ;;
           node)
-            if command -v apt-get >/dev/null 2>&1; then
-              echo "Auto-fix: installing nodejs..." >&2
-              if sudo apt-get update -qq && sudo apt-get install -y -qq nodejs; then
-                fixed=true
-              else
-                echo "Auto-fix: nodejs installation failed" >&2
-              fi
+            echo "Auto-fix: installing nodejs..." >&2
+            if apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq nodejs >/dev/null 2>&1; then
+              fixed=true
+              echo "Auto-fix: nodejs installed successfully" >&2
+            else
+              echo "Auto-fix: nodejs installation failed" >&2
             fi
             ;;
         esac
