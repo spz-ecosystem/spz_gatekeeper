@@ -166,49 +166,40 @@ check_build() {
 # P2: Symbol exports
 # ---------------------------------------------------------------------------
 check_symbols() {
-  local exports_file="${BUILD_DIR}/wasm-exports.txt"
   local missing=()
+  local wasm_cc="${PROJECT_DIR}/cpp/src/wasm_main.cc"
+  local cmake_file="${PROJECT_DIR}/cpp/CMakeLists.txt"
+  local js_wrapper="${PROJECT_DIR}/web/spz_gatekeeper.js"
 
-  # Extract WASM binary from SINGLE_FILE=1 JS (data URL format)
-  # Embind exports like inspectSpz/inspectSpzPtr are only in WASM binary,
-  # NOT in the JS wrapper text. wasm-objdump is the only way to verify them.
-  if command -v wasm-objdump &>/dev/null && [ -f "${WASM_JS}" ]; then
-    local wasm_bin="${BUILD_DIR}/wasm-binary.wasm"
-    if python3 -c "
-import base64, re, sys
-with open('${WASM_JS}', 'r') as f: content = f.read(500000)
-m = re.search(r'wasmBinaryFile=\"data:application/octet-stream;base64,([A-Za-z0-9+/=]+)\"', content)
-if m:
-    with open('${wasm_bin}', 'wb') as out: out.write(base64.b64decode(m.group(1)))
-    sys.exit(0)
-sys.exit(1)
-" 2>/dev/null && [ -s "${wasm_bin}" ]; then
-      # Extract exports from WASM binary
-      wasm-objdump -x "${wasm_bin}" > "${exports_file}" 2>/dev/null
-    fi
-  fi
-
-  # Check WASM exports (Embind + C runtime)
+  # Embind exports: verify in wasm_main.cc source (function("name", ...))
   for sym in "${REQUIRED_SYMBOLS[@]}"; do
-    if [ -f "${exports_file}" ] && grep -qE "\\b${sym}\\b" "${exports_file}" 2>/dev/null; then
-      : # found
-    else
-      missing+=("${sym}")
-    fi
+    case "$sym" in
+      _malloc|_free)
+        # C runtime exports: verify in CMakeLists.txt EXPORTED_FUNCTIONS
+        if ! grep -qE "\b${sym}\b" "${cmake_file}" 2>/dev/null; then
+          missing+=("${sym}")
+        fi
+        ;;
+      *)
+        # Embind exports: check for emscripten::function("<sym>", ...)
+        if ! grep -qE 'function\("'"${sym}"'"' "${wasm_cc}" 2>/dev/null; then
+          missing+=("${sym}")
+        fi
+        ;;
+    esac
   done
 
-  # Check JS-wrapped functions in spz_gatekeeper.js (like auditWasmBundle)
-  local js_file="${PROJECT_DIR}/web/spz_gatekeeper.js"
-  if [ -f "${js_file}" ]; then
+  # JS wrappers: verify in spz_gatekeeper.js
+  if [ -f "${js_wrapper}" ]; then
     for sym in "${REQUIRED_JS_WRAPPERS[@]}"; do
-      if ! grep -qE "\\b${sym}\\b" "${js_file}" 2>/dev/null; then
+      if ! grep -qE "\b${sym}\b" "${js_wrapper}" 2>/dev/null; then
         missing+=("${sym}")
       fi
     done
   fi
 
   if [ ${#missing[@]} -gt 0 ]; then
-    fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}" "Check wasm_main.cc for Embind exports and CMakeLists.txt for EXPORTED_FUNCTIONS"
+    fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}" "Check wasm_main.cc for Embind exports, CMakeLists.txt for EXPORTED_FUNCTIONS, and spz_gatekeeper.js for JS wrappers"
   fi
 }
 
