@@ -4,7 +4,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, feature/spz-v2-profile-core, feature/spz-gatekeeper-2.0.2-r1, feature/spz-gatekeeper-2.0.2-r2, feature/spz-gatekeeper-2.0.2-r3, feature/spz-gatekeeper-2.0.2-r4, feature/spz-gatekeeper-2.0.2-r5, feature/spz-gatekeeper-2.0.2-r6, fix/pages-deploy-on-tag ]
+    branches: [ main, feature/spz-v2-profile-core, feature/spz-gatekeeper-2.0.2-r1, feature/spz-gatekeeper-2.0.2-r2, feature/spz-gatekeeper-2.0.2-r3, feature/spz-gatekeeper-2.0.2-r4, feature/spz-gatekeeper-2.0.2-r5, feature/spz-gatekeeper-2.0.2-r6, feature/spz-gatekeeper-2.0.4-r7, fix/pages-deploy-on-tag ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
