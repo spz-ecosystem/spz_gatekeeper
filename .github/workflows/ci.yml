@@ -304,6 +304,8 @@ jobs:
       - name: Verify WASM artifact
         run: |
           test -f build-wasm/site/spz_gatekeeper.js
+          test -f build-wasm/site/spz_gatekeeper_wasm.js
+          test -f build-wasm/site/spz_gatekeeper_wasm.wasm
           test -f build-wasm/site/index.html
           test -f build-wasm/site/synthetic_valid.spz
           test -f build-wasm/site/synthetic_v3.spz

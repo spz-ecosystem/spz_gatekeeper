@@ -929,14 +929,26 @@
 
     async function initializeWasm() {
       const maxAttempts = 3;
-      const delays = [0, 3000, 6000];
+      // Two-stage retry: first retry longer (allow slow networks to finish),
+      // second retry uses max timeout.
+      const timeouts = [
+        { import: 10000, factory: 30000 },
+        { import: 15000, factory: 45000 },
+        { import: 20000, factory: 60000 },
+      ];
+      const delays = [0, 1000, 2000];
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
           if (attempt > 1) {
-            setEngineStatus('loading', `轻审引擎加载重试 (${attempt}/${maxAttempts})...`);
+            setEngineStatus('loading', `轻审引擎加载重试 (${attempt}/${maxAttempts})，请等待...`);
             await new Promise(r => setTimeout(r, delays[attempt - 1]));
           }
+
+          const t = timeouts[attempt - 1];
+          setEngineStatus('loading', attempt === 1
+            ? '正在加载浏览器轻审引擎（首次加载可能较慢，请等待）...'
+            : `轻审引擎加载重试 (${attempt}/${maxAttempts})...`);
 
           const wasmEntry = './spz_gatekeeper.js?v=' + Date.now();
           const probe = await fetch('./spz_gatekeeper.js', { cache: 'no-store' });
@@ -944,8 +956,8 @@
             throw new Error('未检测到浏览器轻审入口 spz_gatekeeper.js');
           }
 
-          const moduleFactory = (await withTimeout(import(wasmEntry), 8000, '加载浏览器轻审入口超时')).default;
-          wasmModule = await withTimeout(moduleFactory(), 15000, '浏览器轻审引擎初始化超时');
+          const moduleFactory = (await withTimeout(import(wasmEntry), t.import, '加载浏览器轻审入口超时')).default;
+          wasmModule = await withTimeout(moduleFactory(), t.factory, '浏览器轻审引擎初始化超时');
 
           // Diagnostic: check _malloc availability
           const hasMalloc = typeof wasmModule._malloc === 'function';
