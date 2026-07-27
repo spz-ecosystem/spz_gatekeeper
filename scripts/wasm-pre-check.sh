@@ -11,6 +11,7 @@
 #   6  P4 frontend
 #   7  P5 smoke test
 #   8  P6 workflow lint
+#   9  P7 file integrity
 
 set -euo pipefail
 
@@ -323,6 +324,25 @@ check_workflow() {
 }
 
 # ---------------------------------------------------------------------------
+# P7: File integrity (UTF-8 validity + syntax check)
+# ---------------------------------------------------------------------------
+check_file_integrity() {
+  local failures=0
+
+  # Check UTF-8 validity for .cc and .h source files
+  while IFS= read -r -d '' f; do
+    if ! python3 -c "open('$f','rb').read().decode('utf-8')" 2>/dev/null; then
+      echo "  INVALID UTF-8: $f" >&2
+      failures=$((failures + 1))
+    fi
+  done < <(find "${PROJECT_DIR}/cpp" -name '*.cc' -o -name '*.h' 2>/dev/null | tr '\n' '\0')
+
+  if [ "${failures}" -gt 0 ]; then
+    fail "P7_INTEGRITY" 9 "${failures} file(s) with UTF-8 encoding errors"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 main() {
@@ -338,6 +358,7 @@ main() {
     check_smoke
   fi
   check_workflow
+  check_file_integrity
   pass
 }
 

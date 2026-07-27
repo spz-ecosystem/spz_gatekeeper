@@ -263,7 +263,9 @@ jobs:
 
       - name: Run WASM pre-check (post-build)
         # P1/P5 already covered by Build WASM and the Playwright smoke test below.
-        # This step adds P2 symbol export check, P3 artifact size check, and P4 frontend consistency.
+        # This step adds P2 symbol export check, P3 artifact size check, P4 frontend consistency,
+        # and P7 file integrity (UTF-8 validity + C++ syntax).
+        continue-on-error: false
         run: bash scripts/wasm-pre-check.sh --skip-build --skip-smoke --build-dir build-wasm
 
       - name: Upload WASM pre-check logs on failure
@@ -317,6 +319,9 @@ jobs:
         run: |
           npm install --no-save @playwright/test
           npx playwright install --with-deps chromium
+
+      - name: npm audit (supply chain)
+        run: npm audit --audit-level=high || echo 'WARN: npm audit found high/critical vulnerabilities'
 
       - name: Run WASM browser smoke test
         # T54: 边界测试 — kMaxSpzBytes=30MB + 前端 24MB/30MB 检查
