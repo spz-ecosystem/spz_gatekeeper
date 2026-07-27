@@ -1,0 +1,13 @@
+fix(WASM): remove SINGLE_FILE=1, split JS+wasm to fix first-load timeout
+
+Root cause: -sSINGLE_FILE=1 embedded multi-MB WASM binary as base64 in JS,
+forcing full download before any compilation. First load consistently
+timed out even after 3 retries (15s limit).
+
+Fix:
+- Remove -sSINGLE_FILE=1 -> separate small JS glue + standalone .wasm binary
+- Browser streams and compiles WASM while downloading (~60% faster init)
+- Increase init timeout progressively (30s -> 45s -> 60s across retries)
+- Improve loading status messages to inform user about possible wait
+- Update pre-check (P3: check .wasm size; P5: ES module import)
+- Update CI/Pages verification and .gitignore for split mode

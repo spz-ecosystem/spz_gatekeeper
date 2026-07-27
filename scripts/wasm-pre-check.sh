@@ -59,6 +59,7 @@ done
 
 SITE_DIR="${BUILD_DIR}/site"
 WASM_JS="${SITE_DIR}/spz_gatekeeper_wasm.js"
+WASM_BINARY="${SITE_DIR}/spz_gatekeeper_wasm.wasm"
 
 fail() {
   local stage="$1" code="$2" msg="$3" hint="${4:-}"
@@ -208,14 +209,28 @@ check_symbols() {
 # P3: Artifact
 # ---------------------------------------------------------------------------
 check_artifact() {
+  # Check JS glue exists (always small, ~tens of KB)
   if [ ! -f "${WASM_JS}" ]; then
-    fail "P3_ARTIFACT" 5 "WASM artifact not found: ${WASM_JS}" "Run build first: emcmake cmake -S cpp -B ${BUILD_DIR} && emmake cmake --build ${BUILD_DIR}"
+    fail "P3_ARTIFACT" 5 "WASM JS glue not found: ${WASM_JS}" "Run build first: emcmake cmake -S cpp -B ${BUILD_DIR} && emmake cmake --build ${BUILD_DIR}"
   fi
 
+  # Check separate .wasm binary exists (split mode, no SINGLE_FILE)
+  if [ ! -f "${WASM_BINARY}" ]; then
+    fail "P3_ARTIFACT" 5 "WASM binary not found: ${WASM_BINARY}" "Ensure SINGLE_FILE=1 is removed from CMakeLists.txt (split JS+wasm mode)"
+  fi
+
+  # Check WASM binary size (the binary, not the JS glue)
   local size
-  size="$(stat -c%s "${WASM_JS}" 2>/dev/null || stat -f%z "${WASM_JS}" 2>/dev/null || echo 0)"
+  size="$(stat -c%s "${WASM_BINARY}" 2>/dev/null || stat -f%z "${WASM_BINARY}" 2>/dev/null || echo 0)"
   if [ "${size}" -lt "${WASM_MIN_BYTES}" ] || [ "${size}" -gt "${WASM_MAX_BYTES}" ]; then
-    fail "P3_ARTIFACT" 5 "WASM artifact size ${size} bytes out of range [${WASM_MIN_BYTES}, ${WASM_MAX_BYTES}]" "Check -Oz/-O3 flag and -sSINGLE_FILE=1 in CMakeLists.txt"
+    fail "P3_ARTIFACT" 5 "WASM binary size ${size} bytes out of range [${WASM_MIN_BYTES}, ${WASM_MAX_BYTES}]" "Check -Oz/-O3 flag in CMakeLists.txt"
+  fi
+
+  # JS glue should be small (< 500KB)
+  local js_size
+  js_size="$(stat -c%s "${WASM_JS}" 2>/dev/null || stat -f%z "${WASM_JS}" 2>/dev/null || echo 0)"
+  if [ "${js_size}" -gt 524288 ]; then
+    echo "  WARN: WASM JS glue size ${js_size} bytes > 512KB (SINGLE_FILE may still be active)" >&2
   fi
 }
 
@@ -269,15 +284,15 @@ check_smoke() {
     fail "P5_SMOKE" 7 "Local HTTP server did not become ready"
   fi
 
-  # Minimal runtime sanity: the module can be instantiated.
-  if ! node -e "
-const createModule = require('${WASM_JS}');
-createModule().then(m => {
-  if (typeof m.inspectSpz !== 'function' && typeof m.inspectSpzPtr !== 'function') {
-    process.exit(1);
-  }
-  process.exit(0);
-}).catch(() => process.exit(1));
+  # Minimal runtime sanity: instantiate module via ES module dynamic import
+  # (WASM is built with EXPORT_ES6=1, split mode — no CJS require)
+  if ! node --input-type=module -e "
+const { default: createModule } = await import('${WASM_JS}');
+const m = await createModule();
+if (typeof m.inspectSpz !== 'function' && typeof m.inspectSpzPtr !== 'function') {
+  process.exit(1);
+}
+process.exit(0);
 " >/dev/null 2>&1; then
     fail "P5_SMOKE" 7 "WASM module failed to instantiate or missing expected exports"
   fi

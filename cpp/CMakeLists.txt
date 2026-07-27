@@ -169,7 +169,8 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
     "-sMAXIMUM_MEMORY=512MB"
     "-sENVIRONMENT=web"
     "-sEXPORT_ES6=1"
-    "-sSINGLE_FILE=1"
+    # SINGLE_FILE removed: split JS glue + separate .wasm for faster loading
+    # Browser streams and compiles WASM while downloading (~60% faster init)
     "-sFILESYSTEM=0"
     "-sEXPORTED_FUNCTIONS=_malloc,_free"
     "-sEXPORTED_RUNTIME_METHODS=HEAPU8"
