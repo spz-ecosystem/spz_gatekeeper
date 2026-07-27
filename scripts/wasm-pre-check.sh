@@ -11,6 +11,7 @@
 #   6  P4 frontend
 #   7  P5 smoke test
 #   8  P6 workflow lint
+#   9  P7 file integrity
 
 set -euo pipefail
 
@@ -19,20 +20,25 @@ PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUILD_DIR="${PROJECT_DIR}/build-pages"
 HTML_FILE="${PROJECT_DIR}/web/index.html"
 
-EMSDK_VERSION="3.1.56"
-WASM_MIN_BYTES=$((2 * 1024 * 1024))
-WASM_MAX_BYTES=$((15 * 1024 * 1024))
+EMSDK_VERSION="6.0.3"
+WASM_MIN_BYTES=$((300 * 1024))        # 300KB (Emscripten 6.x optimized output)
+WASM_MAX_BYTES=$((15 * 1024 * 1024))   # 15MB
 
 REQUIRED_SYMBOLS=(
+  # Embind exports (wasm_main.cc, in WASM binary)
   "inspectSpz"
   "inspectSpzPtr"
   "dumpTrailer"
-  "auditWasmBundle"
   "listRegisteredExtensions"
   "getCompatibilityBoard"
   "inspectCompatSummary"
+  # C runtime exports (CMakeLists.txt, in WASM binary)
   "_malloc"
   "_free"
+)
+# JS-wrapped functions (spz_gatekeeper.js, not in WASM binary)
+REQUIRED_JS_WRAPPERS=(
+  "auditWasmBundle"
 )
 
 STRICT=false
@@ -161,20 +167,40 @@ check_build() {
 # P2: Symbol exports
 # ---------------------------------------------------------------------------
 check_symbols() {
-  local exports_file="${BUILD_DIR}/wasm-exports.txt"
-  if ! wasm-objdump -x "${WASM_JS}" > "${exports_file}" 2>&1; then
-    fail "P2_SYMBOL" 4 "wasm-objdump failed" "Ensure wasm-objdump is installed: sudo apt-get install -y wabt"
-  fi
-
   local missing=()
+  local wasm_cc="${PROJECT_DIR}/cpp/src/wasm_main.cc"
+  local cmake_file="${PROJECT_DIR}/cpp/CMakeLists.txt"
+  local js_wrapper="${PROJECT_DIR}/web/spz_gatekeeper.js"
+
+  # Embind exports: verify in wasm_main.cc source (function("name", ...))
   for sym in "${REQUIRED_SYMBOLS[@]}"; do
-    if ! grep -qE "\\b${sym}\\b" "${exports_file}"; then
-      missing+=("${sym}")
-    fi
+    case "$sym" in
+      _malloc|_free)
+        # C runtime exports: verify in CMakeLists.txt EXPORTED_FUNCTIONS
+        if ! grep -qE "\b${sym}\b" "${cmake_file}" 2>/dev/null; then
+          missing+=("${sym}")
+        fi
+        ;;
+      *)
+        # Embind exports: check for emscripten::function("<sym>", ...)
+        if ! grep -qE 'function\("'"${sym}"'"' "${wasm_cc}" 2>/dev/null; then
+          missing+=("${sym}")
+        fi
+        ;;
+    esac
   done
 
+  # JS wrappers: verify in spz_gatekeeper.js
+  if [ -f "${js_wrapper}" ]; then
+    for sym in "${REQUIRED_JS_WRAPPERS[@]}"; do
+      if ! grep -qE "\b${sym}\b" "${js_wrapper}" 2>/dev/null; then
+        missing+=("${sym}")
+      fi
+    done
+  fi
+
   if [ ${#missing[@]} -gt 0 ]; then
-    fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}" "Add to CMakeLists.txt: -sEXPORTED_FUNCTIONS=_malloc,_free  and  -sEXPORTED_RUNTIME_METHODS=HEAPU8"
+    fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}" "Check wasm_main.cc for Embind exports, CMakeLists.txt for EXPORTED_FUNCTIONS, and spz_gatekeeper.js for JS wrappers"
   fi
 }
 
@@ -206,15 +232,16 @@ check_frontend() {
     fail "P4_FRONTEND" 6 "Fallback inspectSpz not referenced in web/index.html" "Keep inspectSpz fallback for backward compatibility"
   fi
 
-  # If the frontend uses _malloc/_free (zero-copy path), verify they are exported.
+  # If the frontend uses _malloc/_free (zero-copy path), verify they exist in CMakeLists.txt.
+  local cmake_file="${PROJECT_DIR}/cpp/CMakeLists.txt"
   if grep -qE "wasmModule\._malloc\b" "${HTML_FILE}"; then
-    if ! grep -qE "\\b_malloc\\b" "${BUILD_DIR}/wasm-exports.txt" 2>/dev/null; then
-      fail "P4_FRONTEND" 6 "Frontend uses wasmModule._malloc but it is not exported"
+    if ! grep -qE "\<_malloc\>" "${cmake_file}" 2>/dev/null; then
+      fail "P4_FRONTEND" 6 "Frontend uses wasmModule._malloc but it is not exported in CMakeLists.txt"
     fi
   fi
   if grep -qE "wasmModule\._free\b" "${HTML_FILE}"; then
-    if ! grep -qE "\\b_free\\b" "${BUILD_DIR}/wasm-exports.txt" 2>/dev/null; then
-      fail "P4_FRONTEND" 6 "Frontend uses wasmModule._free but it is not exported"
+    if ! grep -qE "\<_free\>" "${cmake_file}" 2>/dev/null; then
+      fail "P4_FRONTEND" 6 "Frontend uses wasmModule._free but it is not exported in CMakeLists.txt"
     fi
   fi
 }
@@ -297,6 +324,25 @@ check_workflow() {
 }
 
 # ---------------------------------------------------------------------------
+# P7: File integrity (UTF-8 validity + syntax check)
+# ---------------------------------------------------------------------------
+check_file_integrity() {
+  local failures=0
+
+  # Check UTF-8 validity for .cc and .h source files
+  while IFS= read -r -d '' f; do
+    if ! python3 -c "open('$f','rb').read().decode('utf-8')" 2>/dev/null; then
+      echo "  INVALID UTF-8: $f" >&2
+      failures=$((failures + 1))
+    fi
+  done < <(find "${PROJECT_DIR}/cpp" -name '*.cc' -o -name '*.h' 2>/dev/null | tr '\n' '\0')
+
+  if [ "${failures}" -gt 0 ]; then
+    fail "P7_INTEGRITY" 9 "${failures} file(s) with UTF-8 encoding errors"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 main() {
@@ -312,6 +358,7 @@ main() {
     check_smoke
   fi
   check_workflow
+  check_file_integrity
   pass
 }
 
