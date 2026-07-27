@@ -321,7 +321,9 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: npm audit (supply chain)
-        run: npm audit --audit-level=high || echo 'WARN: npm audit found high/critical vulnerabilities'
+        shell: bash
+        run: |
+          npm audit --audit-level=high || echo 'WARN: npm audit found high/critical vulnerabilities'
 
       - name: Run WASM browser smoke test
         # T54: 边界测试 — kMaxSpzBytes=30MB + 前端 24MB/30MB 检查
