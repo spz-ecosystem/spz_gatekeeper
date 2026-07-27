@@ -24,15 +24,20 @@ WASM_MIN_BYTES=$((2 * 1024 * 1024))
 WASM_MAX_BYTES=$((15 * 1024 * 1024))
 
 REQUIRED_SYMBOLS=(
+  # Embind exports (wasm_main.cc, in WASM binary)
   "inspectSpz"
   "inspectSpzPtr"
   "dumpTrailer"
-  "auditWasmBundle"
   "listRegisteredExtensions"
   "getCompatibilityBoard"
   "inspectCompatSummary"
+  # C runtime exports (CMakeLists.txt, in WASM binary)
   "_malloc"
   "_free"
+)
+# JS-wrapped functions (spz_gatekeeper.js, not in WASM binary)
+REQUIRED_JS_WRAPPERS=(
+  "auditWasmBundle"
 )
 
 STRICT=false
@@ -162,55 +167,42 @@ check_build() {
 # ---------------------------------------------------------------------------
 check_symbols() {
   local exports_file="${BUILD_DIR}/wasm-exports.txt"
-  local wasm_cc="${PROJECT_DIR}/cpp/src/wasm_main.cc"
-  local cmake_file="${PROJECT_DIR}/cpp/CMakeLists.txt"
   local missing=()
 
-  # Primary check: verify Embind exports in wasm_main.cc source.
-  # This is more robust than wasm-objdump on SINGLE_FILE=1 output.
-  for sym in "${REQUIRED_SYMBOLS[@]}"; do
-    if [ "$sym" = "_malloc" ] || [ "$sym" = "_free" ]; then
-      # _malloc/_free are Emscripten C exports defined in CMakeLists.txt flags.
-      if ! grep -qE "-sEXPORTED_FUNCTIONS=.*\b${sym}\b" "${cmake_file}" 2>/dev/null; then
-        missing+=("${sym}")
-      fi
-    else
-      # Embind exports: check for emscripten::function("<sym>", ...) in wasm_main.cc
-      if ! grep -qE "function\(\"${sym}\"" "${wasm_cc}" 2>/dev/null; then
-        missing+=("${sym}")
-      fi
-    fi
-  done
-
-  # Secondary check: wasm-objdump (if available) on the built artifact.
-  # Handles SINGLE_FILE=1 by extracting base64 WASM from the JS file.
+  # Check Embind + C exports from the built WASM binary.
+  # SINGLE_FILE=1 embeds WASM as data URL in JS, so extract it first.
   if command -v wasm-objdump &>/dev/null && [ -f "${WASM_JS}" ]; then
     local wasm_bin="${BUILD_DIR}/wasm-binary.wasm"
     if python3 -c "
 import base64, re, sys
-with open('${WASM_JS}', 'r') as f:
-    content = f.read(500000)  # first 500KB is enough for header
+with open('${WASM_JS}', 'r') as f: content = f.read(500000)
 m = re.search(r'wasmBinaryFile=\"data:application/octet-stream;base64,([A-Za-z0-9+/=]+)\"', content)
 if m:
     with open('${wasm_bin}', 'wb') as out: out.write(base64.b64decode(m.group(1)))
     sys.exit(0)
 sys.exit(1)
-" 2>/dev/null && [ -s "${wasm_bin}" ] && wasm-objdump -x "${wasm_bin}" > "${exports_file}" 2>/dev/null; then
-      local wasm_missing=()
+" 2>/dev/null && [ -s "${wasm_bin}" ]; then
+      wasm-objdump -x "${wasm_bin}" > "${exports_file}" 2>/dev/null
       for sym in "${REQUIRED_SYMBOLS[@]}"; do
         if ! grep -qE "\\b${sym}\\b" "${exports_file}" 2>/dev/null; then
-          wasm_missing+=("${sym}")
+          missing+=("${sym}")
         fi
       done
-      if [ ${#wasm_missing[@]} -gt 0 ]; then
-        # wasm-objdump found missing symbols that source check didn't catch
-        missing+=("wasm_binary:${wasm_missing[*]}")
-      fi
     fi
   fi
 
+  # Check JS-wrapped functions in spz_gatekeeper.js
+  local js_file="${PROJECT_DIR}/web/spz_gatekeeper.js"
+  if [ -f "${js_file}" ]; then
+    for sym in "${REQUIRED_JS_WRAPPERS[@]}"; do
+      if ! grep -qE "\\b${sym}\\b" "${js_file}" 2>/dev/null; then
+        missing+=("${sym}")
+      fi
+    done
+  fi
+
   if [ ${#missing[@]} -gt 0 ]; then
-    fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}" "Check wasm_main.cc for emscripten::function() calls and CMakeLists.txt for -sEXPORTED_FUNCTIONS=_malloc,_free"
+    fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}" "Check wasm_main.cc for Embind exports, CMakeLists.txt for EXPORTED_FUNCTIONS, and spz_gatekeeper.js for JS wrappers"
   fi
 }
 
