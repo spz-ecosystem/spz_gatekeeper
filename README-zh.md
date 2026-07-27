@@ -449,5 +449,11 @@ spz_gatekeeper/
 - [nianticlabs/spz](https://github.com/nianticlabs/spz) - 上游 SPZ 库
 - [KHR_gaussian_splatting](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_gaussian_splatting) - Khronos 扩展规范
 
+## 引用
+
+如在研究中使用本项目，请引用：
+
+> Pu Junhan. Zero-Trust HL Harness: Governing Autonomous Agents through Self-Referential Evolution. 中国科学院科技论文预发布平台, ChinaXiv:202607.00158V1.
+
 ## 许可证
 MulanPSL v2，详见 `LICENSE`。

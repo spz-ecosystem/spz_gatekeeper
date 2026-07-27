@@ -440,5 +440,11 @@ spz_gatekeeper/
 - [nianticlabs/spz](https://github.com/nianticlabs/spz) - upstream SPZ library
 - [KHR_gaussian_splatting](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_gaussian_splatting) - Khronos extension spec
 
+## Citation
+
+If you use this project in your research, please cite:
+
+> Pu Junhan. Zero-Trust HL Harness: Governing Autonomous Agents through Self-Referential Evolution. 中国科学院科技论文预发布平台, ChinaXiv:202607.00158V1.
+
 ## License
 MulanPSL v2. See `LICENSE`.
