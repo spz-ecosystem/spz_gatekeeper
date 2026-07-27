@@ -2,7 +2,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20849212.svg)](https://doi.org/10.5281/zenodo.20849212)
 
-> SPZ legality checker for validating headers, flags, and TLV trailer extensions without changing baseline SPZ decoding behavior.
+> SPZ legality checker for validating headers, flags, and ILV trailer extensions without changing baseline SPZ decoding behavior.
 
 `spz_gatekeeper` is a **pure C++17** validator for `.spz` files. It does **not** validate GLB containers, and it does **not** implement compression or rendering. Its job is to audit whether an SPZ file stays compatible with the upstream SPZ packed format while carrying optional vendor extensions.
 
@@ -42,7 +42,7 @@ Inclusion in, or validation by, this gatekeeper project does not constitute endo
 ### What this tool does
 - Validate SPZ header fields: magic, version, point count, SH degree, flags, reserved byte
 - Validate base payload sizing and truncation
-- Validate TLV trailer layout after the base payload
+- Validate ILV trailer layout after the base payload
 - Validate known vendor extensions, currently Adobe Safe Orbit Camera (`0xADBE0002`)
 - Warn on newer SPZ versions while continuing best-effort validation
 
@@ -55,8 +55,8 @@ Inclusion in, or validation by, this gatekeeper project does not constitute endo
 - Official extension-presence flag: `0x02` (`has extensions`)
 - Antialiasing flag remains `0x01`
 - Unknown flag bits are treated as ignorable
-- Extension records use TLV layout: `[u32 type][u32 length][payload...]`
-- Unknown TLV types must be skippable via `length`
+- Extension records use ILV layout: `[u32 type][u32 length][payload...]`
+- Unknown ILV types must be skippable via `length`
 - Version policy:
   - `version < 1` => error
   - `version 1..4` => normal validation
@@ -154,7 +154,7 @@ sudo apt-get install -y zlib1g-dev libzstd-dev
 spz_gatekeeper check-spz <file.spz> [--strict|--no-strict] [--json]
 ```
 
-### Dump trailer TLV records
+### Dump trailer ILV records
 ```bash
 spz_gatekeeper dump-trailer <file.spz> [--strict|--no-strict] [--json]
 ```
@@ -194,7 +194,7 @@ spz_gatekeeper --self-test
 
 ### Command guide
 - `check-spz`: main L2 legality check for CI, release gating, and manual audits.
-- `dump-trailer`: inspect raw TLV records, offsets, and lengths after the base SPZ payload.
+- `dump-trailer`: inspect raw ILV records, offsets, and lengths after the base SPZ payload.
 - `registry`: browse built-in extension specs; use `registry show <type>` when you need one contract in detail.
 - `gen-fixture`: generate the smallest valid or invalid `.spz` sample for extension-validator development.
 - `compat-check`: run the fast strict/non-strict compatibility summary for one asset.
@@ -204,7 +204,7 @@ spz_gatekeeper --self-test
 
 ## Registry, self-test, and compatibility board
 - `registry` is the machine-readable catalog of built-in extension contracts.
-- `--self-test` verifies the gatekeeper's own TLV/header assumptions without requiring external assets.
+- `--self-test` verifies the gatekeeper's own ILV/header assumptions without requiring external assets.
 - `compat-board` reports extension integration maturity, not an algorithm leaderboard.
 - `docs/extension_registry.json` mirrors the current built-in registry and compatibility-board snapshot for docs/Web use.
 - The Web/WASM entry points reuse the same registry/report vocabulary as the CLI, so the JSON fields stay aligned across terminal, browser, and docs.
@@ -331,7 +331,7 @@ spz_gatekeeper compat-check fixture_valid.spz --json
 spz_gatekeeper compat-board --json
 ```
 
-Use this loop to confirm, in order, the registered contract, a minimal valid/invalid sample pair, the raw TLV layout, the structured compatibility summary, and the current maturity-board status before cutting a release.
+Use this loop to confirm, in order, the registered contract, a minimal valid/invalid sample pair, the raw ILV layout, the structured compatibility summary, and the current maturity-board status before cutting a release.
 
 ## Validation details
 
@@ -343,9 +343,9 @@ Use this loop to confirm, in order, the registered contract, a minimal valid/inv
 
 ### Trailer checks
 - Trailer may only appear after standard SPZ fields
-- If `flags & 0x02` is set, trailer must exist and parse as TLV
+- If `flags & 0x02` is set, trailer must exist and parse as ILV
 - If trailer exists without `0x02`, validation emits warning `L2_UNDECLARED_TRAILER`
-- In `--no-strict` mode, TLV parse failures downgrade to warnings
+- In `--no-strict` mode, ILV parse failures downgrade to warnings
 
 ### Adobe extension
 Registered extension: `0xADBE0003` (`Adobe Coordinate System`) — status: draft, validator deferred.
