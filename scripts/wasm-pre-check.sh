@@ -231,15 +231,16 @@ check_frontend() {
     fail "P4_FRONTEND" 6 "Fallback inspectSpz not referenced in web/index.html" "Keep inspectSpz fallback for backward compatibility"
   fi
 
-  # If the frontend uses _malloc/_free (zero-copy path), verify they are exported.
+  # If the frontend uses _malloc/_free (zero-copy path), verify they exist in CMakeLists.txt.
+  local cmake_file="${PROJECT_DIR}/cpp/CMakeLists.txt"
   if grep -qE "wasmModule\._malloc\b" "${HTML_FILE}"; then
-    if ! grep -qE "\\b_malloc\\b" "${BUILD_DIR}/wasm-exports.txt" 2>/dev/null; then
-      fail "P4_FRONTEND" 6 "Frontend uses wasmModule._malloc but it is not exported"
+    if ! grep -qE "\<_malloc\>" "${cmake_file}" 2>/dev/null; then
+      fail "P4_FRONTEND" 6 "Frontend uses wasmModule._malloc but it is not exported in CMakeLists.txt"
     fi
   fi
   if grep -qE "wasmModule\._free\b" "${HTML_FILE}"; then
-    if ! grep -qE "\\b_free\\b" "${BUILD_DIR}/wasm-exports.txt" 2>/dev/null; then
-      fail "P4_FRONTEND" 6 "Frontend uses wasmModule._free but it is not exported"
+    if ! grep -qE "\<_free\>" "${cmake_file}" 2>/dev/null; then
+      fail "P4_FRONTEND" 6 "Frontend uses wasmModule._free but it is not exported in CMakeLists.txt"
     fi
   fi
 }
