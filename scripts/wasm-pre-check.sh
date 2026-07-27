@@ -19,7 +19,7 @@ PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BUILD_DIR="${PROJECT_DIR}/build-pages"
 HTML_FILE="${PROJECT_DIR}/web/index.html"
 
-EMSDK_VERSION="3.1.56"
+EMSDK_VERSION="6.0.3"
 WASM_MIN_BYTES=$((2 * 1024 * 1024))
 WASM_MAX_BYTES=$((15 * 1024 * 1024))
 
@@ -169,8 +169,9 @@ check_symbols() {
   local exports_file="${BUILD_DIR}/wasm-exports.txt"
   local missing=()
 
-  # Check Embind + C exports from the built WASM binary.
-  # SINGLE_FILE=1 embeds WASM as data URL in JS, so extract it first.
+  # Extract WASM binary from SINGLE_FILE=1 JS (data URL format)
+  # Embind exports like inspectSpz/inspectSpzPtr are only in WASM binary,
+  # NOT in the JS wrapper text. wasm-objdump is the only way to verify them.
   if command -v wasm-objdump &>/dev/null && [ -f "${WASM_JS}" ]; then
     local wasm_bin="${BUILD_DIR}/wasm-binary.wasm"
     if python3 -c "
@@ -182,16 +183,21 @@ if m:
     sys.exit(0)
 sys.exit(1)
 " 2>/dev/null && [ -s "${wasm_bin}" ]; then
+      # Extract exports from WASM binary
       wasm-objdump -x "${wasm_bin}" > "${exports_file}" 2>/dev/null
-      for sym in "${REQUIRED_SYMBOLS[@]}"; do
-        if ! grep -qE "\\b${sym}\\b" "${exports_file}" 2>/dev/null; then
-          missing+=("${sym}")
-        fi
-      done
     fi
   fi
 
-  # Check JS-wrapped functions in spz_gatekeeper.js
+  # Check WASM exports (Embind + C runtime)
+  for sym in "${REQUIRED_SYMBOLS[@]}"; do
+    if [ -f "${exports_file}" ] && grep -qE "\\b${sym}\\b" "${exports_file}" 2>/dev/null; then
+      : # found
+    else
+      missing+=("${sym}")
+    fi
+  done
+
+  # Check JS-wrapped functions in spz_gatekeeper.js (like auditWasmBundle)
   local js_file="${PROJECT_DIR}/web/spz_gatekeeper.js"
   if [ -f "${js_file}" ]; then
     for sym in "${REQUIRED_JS_WRAPPERS[@]}"; do
@@ -202,7 +208,7 @@ sys.exit(1)
   fi
 
   if [ ${#missing[@]} -gt 0 ]; then
-    fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}" "Check wasm_main.cc for Embind exports, CMakeLists.txt for EXPORTED_FUNCTIONS, and spz_gatekeeper.js for JS wrappers"
+    fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}" "Check wasm_main.cc for Embind exports and CMakeLists.txt for EXPORTED_FUNCTIONS"
   fi
 }
 

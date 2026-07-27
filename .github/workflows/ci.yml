@@ -224,7 +224,7 @@ jobs:
         uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.3
         with:
           path: /tmp/emsdk-cache
-          key: emsdk-3.1.56-${{ runner.os }}
+          key: emsdk-6.0.3-${{ runner.os }}
 
       - name: Setup Emscripten SDK
         run: |
@@ -233,11 +233,11 @@ jobs:
             cp -r /tmp/emsdk-cache/emsdk ./emsdk
           else
             git clone https://github.com/emscripten-core/emsdk.git --depth 1
-            ./emsdk/emsdk install 3.1.56
+            ./emsdk/emsdk install 6.0.3
             mkdir -p /tmp/emsdk-cache
             cp -r ./emsdk /tmp/emsdk-cache/emsdk
           fi
-          ./emsdk/emsdk activate 3.1.56
+          ./emsdk/emsdk activate 6.0.3
           echo "${GITHUB_WORKSPACE}/emsdk" >> "$GITHUB_PATH"
           echo "${GITHUB_WORKSPACE}/emsdk/upstream/emscripten" >> "$GITHUB_PATH"
           echo "EMSDK=${GITHUB_WORKSPACE}/emsdk" >> "$GITHUB_ENV"
