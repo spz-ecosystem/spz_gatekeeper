@@ -15,6 +15,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  EMSCRIPTEN_VERSION: "6.0.3"
 
 jobs:
   build:
@@ -224,7 +225,7 @@ jobs:
         uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.3
         with:
           path: /tmp/emsdk-cache
-          key: emsdk-6.0.3-${{ runner.os }}
+          key: emsdk-${{ env.EMSCRIPTEN_VERSION }}-${{ runner.os }}
 
       - name: Setup Emscripten SDK
         run: |
@@ -233,11 +234,11 @@ jobs:
             cp -r /tmp/emsdk-cache/emsdk ./emsdk
           else
             git clone https://github.com/emscripten-core/emsdk.git --depth 1
-            ./emsdk/emsdk install 6.0.3
+            ./emsdk/emsdk install ${{ env.EMSCRIPTEN_VERSION }}
             mkdir -p /tmp/emsdk-cache
             cp -r ./emsdk /tmp/emsdk-cache/emsdk
           fi
-          ./emsdk/emsdk activate 6.0.3
+          ./emsdk/emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
           echo "${GITHUB_WORKSPACE}/emsdk" >> "$GITHUB_PATH"
           echo "${GITHUB_WORKSPACE}/emsdk/upstream/emscripten" >> "$GITHUB_PATH"
           echo "EMSDK=${GITHUB_WORKSPACE}/emsdk" >> "$GITHUB_ENV"
@@ -264,6 +265,12 @@ jobs:
         # P1/P5 already covered by Build WASM and the Playwright smoke test below.
         # This step adds P2 symbol export check, P3 artifact size check, and P4 frontend consistency.
         run: bash scripts/wasm-pre-check.sh --skip-build --skip-smoke --build-dir build-wasm
+
+      - name: Upload WASM pre-check logs on failure
+        if: failure()
+        run: |
+          test -f build-wasm/wasm-exports.txt && cat build-wasm/wasm-exports.txt || echo "no wasm-exports.txt"
+          test -f build-wasm/wasm-binary.wasm && ls -la build-wasm/wasm-binary.wasm || echo "no wasm-binary.wasm"
 
       - name: Build native fixture generator (Ubuntu)
         run: |

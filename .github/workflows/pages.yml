@@ -16,6 +16,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  EMSCRIPTEN_VERSION: "6.0.3"
 
 jobs:
 
@@ -30,9 +31,9 @@ jobs:
 
       - name: Setup Emscripten SDK
         run: |
-          git clone https://github.com/emscripten-core/emsdk.git --depth 1      
-          ./emsdk/emsdk install 6.0.3
-          ./emsdk/emsdk activate 6.0.3
+          git clone https://github.com/emscripten-core/emsdk.git --depth 1
+          ./emsdk/emsdk install ${{ env.EMSCRIPTEN_VERSION }}
+          ./emsdk/emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
           echo ${GITHUB_WORKSPACE}/emsdk >> $GITHUB_PATH
           echo ${GITHUB_WORKSPACE}/emsdk/upstream/emscripten >> $GITHUB_PATH
           echo EMSDK=${GITHUB_WORKSPACE}/emsdk >> $GITHUB_ENV
@@ -55,6 +56,10 @@ jobs:
           test -f build-pages/site/index.html
           mkdir -p site
           cp -R build-pages/site/. site/
+
+      - name: Generate SHA256 artifact manifest
+        run: |
+          cd site && sha256sum * > pages-artifact-sha256.txt && cat pages-artifact-sha256.txt
 
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
