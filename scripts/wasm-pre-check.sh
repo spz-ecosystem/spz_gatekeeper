@@ -20,8 +20,8 @@ BUILD_DIR="${PROJECT_DIR}/build-pages"
 HTML_FILE="${PROJECT_DIR}/web/index.html"
 
 EMSDK_VERSION="6.0.3"
-WASM_MIN_BYTES=$((2 * 1024 * 1024))
-WASM_MAX_BYTES=$((15 * 1024 * 1024))
+WASM_MIN_BYTES=$((300 * 1024))        # 300KB (Emscripten 6.x optimized output)
+WASM_MAX_BYTES=$((15 * 1024 * 1024))   # 15MB
 
 REQUIRED_SYMBOLS=(
   # Embind exports (wasm_main.cc, in WASM binary)
