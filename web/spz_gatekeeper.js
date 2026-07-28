@@ -7,6 +7,7 @@ const kAuditPolicyModeChallenge = 'challenge';
 const kAuditToolVersion = '1.0.0';
 const kBrowserAuditMode = 'browser_lightweight_wasm_audit';
 const kBrowserToCliHandoffSchemaVersion = 'spz_gatekeeper.browser_to_cli_handoff.v1';
+const kLicenseStatement = 'SPZ Gatekeeper (Browser Lightweight Audit) — Licensed under MulanPSL v2. Copyright (c) 2026 PuJunhan.';
 const kUnifiedBudgetPolicyTable = Object.freeze({
   cold_start_ms: Object.freeze({
     domain: 'perf',
@@ -419,11 +420,39 @@ function buildBrowserAuditReport(data, runtime) {
   return buildLegacyBrowserAuditReport(data);
 }
 
-function buildBrowserToCliHandoff(report) {
+function buildTimestamp() {
+  return new Date().toISOString().replace('T', ' ').replace(/\.\d+Z/, ' UTC');
+}
+
+function buildSpzHandoff(report, fileName, auditDurationMs) {
+  const verdict = report?.verdict || 'block';
+  return {
+    schema_version: kBrowserToCliHandoffSchemaVersion.replace('v1', 'v2'),
+    tool_version: kAuditToolVersion,
+    audit_profile: kAuditProfile,
+    audit_mode: 'spz_inspect',
+    policy_mode: kAuditPolicyModeRelease,
+    bundle_id: fileName,
+    bundle_verdict: verdict,
+    verdict,
+    final_verdict: verdict,
+    release_ready: verdict === 'pass',
+    license: kLicenseStatement,
+    timestamp: buildTimestamp(),
+    audit_duration_ms: auditDurationMs || 0,
+    summary: report?.summary || { issue_count: 0 },
+    budgets: report?.budgets || {},
+    issues: report?.issues || [],
+    next_action: verdict === 'pass' ? 'approve_bundle' : 'block_bundle',
+    spz_meta: report?._spzMeta || null,
+  };
+}
+
+function buildBrowserToCliHandoff(report, auditDurationMs) {
   const bundleVerdict = resolveBundleVerdict(report);
   const finalVerdict = resolveFinalVerdict(report);
   return {
-    schema_version: kBrowserToCliHandoffSchemaVersion,
+    schema_version: kBrowserToCliHandoffSchemaVersion.replace('v1', 'v2'),
     audit_profile: report.audit_profile,
     audit_mode: report.audit_mode,
     policy_mode: resolvePolicyMode(report.policy_mode),
@@ -433,6 +462,9 @@ function buildBrowserToCliHandoff(report) {
     verdict: bundleVerdict,
     final_verdict: finalVerdict,
     release_ready: resolveReleaseReady(report, finalVerdict),
+    license: kLicenseStatement,
+    timestamp: buildTimestamp(),
+    audit_duration_ms: auditDurationMs || 0,
     summary: report.summary || {},
     budgets: report.budgets || {},
     copy_breakdown: report.copy_breakdown || { total_passes: 0, stages: [] },
@@ -865,7 +897,8 @@ export default async function createSpzGatekeeperModule() {
     writeToReservedBuffer: (data, options) => writeToReservedBuffer(runtime, data, options),
     createBatchQueue: () => new BatchQueue(2),
     BatchQueue,
+    buildSpzHandoff,
   };
 }
 
-export { writeToReservedBuffer, BatchQueue };
+export { writeToReservedBuffer, BatchQueue, buildSpzHandoff, buildBrowserToCliHandoff };
