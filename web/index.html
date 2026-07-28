@@ -67,6 +67,15 @@
       75% { transform: translate(15px, -20px); }
     }
 
+    @keyframes slideOut {
+      0% { opacity: 1; transform: translateX(0); max-width: 200px; }
+      100% { opacity: 0; transform: translateX(30px); max-width: 0; padding: 0 4px; margin: 0; }
+    }
+
+    .queue-exit {
+      animation: slideOut 0.5s ease forwards;
+    }
+
     .main-wrapper {
       width: min(1200px, 100%);
       margin: 0 auto;
@@ -561,7 +570,11 @@
 
   <script type="module">
     import { memoryManager } from './smart_memory_manager.js';
+<<<<<<< HEAD
     import { BatchQueue } from './spz_gatekeeper.js';
+=======
+    import { BatchQueue, buildSpzHandoff, buildBrowserToCliHandoff } from './spz_gatekeeper.js';
+>>>>>>> 6a7d385 (feat(UX): auto-export handoff JSON on completion + queue slide animation)
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
     const loadingStatus = document.getElementById('loadingStatus');
@@ -588,6 +601,7 @@
     const kQueueMax = 2;
     let fileQueue = [];
     let queueProcessing = false;
+    let queueTimer = null;
 
     function updateQueueBar() {
       if (fileQueue.length === 0) {
@@ -598,8 +612,20 @@
       queueItems.innerHTML = fileQueue.map((item, i) => {
         const statusClass = item.status === 'done' ? 'pass' : item.status === 'error' ? 'fail' : 'pending';
         const label = item.status === 'done' ? '✅' : item.status === 'error' ? '❌' : '⏳';
-        return `<span class="badge ${statusClass}" style="font-size:12px; white-space:nowrap;">${label} ${item.name}</span>`;
+        const animClass = item.status === 'done' || item.status === 'error' ? 'queue-exit' : '';
+        return `<span class="badge ${statusClass} ${animClass}" style="font-size:12px; white-space:nowrap; transition: all 0.4s ease; ${animClass ? 'animation: slideOut 0.5s ease forwards;' : ''}">${label} ${item.name}</span>`;
       }).join('');
+
+      // Auto-remove completed items after animation
+      if (queueTimer) clearTimeout(queueTimer);
+      const hasDone = fileQueue.some(f => f.status === 'done' || f.status === 'error');
+      if (hasDone) {
+        queueTimer = setTimeout(() => {
+          fileQueue = fileQueue.filter(f => f.status === 'pending' || f.status === 'processing');
+          updateQueueBar();
+          processQueue();
+        }, 1500);
+      }
     }
 
     function processQueue() {
@@ -963,6 +989,26 @@
         resultEmpty.classList.add('hidden');
         resultContent.classList.remove('hidden');
         setEngineStatus('ready', `WASM 引擎就绪 · 最近审查 ${file.name}`);
+
+        // Auto-export handoff JSON report on completion
+        try {
+          const handoff = isSpz
+            ? buildSpzHandoff(report, file.name)
+            : buildBrowserToCliHandoff(report);
+          const jsonStr = JSON.stringify(handoff, null, 2);
+          const blob = new Blob([jsonStr], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${sanitizeDownloadName(file.name)}.browser_audit.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          // Auto-export is best-effort; non-critical if it fails
+          console.warn('Auto-export handoff failed:', e);
+        }
 
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
