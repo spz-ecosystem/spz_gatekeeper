@@ -338,6 +338,23 @@ check_frontend() {
     # Build output has WASM JS but web/ doesn't — that's OK for deployment, but log it
     echo "  WARN: WASM artifacts in site/ but not in web/ — page served from site/ is fine, but local web/ dev is degraded" >&2
   fi
+
+  # Check for unresolved git conflict markers in all web source files
+  local conflict_count=0
+  local web_src_files="${PROJECT_DIR}/web/index.html ${PROJECT_DIR}/web/spz_gatekeeper.js ${PROJECT_DIR}/web/smart_memory_manager.js"
+  for f in ${web_src_files}; do
+    if [ -f "${f}" ]; then
+      local markers
+      markers="$(grep -cE '<<<<<<< |=======$|>>>>>>> ' "${f}" 2>/dev/null || true)"
+      if [ "${markers}" -gt 0 ]; then
+        echo "  ERROR: Found ${markers} unresolved conflict marker(s) in ${f}" >&2
+        conflict_count=$((conflict_count + markers))
+      fi
+    fi
+  done
+  if [ "${conflict_count}" -gt 0 ]; then
+    fail "P4_FRONTEND" 6 "Found ${conflict_count} unresolved conflict marker(s) in web/ source files" "Run 'git grep -nE \"<<<<<<< |=======|\>>>>>>> \" web/' to locate and fix them"
+  fi
 }
 
 # ---------------------------------------------------------------------------
