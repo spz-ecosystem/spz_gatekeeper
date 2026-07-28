@@ -157,7 +157,7 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
   set(SPZ_GATEKEEPER_WASM_PROFILE "compat" CACHE STRING "WASM build profile")
   set_property(CACHE SPZ_GATEKEEPER_WASM_PROFILE PROPERTY STRINGS compat perf-lite)
 
-  add_executable(spz_gatekeeper-wasm src/wasm_main.cc)
+  add_executable(spz_gatekeeper-wasm src/wasm_main.cc src/wasm_buffer.cc)
   target_link_libraries(spz_gatekeeper-wasm PRIVATE spz_gatekeeper_core)
   target_include_directories(spz_gatekeeper-wasm PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
