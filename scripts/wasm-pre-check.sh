@@ -214,6 +214,27 @@ check_symbols() {
   if [ ${#missing[@]} -gt 0 ]; then
     fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}" "Check wasm_main.cc for Embind exports, CMakeLists.txt for EXPORTED_FUNCTIONS, and spz_gatekeeper.js for JS wrappers"
   fi
+
+  # Emscripten underscore prefix check: C symbols in EXPORTED_FUNCTIONS must use _ prefix
+  # R7 CI lesson: gk_* without underscore caused linker error (undefined exported symbol)
+  local emsc_issues=0
+  if grep -qE 'EXPORTED_FUNCTIONS=[^"]*\bgk_\b' "${cmake_file}" 2>/dev/null; then
+    echo "  WARN: EXPORTED_FUNCTIONS contains 'gk_' without Emscripten underscore prefix (should be '_gk_')" >&2
+    emsc_issues=1
+    if [ "${AUTO_FIX}" = "true" ]; then
+      echo "  Auto-fix: adding underscore prefix to gk_* symbols in EXPORTED_FUNCTIONS..." >&2
+      sed -i 's/\bgk_\(reserve_buffer\|get_buffer_ptr\|get_buffer_size\|get_buffer_used\|set_buffer_used\|release_buffer\|reset_memory_stats\|get_memory_stats\)/_gk_\1/g' "${cmake_file}"
+      if grep -qE 'EXPORTED_FUNCTIONS=[^"]*\bgk_\b' "${cmake_file}" 2>/dev/null; then
+        echo "  WARN: auto-fix incomplete — manual review of gk_ symbols in EXPORTED_FUNCTIONS required" >&2
+      else
+        echo "  Auto-fix: gk_* → _gk_* applied successfully in EXPORTED_FUNCTIONS" >&2
+        emsc_issues=0
+      fi
+    fi
+  fi
+  if [ "${emsc_issues}" -gt 0 ]; then
+    fail "P2_EMSCRIPTEN_PREFIX" 4 "EXPORTED_FUNCTIONS missing underscore prefix for gk_ symbols" "Run with --auto-fix or manually prefix all gk_* with _gk_* in cpp/CMakeLists.txt"
+  fi
 }
 
 # ---------------------------------------------------------------------------
