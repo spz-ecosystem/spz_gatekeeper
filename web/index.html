@@ -885,12 +885,13 @@
 
 
 
-    function renderSummary(file, report) {
+    function renderSummary(file, report, auditDurationMs) {
       const verdict = formatVerdict(report);
       const summary = report.summary || {};
       const issueCount = report.issues ? report.issues.length : (summary.issue_count ?? 0);
       summaryTitle.textContent = file.name;
-      summaryMeta.textContent = `${formatBytes(file.size)} · entries ${summary.file_count ?? 0} · issues ${issueCount} · next ${report.next_action || 'n/a'}`;
+      const durationStr = auditDurationMs != null ? ` · ⏱ ${auditDurationMs}ms` : '';
+      summaryMeta.textContent = `${formatBytes(file.size)} · entries ${summary.file_count ?? 0} · issues ${issueCount}${durationStr} · next ${report.next_action || 'n/a'}`;
       summaryBadge.textContent = verdict.label;
       summaryBadge.className = `badge ${verdict.state}`;
     }
@@ -957,6 +958,7 @@
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
         const isSpz = file.name.toLowerCase().endsWith('.spz');
+        const auditStart = performance.now();
 
         let report;
         if (isSpz) {
@@ -982,7 +984,10 @@
           lastAuditFileName = file.name;
           setHandoffButtonState(typeof wasmModule.buildBrowserToCliHandoff === 'function');
         }
-        renderSummary(file, report);
+        const auditDurationMs = Math.round(performance.now() - auditStart);
+        report._auditDurationMs = auditDurationMs;
+
+        renderSummary(file, report, auditDurationMs);
         renderIssues(report);
         renderManifest(report);
         renderBudgets(report);
@@ -993,8 +998,8 @@
         // Auto-export handoff JSON report on completion
         try {
           const handoff = isSpz
-            ? buildSpzHandoff(report, file.name)
-            : buildBrowserToCliHandoff(report);
+            ? buildSpzHandoff(report, file.name, auditDurationMs)
+            : buildBrowserToCliHandoff(report, auditDurationMs);
           const jsonStr = JSON.stringify(handoff, null, 2);
           const blob = new Blob([jsonStr], { type: 'application/json' });
           const url = URL.createObjectURL(blob);

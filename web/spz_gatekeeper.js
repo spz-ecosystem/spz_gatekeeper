@@ -424,7 +424,7 @@ function buildTimestamp() {
   return new Date().toISOString().replace('T', ' ').replace(/\.\d+Z/, ' UTC');
 }
 
-function buildSpzHandoff(report, fileName) {
+function buildSpzHandoff(report, fileName, auditDurationMs) {
   const verdict = report?.verdict || 'block';
   return {
     schema_version: kBrowserToCliHandoffSchemaVersion.replace('v1', 'v2'),
@@ -439,6 +439,7 @@ function buildSpzHandoff(report, fileName) {
     release_ready: verdict === 'pass',
     license: kLicenseStatement,
     timestamp: buildTimestamp(),
+    audit_duration_ms: auditDurationMs || 0,
     summary: report?.summary || { issue_count: 0 },
     budgets: report?.budgets || {},
     issues: report?.issues || [],
@@ -447,7 +448,7 @@ function buildSpzHandoff(report, fileName) {
   };
 }
 
-function buildBrowserToCliHandoff(report) {
+function buildBrowserToCliHandoff(report, auditDurationMs) {
   const bundleVerdict = resolveBundleVerdict(report);
   const finalVerdict = resolveFinalVerdict(report);
   return {
@@ -463,6 +464,7 @@ function buildBrowserToCliHandoff(report) {
     release_ready: resolveReleaseReady(report, finalVerdict),
     license: kLicenseStatement,
     timestamp: buildTimestamp(),
+    audit_duration_ms: auditDurationMs || 0,
     summary: report.summary || {},
     budgets: report.budgets || {},
     copy_breakdown: report.copy_breakdown || { total_passes: 0, stages: [] },
