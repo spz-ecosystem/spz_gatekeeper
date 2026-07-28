@@ -2,7 +2,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20849212.svg)](https://doi.org/10.5281/zenodo.20849212)
 
-> 仅做 L2 的 SPZ 合法性检查器，用于审计 header、flags 和 TLV trailer 扩展，同时不破坏原始 SPZ 的基础解码行为。
+> 仅做 L2 的 SPZ 合法性检查器，用于审计 header、flags 和 ILV trailer 扩展，同时不破坏原始 SPZ 的基础解码行为。
 
 `spz_gatekeeper` 是一个 **纯 C++17** 的 `.spz` 校验工具。它**不**检查 GLB 容器，也**不**实现压缩、渲染或效果评测；它只负责判断一个 SPZ 文件在携带可选厂商扩展时，是否仍保持与上游 SPZ packed format 的兼容性。
 
@@ -42,7 +42,7 @@
 ### 本工具负责
 - 校验 SPZ header：magic、version、点数、SH degree、flags、reserved
 - 校验 base payload 大小与截断情况
-- 校验 base payload 之后的 TLV trailer
+- 校验 base payload 之后的 ILV trailer
 Registered extension: `0xADBE0003` (`Adobe Coordinate System`) — status: draft, validator deferred.
 
 - 校验已知厂商扩展，目前内置 Adobe Safe Orbit Camera（`0xADBE0002`）
@@ -57,8 +57,8 @@ Registered extension: `0xADBE0003` (`Adobe Coordinate System`) — status: draft
 - 官方扩展存在位：`0x02`（`has extensions`）
 - 抗锯齿位保持 `0x01`
 - 未识别 flags 位按可忽略处理
-- 扩展记录采用 TLV：`[u32 type][u32 length][payload...]`
-- 未知 TLV 类型必须能通过 `length` 跳过
+- 扩展记录采用 ILV：`[u32 type][u32 length][payload...]`
+- 未知 ILV 类型必须能通过 `length` 跳过
 - 版本策略：
   - `version < 1` => error
   - `version 1..4` => 正常校验
@@ -159,7 +159,7 @@ spz_gatekeeper registry [--json]
 spz_gatekeeper registry show 0xADBE0002 [--json]
 ```
 
-### 导出 trailer TLV 记录
+### 导出 trailer ILV 记录
 ```bash
 spz_gatekeeper dump-trailer <file.spz> [--strict|--no-strict] [--json]
 ```
@@ -203,7 +203,7 @@ spz_gatekeeper --self-test
 
 ## Registry、自测与兼容性看板的分工
 - `registry` 是内置扩展契约的机器可读目录。
-- `--self-test` 用于验证门卫自身的 header / TLV 假设，不依赖外部资产。
+- `--self-test` 用于验证门卫自身的 header / ILV 假设，不依赖外部资产。
 - `compat-board` 展示的是扩展接入成熟度，不是算法排行榜。
 - `docs/extension_registry.json` 提供当前内置 registry 与 compatibility board 的文档镜像，供文档或 Web 页面复用。
 - Web/WASM 与 CLI 复用同一套 registry / report 字段口径，保证终端、浏览器和文档里的 JSON 结构一致。
@@ -340,7 +340,7 @@ spz_gatekeeper compat-check fixture_valid.spz --json
 spz_gatekeeper compat-board --json
 ```
 
-这条闭环路径依次确认：已登记契约、最小合法/非法样例、原始 TLV 布局、结构化兼容性摘要，以及当前成熟度看板状态，适合作为发布前的最短核对流程。
+这条闭环路径依次确认：已登记契约、最小合法/非法样例、原始 ILV 布局、结构化兼容性摘要，以及当前成熟度看板状态，适合作为发布前的最短核对流程。
 
 ## 校验细节
 
@@ -352,9 +352,9 @@ spz_gatekeeper compat-board --json
 
 ### Trailer 校验
 - trailer 只能出现在标准 SPZ 字段之后
-- 若 `flags & 0x02` 置位，则 trailer 必须存在且必须能按 TLV 解析
+- 若 `flags & 0x02` 置位，则 trailer 必须存在且必须能按 ILV 解析
 - 若存在 trailer 但未置 `0x02`，则发出 `L2_UNDECLARED_TRAILER` warning
-- 在 `--no-strict` 模式下，TLV 解析失败降级为 warning
+- 在 `--no-strict` 模式下，ILV 解析失败降级为 warning
 
 ### Adobe 扩展
 内置验证器：`0xADBE0002`（`Adobe Safe Orbit Camera`）

@@ -35,10 +35,21 @@ REQUIRED_SYMBOLS=(
   # C runtime exports (CMakeLists.txt, in WASM binary)
   "_malloc"
   "_free"
+  # R7: memory pool + reserved buffer C API (wasm_buffer.cc, in WASM binary)
+  "_gk_reserve_buffer"
+  "_gk_get_buffer_ptr"
+  "_gk_get_buffer_size"
+  "_gk_get_buffer_used"
+  "_gk_set_buffer_used"
+  "_gk_release_buffer"
+  "_gk_reset_memory_stats"
+  "_gk_get_memory_stats"
 )
 # JS-wrapped functions (spz_gatekeeper.js, not in WASM binary)
 REQUIRED_JS_WRAPPERS=(
   "auditWasmBundle"
+  # R7: chunked write to reserved buffer
+  "writeToReservedBuffer"
 )
 
 STRICT=false
@@ -150,17 +161,47 @@ check_environment() {
 # P1: Build
 # ---------------------------------------------------------------------------
 check_build() {
-  rm -rf "${BUILD_DIR}"
-  if ! emcmake cmake -S "${PROJECT_DIR}/cpp" -B "${BUILD_DIR}" \
-      -DCMAKE_BUILD_TYPE=Release \
-      -DBUILD_TESTING=OFF \
-      -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF \
-      -DSPZ_GATEKEEPER_BUILD_WASM=ON >/dev/null 2>&1; then
-    fail "P1_BUILD" 3 "emcmake configuration failed" "Check CMake output: emcmake cmake -S cpp -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Release"
-  fi
+  local build_ok=false
+  local max_attempts=1
+  [ "${AUTO_FIX}" = "true" ] && max_attempts=2
 
-  if ! emmake cmake --build "${BUILD_DIR}" --parallel >/dev/null 2>&1; then
-    fail "P1_BUILD" 3 "emmake build failed" "Check compiler errors in C++ source files"
+  for attempt in $(seq 1 ${max_attempts}); do
+    if [ "${attempt}" -gt 1 ]; then
+      echo "  Auto-fix: retrying build (attempt ${attempt}/${max_attempts})..." >&2
+      rm -rf "${BUILD_DIR}"
+    fi
+
+    if ! emcmake cmake -S "${PROJECT_DIR}/cpp" -B "${BUILD_DIR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_TESTING=OFF \
+        -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF \
+        -DSPZ_GATEKEEPER_BUILD_WASM=ON >/dev/null 2>&1; then
+      if [ "${attempt}" -lt "${max_attempts}" ]; then
+        echo "  Auto-fix: cmake configure failed, retrying after cleanup..." >&2
+        continue
+      fi
+      fail "P1_BUILD" 3 "emcmake configuration failed" "Check CMake output: emcmake cmake -S cpp -B ${BUILD_DIR} -DCMAKE_BUILD_TYPE=Release"
+    fi
+
+    if ! emmake cmake --build "${BUILD_DIR}" --parallel >/dev/null 2>&1; then
+      # Auto-fix: retry with --parallel 1 if OOM suspected
+      if [ "${AUTO_FIX}" = "true" ] && [ "${attempt}" -lt "${max_attempts}" ]; then
+        echo "  Auto-fix: build failed (possible OOM), retrying with --parallel 1..." >&2
+        if emmake cmake --build "${BUILD_DIR}" --parallel 1 >/dev/null 2>&1; then
+          build_ok=true
+          break
+        fi
+        echo "  Auto-fix: single-thread build also failed, retrying from clean build..." >&2
+        continue
+      fi
+      fail "P1_BUILD" 3 "emmake build failed" "Check compiler errors in C++ source files"
+    fi
+    build_ok=true
+    break
+  done
+
+  if [ "${build_ok}" != "true" ]; then
+    fail "P1_BUILD" 3 "emmake build failed after ${max_attempts} attempts" "Check compiler errors, disk space, and memory"
   fi
 }
 
@@ -176,7 +217,7 @@ check_symbols() {
   # Embind exports: verify in wasm_main.cc source (function("name", ...))
   for sym in "${REQUIRED_SYMBOLS[@]}"; do
     case "$sym" in
-      _malloc|_free)
+      _malloc|_free|_gk_*)
         # C runtime exports: verify in CMakeLists.txt EXPORTED_FUNCTIONS
         if ! grep -qE "\b${sym}\b" "${cmake_file}" 2>/dev/null; then
           missing+=("${sym}")
@@ -202,6 +243,27 @@ check_symbols() {
 
   if [ ${#missing[@]} -gt 0 ]; then
     fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}" "Check wasm_main.cc for Embind exports, CMakeLists.txt for EXPORTED_FUNCTIONS, and spz_gatekeeper.js for JS wrappers"
+  fi
+
+  # Emscripten underscore prefix check: C symbols in EXPORTED_FUNCTIONS must use _ prefix
+  # R7 CI lesson: gk_* without underscore caused linker error (undefined exported symbol)
+  local emsc_issues=0
+  if grep -qE 'EXPORTED_FUNCTIONS=[^"]*\bgk_\b' "${cmake_file}" 2>/dev/null; then
+    echo "  WARN: EXPORTED_FUNCTIONS contains 'gk_' without Emscripten underscore prefix (should be '_gk_')" >&2
+    emsc_issues=1
+    if [ "${AUTO_FIX}" = "true" ]; then
+      echo "  Auto-fix: adding underscore prefix to gk_* symbols in EXPORTED_FUNCTIONS..." >&2
+      sed -i 's/\bgk_\(reserve_buffer\|get_buffer_ptr\|get_buffer_size\|get_buffer_used\|set_buffer_used\|release_buffer\|reset_memory_stats\|get_memory_stats\)/_gk_\1/g' "${cmake_file}"
+      if grep -qE 'EXPORTED_FUNCTIONS=[^"]*\bgk_\b' "${cmake_file}" 2>/dev/null; then
+        echo "  WARN: auto-fix incomplete — manual review of gk_ symbols in EXPORTED_FUNCTIONS required" >&2
+      else
+        echo "  Auto-fix: gk_* → _gk_* applied successfully in EXPORTED_FUNCTIONS" >&2
+        emsc_issues=0
+      fi
+    fi
+  fi
+  if [ "${emsc_issues}" -gt 0 ]; then
+    fail "P2_EMSCRIPTEN_PREFIX" 4 "EXPORTED_FUNCTIONS missing underscore prefix for gk_ symbols" "Run with --auto-fix or manually prefix all gk_* with _gk_* in cpp/CMakeLists.txt"
   fi
 }
 
@@ -266,22 +328,37 @@ check_frontend() {
 # ---------------------------------------------------------------------------
 check_smoke() {
   local port=4173
+  local max_port=4175
+  [ "${AUTO_FIX}" = "true" ] && max_port=4175 || max_port=4173
   local server_pid
-  python3 -m http.server "${port}" --directory "${SITE_DIR}" >/dev/null 2>&1 &
-  server_pid=$!
-  trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
 
-  local ready=false
-  for _ in $(seq 1 20); do
-    if curl -fsS "http://127.0.0.1:${port}/index.html" >/dev/null 2>&1; then
-      ready=true
+  for port in $(seq 4173 ${max_port}); do
+    python3 -m http.server "${port}" --directory "${SITE_DIR}" >/dev/null 2>&1 &
+    server_pid=$!
+    trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
+
+    local ready=false
+    for _ in $(seq 1 20); do
+      if curl -fsS "http://127.0.0.1:${port}/index.html" >/dev/null 2>&1; then
+        ready=true
+        break
+      fi
+      sleep 1
+    done
+
+    if [ "${ready}" = "true" ]; then
       break
     fi
-    sleep 1
+
+    # Port in use or server failed - kill and try next
+    kill "${server_pid}" 2>/dev/null || true
+    if [ "${port}" -lt "${max_port}" ]; then
+      echo "  Auto-fix: port ${port} unavailable, trying ${port}..." >&2
+    fi
   done
 
   if [ "${ready}" != "true" ]; then
-    fail "P5_SMOKE" 7 "Local HTTP server did not become ready"
+    fail "P5_SMOKE" 7 "Local HTTP server did not become ready (tried ports 4173-${max_port})"
   fi
 
   # Minimal runtime sanity: instantiate module via ES module dynamic import

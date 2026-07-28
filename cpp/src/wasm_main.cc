@@ -7,6 +7,8 @@
 #include "spz_gatekeeper/spz.h"
 #include "spz_gatekeeper/validator_registry.h"
 
+#include "wasm_buffer.h"
+
 #include <cstddef>
 
 #include <cstdint>
