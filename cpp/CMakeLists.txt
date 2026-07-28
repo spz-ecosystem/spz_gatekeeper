@@ -173,7 +173,7 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
     # SINGLE_FILE removed: split JS glue + separate .wasm for faster loading
     # Browser streams and compiles WASM while downloading (~60% faster init)
     "-sFILESYSTEM=0"
-    "-sEXPORTED_FUNCTIONS=_malloc,_free,gk_reserve_buffer,gk_get_buffer_ptr,gk_get_buffer_size,gk_get_buffer_used,gk_set_buffer_used,gk_release_buffer,gk_reset_memory_stats,gk_get_memory_stats"
+    "-sEXPORTED_FUNCTIONS=_malloc,_free,_gk_reserve_buffer,_gk_get_buffer_ptr,_gk_get_buffer_size,_gk_get_buffer_used,_gk_set_buffer_used,_gk_release_buffer,_gk_reset_memory_stats,_gk_get_memory_stats"
     "-sEXPORTED_RUNTIME_METHODS=HEAPU8"
   )
 
