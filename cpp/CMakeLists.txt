@@ -159,6 +159,7 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
 
   add_executable(spz_gatekeeper-wasm src/wasm_main.cc)
   target_link_libraries(spz_gatekeeper-wasm PRIVATE spz_gatekeeper_core)
+  target_include_directories(spz_gatekeeper-wasm PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
   set(SPZ_GATEKEEPER_WASM_LINK_OPTS
     "--bind"
@@ -172,7 +173,7 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
     # SINGLE_FILE removed: split JS glue + separate .wasm for faster loading
     # Browser streams and compiles WASM while downloading (~60% faster init)
     "-sFILESYSTEM=0"
-    "-sEXPORTED_FUNCTIONS=_malloc,_free"
+    "-sEXPORTED_FUNCTIONS=_malloc,_free,gk_reserve_buffer,gk_get_buffer_ptr,gk_get_buffer_size,gk_get_buffer_used,gk_set_buffer_used,gk_release_buffer,gk_reset_memory_stats,gk_get_memory_stats"
     "-sEXPORTED_RUNTIME_METHODS=HEAPU8"
   )
 
@@ -203,6 +204,7 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
   add_custom_command(
     OUTPUT "${SPZ_GATEKEEPER_WASM_SITE_DIR}/index.html"
            "${SPZ_GATEKEEPER_WASM_SITE_DIR}/spz_gatekeeper.js"
+           "${SPZ_GATEKEEPER_WASM_SITE_DIR}/smart_memory_manager.js"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${SPZ_GATEKEEPER_WASM_SITE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/../web/index.html"
@@ -210,9 +212,13 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/../web/spz_gatekeeper.js"
             "${SPZ_GATEKEEPER_WASM_SITE_DIR}/spz_gatekeeper.js"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/../web/smart_memory_manager.js"
+            "${SPZ_GATEKEEPER_WASM_SITE_DIR}/smart_memory_manager.js"
     DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../web/index.html"
             "${CMAKE_CURRENT_SOURCE_DIR}/../web/spz_gatekeeper.js"
-    COMMENT "Copy web entrypoint and browser audit wrapper into WASM site directory"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../web/smart_memory_manager.js"
+    COMMENT "Copy web entrypoints into WASM site directory"
     VERBATIM
   )
 
@@ -220,6 +226,7 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
     DEPENDS spz_gatekeeper-wasm
             "${SPZ_GATEKEEPER_WASM_SITE_DIR}/index.html"
             "${SPZ_GATEKEEPER_WASM_SITE_DIR}/spz_gatekeeper.js"
+            "${SPZ_GATEKEEPER_WASM_SITE_DIR}/smart_memory_manager.js"
   )
 endif()
 

@@ -35,10 +35,21 @@ REQUIRED_SYMBOLS=(
   # C runtime exports (CMakeLists.txt, in WASM binary)
   "_malloc"
   "_free"
+  # R7: memory pool + reserved buffer C API (wasm_buffer.h, in WASM binary)
+  "gk_reserve_buffer"
+  "gk_get_buffer_ptr"
+  "gk_get_buffer_size"
+  "gk_get_buffer_used"
+  "gk_set_buffer_used"
+  "gk_release_buffer"
+  "gk_reset_memory_stats"
+  "gk_get_memory_stats"
 )
 # JS-wrapped functions (spz_gatekeeper.js, not in WASM binary)
 REQUIRED_JS_WRAPPERS=(
   "auditWasmBundle"
+  # R7: chunked write to reserved buffer
+  "writeToReservedBuffer"
 )
 
 STRICT=false
@@ -176,7 +187,7 @@ check_symbols() {
   # Embind exports: verify in wasm_main.cc source (function("name", ...))
   for sym in "${REQUIRED_SYMBOLS[@]}"; do
     case "$sym" in
-      _malloc|_free)
+      _malloc|_free|gk_*)
         # C runtime exports: verify in CMakeLists.txt EXPORTED_FUNCTIONS
         if ! grep -qE "\b${sym}\b" "${cmake_file}" 2>/dev/null; then
           missing+=("${sym}")

@@ -456,7 +456,7 @@
 
     <div class="content-area">
       <div class="upload-card" id="dropZone">
-        <input type="file" id="fileInput" accept=".zip,application/zip">
+        <input type="file" id="fileInput" accept=".spz,.zip,application/zip" multiple>
         <div class="upload-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
@@ -477,6 +477,12 @@
           </svg>
           <span id="statusText">正在加载浏览器轻审引擎...</span>
         </div>
+      </div>
+
+      <!-- R7: Batch queue status bar -->
+      <div class="queue-bar" id="queueBar" style="display:none; width:100%; margin-top:12px; padding:8px 16px; background:var(--card-hover-bg); border:1px solid var(--border-soft); border-radius:12px; gap:8px; flex-wrap:wrap; align-items:center;">
+        <span style="font-size:13px; font-weight:500; color:var(--text-secondary); min-width:60px;">队列</span>
+        <div id="queueItems" style="display:flex; gap:6px; flex-wrap:wrap; flex:1;"></div>
       </div>
 
       <div class="features-section">
@@ -554,6 +560,8 @@
   </footer>
 
   <script type="module">
+    import { memoryManager } from './smart_memory_manager.js';
+    import { BatchQueue } from './spz_gatekeeper.js';
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
     const loadingStatus = document.getElementById('loadingStatus');
@@ -573,6 +581,52 @@
     const registryMeta = document.getElementById('registryMeta');
     const registryCountBadge = document.getElementById('registryCountBadge');
     const registryList = document.getElementById('registryList');
+
+    // R7: Batch queue state
+    const queueBar = document.getElementById('queueBar');
+    const queueItems = document.getElementById('queueItems');
+    const kQueueMax = 2;
+    let fileQueue = [];
+    let queueProcessing = false;
+
+    function updateQueueBar() {
+      if (fileQueue.length === 0) {
+        queueBar.style.display = 'none';
+        return;
+      }
+      queueBar.style.display = 'flex';
+      queueItems.innerHTML = fileQueue.map((item, i) => {
+        const statusClass = item.status === 'done' ? 'pass' : item.status === 'error' ? 'fail' : 'pending';
+        const label = item.status === 'done' ? '✅' : item.status === 'error' ? '❌' : '⏳';
+        return `<span class="badge ${statusClass}" style="font-size:12px; white-space:nowrap;">${label} ${item.name}</span>`;
+      }).join('');
+    }
+
+    function processQueue() {
+      if (queueProcessing || fileQueue.length === 0) return;
+      if (fileQueue.filter(f => f.status === 'pending').length === 0) {
+        // All done or all errored
+        return;
+      }
+      const running = fileQueue.filter(f => f.status === 'processing').length;
+      if (running >= kQueueMax) return;
+
+      queueProcessing = true;
+      const item = fileQueue.find(f => f.status === 'pending');
+      if (!item) { queueProcessing = false; return; }
+
+      item.status = 'processing';
+      updateQueueBar();
+      handleFile(item.file).catch(() => {}).finally(() => {
+        const idx = fileQueue.indexOf(item);
+        if (idx !== -1) {
+          fileQueue[idx].status = fileQueue[idx].status === 'processing' ? 'done' : fileQueue[idx].status;
+        }
+        updateQueueBar();
+        queueProcessing = false;
+        processQueue();
+      });
+    }
 
     let wasmModule = null;
     let lastAuditReport = null;
@@ -854,15 +908,23 @@
         return;
       }
 
+      // SmartMemoryManager 设备感知文件大小检查
+      const fileSizeMB = file.size / (1024 * 1024);
+      const recommendation = memoryManager.getRecommendation(fileSizeMB);
+      if (!recommendation.canHandle) {
+        setEngineStatus('error', `文件超过浏览器安全上限（推荐 ≤${recommendation.recommendedMaxSize}MB，硬上限 ${recommendation.hardMaxSize}MB），请改用 CLI`);
+        return;
+      }
+
       // 前端文件大小限制（30MB 硬上限，24MB 告警线）
       const kMaxBytes = 30 * 1024 * 1024;
       const kWarnBytes = 24 * 1024 * 1024;
       if (file.size >= kMaxBytes) {
-        setEngineStatus('error', `文件过大（${(file.size / 1024 / 1024).toFixed(1)}MB），超过 30MB 硬上限`);
+        setEngineStatus('error', `文件过大（${fileSizeMB.toFixed(1)}MB），超过 30MB 硬上限`);
         return;
       }
       if (file.size >= kWarnBytes) {
-        setEngineStatus('ready', `⚠️ 文件较大（${(file.size / 1024 / 1024).toFixed(1)}MB），处理速度可能较慢`);
+        setEngineStatus('ready', `⚠️ 文件较大（${fileSizeMB.toFixed(1)}MB），处理速度可能较慢`);
       } else {
         setEngineStatus('ready', `正在审查 ${file.name} ...`);
       }
@@ -1011,16 +1073,30 @@
 
     dropZone.addEventListener('click', () => fileInput.click());
 
-    fileInput.addEventListener('change', event => {
-      const file = event.target.files?.[0];
-      if (file) {
-        handleFile(file);
+    function addFilesToQueue(files) {
+      for (const file of files) {
+        if (!file.name.toLowerCase().endsWith('.spz') && !file.name.toLowerCase().endsWith('.zip')) continue;
+        const kMaxBytes = 30 * 1024 * 1024;
+        if (file.size >= kMaxBytes) continue;
+        if (fileQueue.some(f => f.name === file.name && f.status !== 'error')) continue;
+        fileQueue.push({ file, name: file.name, status: 'pending' });
       }
+      updateQueueBar();
+      processQueue();
+    }
+
+    fileInput.addEventListener('change', event => {
+      const files = event.target.files;
+      if (files && files.length > 0) {
+        addFilesToQueue(files);
+      }
+      // Reset so re-selecting same files triggers change again
+      fileInput.value = '';
     });
     dropZone.addEventListener('drop', event => {
-      const file = event.dataTransfer?.files?.[0];
-      if (file) {
-        handleFile(file);
+      let files = event.dataTransfer?.files;
+      if (files && files.length > 0) {
+        addFilesToQueue(files);
       }
     });
 

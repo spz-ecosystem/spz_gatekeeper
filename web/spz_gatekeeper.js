@@ -767,6 +767,65 @@ function createUnavailableMethod(method) {
   return () => Promise.reject(new Error(`${method} is unavailable in browser_lightweight_wasm_audit mode`));
 }
 
+// ---------------------------------------------------------------------------
+// R7: Chunked write to reserved WASM buffer
+// ---------------------------------------------------------------------------
+function writeToReservedBuffer(runtime, data, options = {}) {
+  const chunkSize = options.chunkSize || 65536; // 64KB default
+  const bytes = toUint8Array(data);
+  const totalSize = bytes.length;
+
+  const bufPtr = runtime.gk_reserve_buffer(totalSize);
+  if (!bufPtr) {
+    return Promise.reject(new Error('Failed to reserve WASM buffer'));
+  }
+
+  const heap = runtime.HEAPU8;
+  for (let offset = 0; offset < totalSize; offset += chunkSize) {
+    const end = Math.min(offset + chunkSize, totalSize);
+    const chunk = bytes.slice(offset, end);
+    heap.set(chunk, bufPtr + offset);
+  }
+  runtime.gk_set_buffer_used(totalSize);
+
+  return Promise.resolve({ ptr: bufPtr, size: totalSize });
+}
+
+// ---------------------------------------------------------------------------
+// R7: Serial batch queue (max 2 concurrent)
+// ---------------------------------------------------------------------------
+class BatchQueue {
+  constructor(maxConcurrent = 2) {
+    this.max = maxConcurrent;
+    this.running = 0;
+    this.queue = [];
+  }
+
+  push(task) {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ task, resolve, reject });
+      this._drain();
+    });
+  }
+
+  _drain() {
+    while (this.running < this.max && this.queue.length > 0) {
+      const { task, resolve, reject } = this.queue.shift();
+      this.running++;
+      Promise.resolve()
+        .then(() => task())
+        .then(resolve, reject)
+        .finally(() => {
+          this.running--;
+          this._drain();
+        });
+    }
+  }
+
+  get length() { return this.queue.length; }
+  get pending() { return this.running; }
+}
+
 export default async function createSpzGatekeeperModule() {
   const runtime = await maybeLoadRuntime();
   const runtimeStatus = createRuntimeStatus(runtime);
@@ -801,5 +860,12 @@ export default async function createSpzGatekeeperModule() {
     getCompatibilityBoard: runtime?.getCompatibilityBoard
       ? ((...args) => Promise.resolve().then(() => runtime.getCompatibilityBoard(...args)))
       : (() => Promise.resolve({ count: 0, extensions: [] })),
+
+    // R7: chunked write + batch queue exports
+    writeToReservedBuffer: (data, options) => writeToReservedBuffer(runtime, data, options),
+    createBatchQueue: () => new BatchQueue(2),
+    BatchQueue,
   };
 }
+
+export { writeToReservedBuffer, BatchQueue };
