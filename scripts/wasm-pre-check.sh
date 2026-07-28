@@ -321,6 +321,23 @@ check_frontend() {
       fail "P4_FRONTEND" 6 "Frontend uses wasmModule._free but it is not exported in CMakeLists.txt"
     fi
   fi
+
+  # Check WASM JS glue + binary pair in web/ directory
+  local web_wasm_js="${PROJECT_DIR}/web/spz_gatekeeper_wasm.js"
+  local web_wasm_bin="${PROJECT_DIR}/web/spz_gatekeeper_wasm.wasm"
+  if [ -f "${web_wasm_js}" ]; then
+    if [ ! -f "${web_wasm_bin}" ]; then
+      fail "P4_FRONTEND" 6 "WASM JS glue found in web/ but WASM binary missing: ${web_wasm_bin}" "Build WASM first, then copy spz_gatekeeper_wasm.wasm to web/ directory alongside spz_gatekeeper_wasm.js"
+    fi
+    local wasm_site_size
+    wasm_site_size="$(stat -c%s "${web_wasm_bin}" 2>/dev/null || stat -f%z "${web_wasm_bin}" 2>/dev/null || echo 0)"
+    if [ "${wasm_site_size}" -lt "${WASM_MIN_BYTES}" ] || [ "${wasm_site_size}" -gt "${WASM_MAX_BYTES}" ]; then
+      echo "  WARN: web/spz_gatekeeper_wasm.wasm size ${wasm_site_size} bytes out of range [${WASM_MIN_BYTES}, ${WASM_MAX_BYTES}] — may be stale or corrupted" >&2
+    fi
+  elif [ -f "${WASM_JS}" ]; then
+    # Build output has WASM JS but web/ doesn't — that's OK for deployment, but log it
+    echo "  WARN: WASM artifacts in site/ but not in web/ — page served from site/ is fine, but local web/ dev is degraded" >&2
+  fi
 }
 
 # ---------------------------------------------------------------------------
