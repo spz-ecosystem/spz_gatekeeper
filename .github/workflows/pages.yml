@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
 
 concurrency:
   group: pages
@@ -21,6 +20,8 @@ jobs:
 
   build_pages:
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
 
     steps:
       - name: Checkout
