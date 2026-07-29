@@ -8,7 +8,6 @@ on:
 permissions:
   contents: read
   pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -77,6 +76,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build_pages
+    permissions:
+      pages: write
+      id-token: write
 
     steps:
       - name: Deploy to GitHub Pages

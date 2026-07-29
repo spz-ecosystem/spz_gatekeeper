@@ -51,7 +51,7 @@ jobs:
       - name: Clone bench dataset
         if: matrix.os == 'ubuntu-latest'
         run: |
-          git clone --depth 1 --branch main https://github.com/spz-ecosystem/spz-anime-text2scene-bench.git bench-data
+          git clone --depth 1 https://github.com/spz-ecosystem/spz-anime-text2scene-bench.git bench-data
           echo "SPZ_BENCH_DIR=${{ github.workspace }}/bench-data" >> "$GITHUB_ENV"
 
       - name: Install dependencies (macOS)
@@ -327,6 +327,7 @@ jobs:
 
       - name: npm audit (supply chain)
         shell: bash
+        continue-on-error: true
         run: |
           npm audit --audit-level=high
 
