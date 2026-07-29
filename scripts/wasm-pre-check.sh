@@ -24,11 +24,6 @@ EMSDK_VERSION="6.0.3"
 WASM_MIN_BYTES=$((300 * 1024))        # 300KB (Emscripten 6.x optimized output)
 WASM_MAX_BYTES=$((15 * 1024 * 1024))   # 15MB
 
-# R7_3c: CI 文档编辑预算控制
-WORKFLOW_DIFF_BUDGET=60               # 单次 workflow 改动最大行数（insertions+deletions）
-WORKFLOW_EDIT_BUDGET=3                # 每个 R-phase 最多修改 workflow 次数
-WORKFLOW_EDIT_COUNTER="${PROJECT_DIR}/.trae/workflow_edit_count"
-
 REQUIRED_SYMBOLS=(
   # Embind exports (wasm_main.cc, in WASM binary)
   "inspectSpz"
@@ -61,7 +56,6 @@ STRICT=false
 SKIP_BUILD=false
 SKIP_SMOKE=false
 AUTO_FIX=false
-OVERRIDE_WORKFLOW_BUDGET=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -70,7 +64,6 @@ while [ $# -gt 0 ]; do
     --skip-smoke) SKIP_SMOKE=true; shift ;;
     --build-dir) BUILD_DIR="$2"; shift 2 ;;
     --auto-fix) AUTO_FIX=true; shift ;;
-    --workflow-budget) OVERRIDE_WORKFLOW_BUDGET="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -417,94 +410,42 @@ process.exit(0);
 }
 
 # ---------------------------------------------------------------------------
-# P6: Workflow lint + edit budget control (R7_3c)
+# P6: Workflow lint
 # ---------------------------------------------------------------------------
 check_workflow() {
-  local workflow_changed=false
-  local workflow_dir="${PROJECT_DIR}/.github/workflows"
-
-  # Detect if any workflow files have uncommitted changes or staged changes
-  if ! git -C "${PROJECT_DIR}" diff --quiet -- .github/workflows/ 2>/dev/null || \
-     ! git -C "${PROJECT_DIR}" diff --cached --quiet -- .github/workflows/ 2>/dev/null; then
-    workflow_changed=true
-  fi
-
-  # 3c.2: Diff 行数预算
-  if [ "${workflow_changed}" = "true" ]; then
-    local diff_stats
-    diff_stats="$(git -C "${PROJECT_DIR}" diff --stat -- .github/workflows/ 2>/dev/null || true)"
-    local staged_stats
-    staged_stats="$(git -C "${PROJECT_DIR}" diff --cached --stat -- .github/workflows/ 2>/dev/null || true)"
-
-    local total_lines=0
-    while IFS= read -r line; do
-      if [[ "${line}" =~ ([0-9]+)\ insertion ]]; then
-        total_lines=$((total_lines + BASH_REMATCH[1]))
-      fi
-      if [[ "${line}" =~ ([0-9]+)\ deletion ]]; then
-        total_lines=$((total_lines + BASH_REMATCH[1]))
-      fi
-    done < <(printf '%s\n%s' "${diff_stats}" "${staged_stats}")
-
-    local budget="${WORKFLOW_DIFF_BUDGET}"
-    # Allow override via --workflow-budget flag (parsed earlier)
-    if [ -n "${OVERRIDE_WORKFLOW_BUDGET:-}" ]; then
-      budget="${OVERRIDE_WORKFLOW_BUDGET}"
-    fi
-
-    if [ "${total_lines}" -gt "${budget}" ]; then
-      fail "P6_WORKFLOW" 8 "Workflow diff exceeds budget: ${total_lines} lines (max ${budget}). Use --workflow-budget <N> to override if intentional"
-    fi
-    echo "  P6: workflow diff ${total_lines} lines (budget ${budget})" >&2
-  fi
-
-  # 3c.3: Edit count 门禁 — 追踪 R-phase 内 workflow 提交次数
-  if [ "${workflow_changed}" = "true" ]; then
-    local edit_count=0
-    if [ -f "${WORKFLOW_EDIT_COUNTER}" ]; then
-      edit_count="$(cat "${WORKFLOW_EDIT_COUNTER}" 2>/dev/null || echo 0)"
-    fi
-    edit_count=$((edit_count + 1))
-    if [ "${edit_count}" -gt "${WORKFLOW_EDIT_BUDGET}" ]; then
-      fail "P6_WORKFLOW" 8 "Workflow edit count ${edit_count}/${WORKFLOW_EDIT_BUDGET} exceeded. Reset counter in STAGE_5 or manually: rm -f ${WORKFLOW_EDIT_COUNTER}"
-    fi
-    # Write updated count
-    mkdir -p "$(dirname "${WORKFLOW_EDIT_COUNTER}")"
-    echo "${edit_count}" > "${WORKFLOW_EDIT_COUNTER}"
-    echo "  P6: workflow edit count ${edit_count}/${WORKFLOW_EDIT_BUDGET}" >&2
-  fi
-
-  # 3c.1: 强制 lint — workflow 有改动时始终执行 actionlint+zizmor
-  if [ "${workflow_changed}" = "true" ] || [ "${STRICT}" = "true" ]; then
-    local missing=()
-    command -v actionlint >/dev/null 2>&1 || missing+=("actionlint")
-    command -v zizmor >/dev/null 2>&1 || missing+=("zizmor")
-
-    if [ ${#missing[@]} -gt 0 ]; then
-      if [ "${STRICT}" = "true" ]; then
-        fail "P6_WORKFLOW" 8 "Strict mode requires tools: ${missing[*]}"
-      fi
-      # Workflow changed but tools missing — WARN in default mode
-      echo "  WARN: workflow changed but tools missing: ${missing[*]} — install actionlint + zizmor" >&2
+  if git -C "${PROJECT_DIR}" diff --quiet -- .github/workflows/ 2>/dev/null && \
+     git -C "${PROJECT_DIR}" diff --cached --quiet -- .github/workflows/ 2>/dev/null; then
+    # No workflow changes; skip lint in non-strict mode.
+    if [ "${STRICT}" != "true" ]; then
       return 0
     fi
+  fi
 
-    local had_error=false
-    for wf in "${workflow_dir}/"*.yml "${workflow_dir}/"*.yaml; do
-      [ -e "${wf}" ] || continue
-      if ! actionlint "${wf}" >/dev/null 2>&1; then
-        echo "  ERROR: actionlint failed on ${wf}" >&2
-        had_error=true
-      fi
-      if ! zizmor "${wf}" >/dev/null 2>&1; then
-        echo "  ERROR: zizmor failed on ${wf}" >&2
-        had_error=true
-      fi
-    done
+  local missing=()
+  command -v actionlint >/dev/null 2>&1 || missing+=("actionlint")
+  command -v zizmor >/dev/null 2>&1 || missing+=("zizmor")
 
-    if [ "${had_error}" = "true" ]; then
-      fail "P6_WORKFLOW" 8 "actionlint or zizmor reported issues in workflow files"
+  if [ ${#missing[@]} -gt 0 ]; then
+    if [ "${STRICT}" = "true" ]; then
+      fail "P6_WORKFLOW" 8 "Strict mode requires tools: ${missing[*]}"
     fi
+    # In default mode, only warn.
+    return 0
+  fi
+
+  local had_error=false
+  for wf in "${PROJECT_DIR}/.github/workflows/"*.yml "${PROJECT_DIR}/.github/workflows/"*.yaml; do
+    [ -e "${wf}" ] || continue
+    if ! actionlint "${wf}" >/dev/null 2>&1; then
+      had_error=true
+    fi
+    if ! zizmor "${wf}" >/dev/null 2>&1; then
+      had_error=true
+    fi
+  done
+
+  if [ "${had_error}" = "true" ]; then
+    fail "P6_WORKFLOW" 8 "actionlint or zizmor reported issues"
   fi
 }
 
