@@ -31,7 +31,7 @@ jobs:
 
       - name: Setup Emscripten SDK
         run: |
-          git clone https://github.com/emscripten-core/emsdk.git --depth 1
+          git clone https://github.com/emscripten-core/emsdk.git --depth 1 --branch ${{ env.EMSCRIPTEN_VERSION }}
           ./emsdk/emsdk install ${{ env.EMSCRIPTEN_VERSION }}
           ./emsdk/emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
           echo ${GITHUB_WORKSPACE}/emsdk >> $GITHUB_PATH

@@ -2,6 +2,9 @@
 
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ main, feature/spz-v2-profile-core, feature/spz-gatekeeper-2.0.2-r1, feature/spz-gatekeeper-2.0.2-r2, feature/spz-gatekeeper-2.0.2-r3, feature/spz-gatekeeper-2.0.2-r4, feature/spz-gatekeeper-2.0.2-r5, feature/spz-gatekeeper-2.0.2-r6, feature/spz-gatekeeper-2.0.4-r7, fix/pages-deploy-on-tag ]
@@ -48,7 +51,7 @@ jobs:
       - name: Clone bench dataset
         if: matrix.os == 'ubuntu-latest'
         run: |
-          git clone --depth 1 https://github.com/spz-ecosystem/spz-anime-text2scene-bench.git bench-data
+          git clone --depth 1 --branch main https://github.com/spz-ecosystem/spz-anime-text2scene-bench.git bench-data
           echo "SPZ_BENCH_DIR=${{ github.workspace }}/bench-data" >> "$GITHUB_ENV"
 
       - name: Install dependencies (macOS)
@@ -209,7 +212,7 @@ jobs:
         run: pip install zizmor
 
       - name: Scan GitHub Actions workflows
-        run: zizmor --format plain .github/workflows/ || true
+        run: zizmor --format plain .github/workflows/
 
   wasm:
     runs-on: ubuntu-latest
@@ -233,7 +236,7 @@ jobs:
             echo "Using cached emsdk"
             cp -r /tmp/emsdk-cache/emsdk ./emsdk
           else
-            git clone https://github.com/emscripten-core/emsdk.git --depth 1
+            git clone https://github.com/emscripten-core/emsdk.git --depth 1 --branch ${{ env.EMSCRIPTEN_VERSION }}
             ./emsdk/emsdk install ${{ env.EMSCRIPTEN_VERSION }}
             mkdir -p /tmp/emsdk-cache
             cp -r ./emsdk /tmp/emsdk-cache/emsdk
@@ -319,13 +322,13 @@ jobs:
 
       - name: Install browser test dependencies
         run: |
-          npm install --no-save @playwright/test
+          npm install --no-save @playwright/test@1.52.0
           npx playwright install --with-deps chromium
 
       - name: npm audit (supply chain)
         shell: bash
         run: |
-          npm audit --audit-level=high || echo 'WARN: npm audit found high/critical vulnerabilities'
+          npm audit --audit-level=high
 
       - name: Run WASM browser smoke test
         # T54: 边界测试 — kMaxSpzBytes=30MB + 前端 24MB/30MB 检查
