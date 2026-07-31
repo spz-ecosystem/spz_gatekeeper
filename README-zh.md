@@ -449,6 +449,10 @@ spz_gatekeeper/
 - [nianticlabs/spz](https://github.com/nianticlabs/spz) - 上游 SPZ 库
 - [KHR_gaussian_splatting](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_gaussian_splatting) - Khronos 扩展规范
 
+## 未来规划
+
+本项目有意向在适当阶段捐赠给 **开放原子开源基金会（OpenAtom Foundation）**，以推动 SPZ 生态的更广泛社区共建与治理。具体捐赠时机和方式将在项目成熟度达到社区化运营标准后另行推进。
+
 ## 引用
 
 如在研究中使用本项目，请引用：

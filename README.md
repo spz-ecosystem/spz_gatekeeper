@@ -440,6 +440,10 @@ spz_gatekeeper/
 - [nianticlabs/spz](https://github.com/nianticlabs/spz) - upstream SPZ library
 - [KHR_gaussian_splatting](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_gaussian_splatting) - Khronos extension spec
 
+## Future Plans
+
+This project intends to donate to the **OpenAtom Foundation** at an appropriate stage, to foster broader community collaboration and governance of the SPZ ecosystem. The specific timing and method will be determined as the project matures to community-operation standards.
+
 ## Citation
 
 If you use this project in your research, please cite:
