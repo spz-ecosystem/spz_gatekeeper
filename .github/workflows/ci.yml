@@ -68,7 +68,10 @@ jobs:
           cmake -S cpp -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DBUILD_TESTING=ON `
-            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF 2>&1 | Tee-Object -FilePath cmake-config.log
+          Write-Output "=== Dependency Resolution ==="
+          Select-String -Path cmake-config.log -Pattern "zlib|zstd|FetchContent|found" | Select-Object -First 20
+          if (-not $?) { Write-Output "(check full cmake-config.log)" }
 
       - name: Configure CMake (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
@@ -76,7 +79,9 @@ jobs:
           cmake -S cpp -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=ON \
-            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF
+            -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF 2>&1 | tee cmake-config.log
+          echo "=== Dependency Resolution ==="
+          grep -E "zlib|zstd|FetchContent|found" cmake-config.log | head -20
 
       - name: Configure CMake (macOS)
         if: matrix.os == 'macos-latest'
@@ -85,11 +90,13 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=ON \
             -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix zlib);$(brew --prefix zstd)"
+            -DCMAKE_PREFIX_PATH="$(brew --prefix zlib);$(brew --prefix zstd)" 2>&1 | tee cmake-config.log
+          echo "=== Dependency Resolution ==="
+          grep -E "zlib|zstd|FetchContent|found" cmake-config.log | head -20
 
       - name: Build (with verbose output)
         run: |
-          cmake --build build --config Release --parallel
+          cmake --build build --config Release --parallel 2>&1 | tee build.log
 
       - name: Check build warnings
         if: always()
@@ -196,7 +203,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ matrix.artifact_name }}-logs
-          path: build.log
+          path: |
+            build.log
+            cmake-config.log
           retention-days: 7
 
   security-audit:
@@ -256,8 +265,9 @@ jobs:
             -DSPZ_GATEKEEPER_BUILD_WASM=ON
 
       - name: Build WASM
+        shell: bash
         run: |
-          emmake cmake --build build-wasm --parallel
+          emmake cmake --build build-wasm --parallel 2>&1 | tee build-wasm/wasm-build.log
 
       - name: Install WASM pre-check dependencies
         run: |
@@ -269,11 +279,13 @@ jobs:
         # This step adds P2 symbol export check, P3 artifact size check, P4 frontend consistency,
         # and P7 file integrity (UTF-8 validity + C++ syntax).
         continue-on-error: false
-        run: bash scripts/wasm-pre-check.sh --skip-build --skip-smoke --build-dir build-wasm
+        run: bash scripts/wasm-pre-check.sh --skip-build --skip-smoke --build-dir build-wasm 2>&1 | tee build-wasm/wasm-pre-check.log
 
       - name: Upload WASM pre-check logs on failure
         if: failure()
         run: |
+          test -f build-wasm/wasm-build.log && tail -50 build-wasm/wasm-build.log || echo "no wasm-build.log"
+          test -f build-wasm/wasm-pre-check.log && cat build-wasm/wasm-pre-check.log || echo "no wasm-pre-check.log"
           test -f build-wasm/wasm-exports.txt && cat build-wasm/wasm-exports.txt || echo "no wasm-exports.txt"
           test -f build-wasm/wasm-binary.wasm && ls -la build-wasm/wasm-binary.wasm || echo "no wasm-binary.wasm"
 
@@ -369,6 +381,8 @@ jobs:
             wasm-http.log
             wasm-smoke.log
             wasm-smoke-failure.png
+            build-wasm/wasm-build.log
+            build-wasm/wasm-pre-check.log
           retention-days: 7
 
       - name: WASM post-build failure summary
