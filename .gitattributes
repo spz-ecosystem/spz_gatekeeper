@@ -1,0 +1,29 @@
+# CRLF 保护 — clone-level 生效，不依赖 repo-local git config
+# WSL (Linux) ↔ Windows 双平台开发，统一 LF
+* text=auto eol=lf
+
+# Windows 特定脚本保留 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Shell 脚本强制 LF（WSL 下 shbang 要求 LF）
+*.sh text eol=lf
+
+# Web 文件强制 LF
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
+
+# C++ 源码强制 LF
+*.cc text eol=lf
+*.h text eol=lf
+*.hpp text eol=lf
+*.cpp text eol=lf
+
+# Markdown / 文档
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
