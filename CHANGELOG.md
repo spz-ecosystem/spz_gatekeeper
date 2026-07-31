@@ -20,6 +20,94 @@
 
 本文件仅记录当前主线的重要变更，不保留已废弃路线的细节。
 
+## [v2.0.5] - 2026-07-29
+
+### Batch Queue + WASM 工程优化 (R7)
+- 前端批处理队列 max=2，串行处理，自动推进下一文件 (#61)
+- 从 spz2glb 移植 HotObjectPool、BumpAllocator、MemoryTracker 到 WASM C++ 层 (#61)
+- 预留缓冲区 C API (gk_reserve_buffer 等 8 函数)，支持分块写入 64KB (#61)
+- 设备感知 SmartMemoryManager，根据 UA/deviceMemory/hardwareConcurrency 自适应 (#61)
+- 自动导出 handoff JSON：单文件 .spz 审查完成后自动生成浏览器审计报告 (#62)
+- 队列滑动动画 (slideOut)，完成项自动滑出并移除 (#62)
+
+### CI/CD 管线加固
+- T44 Auto-Fix Loop：P1 cmake 失败自动重配、OOM 自动 --parallel 1 降级、P5 端口冲突自动换端口 (4173→4174→4175) (#52-#55)
+- P2 Emscripten 符号下划线前缀自动检测修复 (gk_* → _gk_*) (#61)
+- P6 工作流强制 lint：actionlint + zizmor --min-severity medium (#53)
+- 预检系统检测缺失 .wasm 二进制文件 (#56)
+- 预算控制 (diff limit + edit count gate) 后因过度设计回退 (#55)
+
+### 安全性
+- 5 个 workflow 安全修复：pages.yml 权限下放到 job 级、zizmor 过滤 info 级别噪音 (#54)
+- 修复 PR #62 合并残留冲突标记导致 WASM 引擎卡加载 (#56)
+- 移除冲突标记残留，确保 initializeWasm() 正常执行
+
+### spz2glb 前置适配 (Pre-R7)
+- ZSTD 检测 + v4 32B header peek：isZstdData() (0xFD2FB528) + peekSpzHeaderFromZstd() (commit 674f64a)
+- fastgltf 扩展字段：GaussianSplatSpzCompression 新增 spzVersion/compression/coordinateSystem
+- ILV 0xADBE0003 坐标系扩展解析：readHeaderZoneCoordSys()
+- 五层验证扩展：L3 ZSTD + L4 GLB↔SPZ 一致性 + L5 ILV 完整性 (原三层→五层)
+- spz_verify CLI 新增 layer4/layer5 命令
+- CMake: 添加 zstd 依赖 (PkgConfig + Emscripten --use-port=zstd)
+- CI 加固：SHA-pin actions, persist-credentials, zizmor 审计, npm audit, 权限收紧
+
+## [v2.0.4] - 2026-07-26
+
+### WASM 零拷贝检查路径
+- 新增 inspectSpzPtr(ptr, size, strict)，绕过 std::vector 中间拷贝，直接操作 WASM 堆内存 (#46, #47, #51)
+- 导出 _malloc/_free/HEAPU8，JS 侧手动管理 WASM 内存生命周期 (#46)
+- WASM 初始化三阶段超时递增重试（30s → 45s → 60s），弱网兼容 (#51)
+
+### JS+WASM 分离加载
+- 移除 -sSINGLE_FILE=1，WASM 二进制从 JS 胶水代码中分离 (#47)
+- JS 胶水从数 MB 降至 ~几十 KB，.wasm 由浏览器流式编译 (#47)
+- 缓存破坏：`?v=Date.now()` 防止 CDN/浏览器缓存旧 WASM (#51)
+
+### Emscripten 6.0.3 升级
+- 从 3.1.56 升级到 6.0.3，享受 Emscripten 最新编译优化
+- WASM 构建产物 -Oz 优化后仅 ~300KB+
+
+### 源文件级预检系统
+- P2 符号检查不再依赖 wasm-objdump，直接在 wasm_main.cc 和 CMakeLists.txt 中验证 (#49, #50)
+- 支持 --auto-fix 自动安装缺失工具 (#50)
+- P3 适配分离模式：检查 .wasm 二进制体积而非 JS 胶水 (#48)
+- P5 Smoke 测试从 CJS require() 改为 ES module import()
+- P7 文件完整性检查：UTF-8 有效性 + C++ 语法验证
+
+### CI/CD 管线
+- Pages 部署与 CI 集成，支持 workflow_dispatch 手动触发 (#40)
+- npm audit 供应链检查、zizmor 工作流安全扫描
+- SHA256 发布清单自动生成
+- 构建日志上传（失败时保留现场）
+
+### Adobe Coordinate System 扩展
+- 新增 0xADBE0003 扩展验证器 (#44)
+- SPZ v4/v3 格式兼容性检查
+- License 统一 + TLV → ILV 重命名 (#39)
+
+### 前端可靠性
+- WASM 导出 Promise.resolve().then() 安全包装，避免 .catch() 漏捕获
+- 修复 renderBudgets 中 undefined budgetsList 引用
+
+## [v2.0.3.1] - 2026-07-03
+
+### 修复
+- 移除 --closure 1 标志（破坏 WASM 在 Pages 上的初始化）
+- 移除 sync-gh-pages.yml（供应链安全风险）
+
+### 前端修复
+- 新增直接 .spz 上传路径 (inspectSpz) 支持 (#34)
+- 修复 GateReport 格式 (ok/issues) 在 formatVerdict + renderSummary 中的处理 (#34)
+- 正确渲染 GateReport summary/manifest/budgets 面板 (#35)
+- 填充 .spz 面板的 registry/compat/trailer 数据 (#36)
+
+## [v2.0.3] - 2026-07-02
+
+### WASM 优化 (T52-T54)
+- WASM 工程优化：构建缓存、内存上限 30MB、前端体积检查
+- Pages 自动部署：tag push (v*) 触发 Pages 构建 (#27)
+- 移除 sync-gh-pages.yml（legacy，供应链风险），pages.yml 通过 actions/deploy-pages 替换
+
 ## [v2.0.0] - 2026-03-26
 
 - v2 profile core 收口，文档与摘要口径统一。
