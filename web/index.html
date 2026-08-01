@@ -913,7 +913,7 @@
         console.warn('[inspectSpzWithPtr] _malloc/_free not available, fallback to vector path');
         return wasmModule.inspectSpz(bytes, strict);
       }
-      const data = new Uint8Array(bytes);
+      const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
       const size = data.length;
       const ptr = wasmModule._malloc(size);
       if (!ptr) throw new Error('WASM malloc failed');
@@ -925,8 +925,8 @@
       }
     }
 
-    // 一次 malloc 共享 inspectSpzPtr + inspectCompatSummaryPtr，避免大文件重复拷贝。
-    // trailer 数据直接从 report.spz_l2 派生，不再单独调用 dumpTrailer（省一次完整解析）。
+    // 一次 malloc + 一次 WASM 调用（inspectSpzWithCompatPtr）同时产出 report + compatSummary，
+    // 彻底消除大文件重复解压/拷贝。trailer 数据从 report.spz_l2 派生，不再单独调 dumpTrailer。
     async function inspectSpzWithPtrAndCompat(bytes, strict) {
       if (typeof wasmModule._malloc !== 'function' || typeof wasmModule._free !== 'function') {
         console.warn('[inspectSpzWithPtrAndCompat] _malloc/_free not available, fallback to vector path');
@@ -938,12 +938,24 @@
           : null;
         return { report, compatSummary, trailer };
       }
-      const data = new Uint8Array(bytes);
+      const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
       const size = data.length;
       const ptr = wasmModule._malloc(size);
       if (!ptr) throw new Error('WASM malloc failed');
       try {
         wasmModule.HEAPU8.set(data, ptr);
+        if (typeof wasmModule.inspectSpzWithCompatPtr === 'function') {
+          // 组合导出：单次解析产出 report + compatSummary
+          const combined = await wasmModule.inspectSpzWithCompatPtr(ptr, size);
+          const report = combined?.report || null;
+          const compatSummary = combined?.compatSummary || null;
+          const l2 = report?.spz_l2;
+          const trailer = l2
+            ? { asset_path: report.asset_path, strict, ok: !(report.issues || []).some(i => i.severity === 'error'), issues: report.issues || [], flags: l2.flags || 0, trailer_size: l2.trailer_size || 0, ilv_records: l2.ilv_records || [] }
+            : null;
+          return { report, compatSummary, trailer };
+        }
+        // fallback: 分别调用
         const report = await wasmModule.inspectSpzPtr(ptr, size, strict);
         const compatSummary = typeof wasmModule.inspectCompatSummaryPtr === 'function'
           ? await wasmModule.inspectCompatSummaryPtr(ptr, size).catch(() => null)
