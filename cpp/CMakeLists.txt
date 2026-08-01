@@ -177,10 +177,12 @@ if(SPZ_GATEKEEPER_BUILD_WASM)
     "-sEXPORTED_RUNTIME_METHODS=HEAPU8"
   )
 
-  if(SPZ_GATEKEEPER_WASM_PROFILE STREQUAL "perf-lite")
-    list(APPEND SPZ_GATEKEEPER_WASM_LINK_OPTS "-O3")
-  else()
+  # WASM 优化档：默认性能优先（-O3，与 spz2glb 对齐，浏览器审查大文件需要速度）。
+  # 仅显式请求 compat（体积优先）档时使用 -Oz。
+  if(SPZ_GATEKEEPER_WASM_PROFILE STREQUAL "compat")
     list(APPEND SPZ_GATEKEEPER_WASM_LINK_OPTS "-Oz")
+  else()
+    list(APPEND SPZ_GATEKEEPER_WASM_LINK_OPTS "-O3")
   endif()
 
   target_link_options(spz_gatekeeper-wasm PRIVATE ${SPZ_GATEKEEPER_WASM_LINK_OPTS})
