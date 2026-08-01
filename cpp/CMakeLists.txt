@@ -153,13 +153,22 @@ endif()
 if(SPZ_GATEKEEPER_BUILD_WASM)
   set(SPZ_GATEKEEPER_WASM_SITE_DIR "${CMAKE_CURRENT_BINARY_DIR}/site")
 
-  # WASM build profile: compat (default) | perf-lite
-  set(SPZ_GATEKEEPER_WASM_PROFILE "compat" CACHE STRING "WASM build profile")
+  # WASM build profile: perf-lite (default, -O3 speed) | compat (-Oz size)
+  # 浏览器审查大文件需要速度，默认 perf-lite 与 spz2glb 对齐。
+  set(SPZ_GATEKEEPER_WASM_PROFILE "perf-lite" CACHE STRING "WASM build profile")
   set_property(CACHE SPZ_GATEKEEPER_WASM_PROFILE PROPERTY STRINGS compat perf-lite)
 
   add_executable(spz_gatekeeper-wasm src/wasm_main.cc src/wasm_buffer.cc)
   target_link_libraries(spz_gatekeeper-wasm PRIVATE spz_gatekeeper_core)
   target_include_directories(spz_gatekeeper-wasm PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+  # 编译期优化：Emscripten 源文件编译成 bitcode 时必须带 -O，链接期标志对已编译
+  # bitcode 优化效果有限（spz2glb 经验：target_compile_options 加 -O3）。
+  if(SPZ_GATEKEEPER_WASM_PROFILE STREQUAL "compat")
+    target_compile_options(spz_gatekeeper-wasm PRIVATE "-Oz")
+  else()
+    target_compile_options(spz_gatekeeper-wasm PRIVATE "-O3")
+  endif()
 
   set(SPZ_GATEKEEPER_WASM_LINK_OPTS
     "--bind"
