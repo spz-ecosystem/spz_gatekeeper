@@ -925,6 +925,39 @@
       }
     }
 
+    // 一次 malloc 共享 inspectSpzPtr + inspectCompatSummaryPtr，避免大文件重复拷贝。
+    // trailer 数据直接从 report.spz_l2 派生，不再单独调用 dumpTrailer（省一次完整解析）。
+    async function inspectSpzWithPtrAndCompat(bytes, strict) {
+      if (typeof wasmModule._malloc !== 'function' || typeof wasmModule._free !== 'function') {
+        console.warn('[inspectSpzWithPtrAndCompat] _malloc/_free not available, fallback to vector path');
+        const report = await wasmModule.inspectSpz(bytes, strict);
+        const compatSummary = await wasmModule.inspectCompatSummary(bytes).catch(() => null);
+        const l2 = report?.spz_l2;
+        const trailer = l2
+          ? { asset_path: report.asset_path, strict, ok: !(report.issues || []).some(i => i.severity === 'error'), issues: report.issues || [], flags: l2.flags || 0, trailer_size: l2.trailer_size || 0, ilv_records: l2.ilv_records || [] }
+          : null;
+        return { report, compatSummary, trailer };
+      }
+      const data = new Uint8Array(bytes);
+      const size = data.length;
+      const ptr = wasmModule._malloc(size);
+      if (!ptr) throw new Error('WASM malloc failed');
+      try {
+        wasmModule.HEAPU8.set(data, ptr);
+        const report = await wasmModule.inspectSpzPtr(ptr, size, strict);
+        const compatSummary = typeof wasmModule.inspectCompatSummaryPtr === 'function'
+          ? await wasmModule.inspectCompatSummaryPtr(ptr, size).catch(() => null)
+          : await wasmModule.inspectCompatSummary(bytes).catch(() => null);
+        const l2 = report?.spz_l2;
+        const trailer = l2
+          ? { asset_path: report.asset_path, strict, ok: !(report.issues || []).some(i => i.severity === 'error'), issues: report.issues || [], flags: l2.flags || 0, trailer_size: l2.trailer_size || 0, ilv_records: l2.ilv_records || [] }
+          : null;
+        return { report, compatSummary, trailer };
+      } finally {
+        wasmModule._free(ptr);
+      }
+    }
+
     async function handleFile(file) {
       if (!wasmModule) {
         setEngineStatus('error', '轻审引擎仍未就绪，无法执行 bundle 审查');
@@ -958,18 +991,18 @@
 
         let report;
         if (isSpz) {
-          // .spz 模式: 多维度验证
-          report = await inspectSpzWithPtr(bytes, false);
+          // .spz 模式: 多维度验证。一次 malloc 共享 inspect + compatSummary，
+          // trailer 从 report.spz_l2 派生，避免大文件重复拷贝/重复解压。
+          const { report: spzReport, compatSummary, trailer } = await inspectSpzWithPtrAndCompat(bytes, false);
+          report = spzReport;
 
-          // 并行获取 trailer + registry + compat 数据
-          const [trailerData, extensionsData, compatBoard, compatSummary] = await Promise.all([
-            wasmModule.dumpTrailer(bytes, false).catch(() => null),
+          // 并行获取 registry + compat 数据（均为静态元数据，不涉及大文件解析）
+          const [extensionsData, compatBoard] = await Promise.all([
             wasmModule.listRegisteredExtensions().catch(() => ({ count: 0, extensions: [] })),
-            wasmModule.getCompatibilityBoard().catch(() => ({ count: 0, extensions: [] })),
-            wasmModule.inspectCompatSummary(bytes).catch(() => null)
+            wasmModule.getCompatibilityBoard().catch(() => ({ count: 0, extensions: [] }))
           ]);
 
-          report._spzMeta = { trailer: trailerData, registry: extensionsData, compatBoard, compatSummary };
+          report._spzMeta = { trailer, registry: extensionsData, compatBoard, compatSummary };
           lastAuditReport = report;
           lastAuditFileName = file.name;
           setHandoffButtonState(false);
