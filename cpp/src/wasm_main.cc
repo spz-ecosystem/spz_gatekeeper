@@ -389,6 +389,52 @@ emscripten::val inspectSpzPtr(std::uintptr_t ptr, std::size_t size, bool strict)
   return result;
 }
 
+// 组合零拷贝导出：一次非 strict 解析同时产出主 report 和 compatSummary，
+// 避免浏览器端对同一大文件重复解压（原来 inspect + compatSummary 各解压一次）。
+emscripten::val inspectSpzWithCompatPtr(std::uintptr_t ptr, std::size_t size) {
+  spz_gatekeeper::GateReport non_strict_report;
+  std::string non_strict_err;
+  if (!TryInspectPtr(ptr, size, false, &non_strict_report, &non_strict_err)) {
+    emscripten::val out = emscripten::val::object();
+    out.set("ok", false);
+    out.set("strict", false);
+    out.set("error", non_strict_err);
+    return out;
+  }
+
+  // strict 与 non-strict 唯一差异是 ILV parse 失败 severity；无失败时复用同一报告。
+  bool has_ilv_parse_failure = false;
+  for (const auto& issue : non_strict_report.issues) {
+    if (issue.code == "SPZ_EXT_PARSE") {
+      has_ilv_parse_failure = true;
+      break;
+    }
+  }
+
+  spz_gatekeeper::GateReport strict_report;
+  if (has_ilv_parse_failure) {
+    std::string strict_err;
+    if (!TryInspectPtr(ptr, size, true, &strict_report, &strict_err)) {
+      emscripten::val out = emscripten::val::object();
+      out.set("ok", false);
+      out.set("strict", false);
+      out.set("error", strict_err);
+      return out;
+    }
+  } else {
+    strict_report = non_strict_report;
+  }
+
+  emscripten::val result = emscripten::val::object();
+  emscripten::val report = ParseJsonObject(non_strict_report.ToJson());
+  report.set("ok", !non_strict_report.HasErrors());
+  report.set("strict", false);
+  result.set("report", report);
+  result.set("compatSummary", ParseJsonObject(
+      spz_gatekeeper::BuildCompatCheckAuditJson("<wasm>", strict_report, non_strict_report)));
+  return result;
+}
+
 emscripten::val inspectSpz(const emscripten::val& spz_buffer, bool strict) {
   spz_gatekeeper::GateReport rep;
   std::string err;
@@ -597,6 +643,7 @@ emscripten::val getCompatibilityBoard() {
 EMSCRIPTEN_BINDINGS(spz_gatekeeper_module) {
   emscripten::function("inspectSpz", &inspectSpz);
     emscripten::function("inspectSpzPtr", &inspectSpzPtr, emscripten::allow_raw_pointers());
+  emscripten::function("inspectSpzWithCompatPtr", &inspectSpzWithCompatPtr, emscripten::allow_raw_pointers());
   emscripten::function("dumpTrailer", &dumpTrailer);
   emscripten::function("inspectSpzText", &inspectSpzText);
   emscripten::function("inspectCompatSummary", &inspectCompatSummary);
