@@ -1,24 +1,17 @@
 # 变更日志
 
-## [v2.0.2] - 2026-06-26
+本文件仅记录当前主线的重要变更，不保留已废弃路线的细节。版本按时间倒序排列（最新在上）。
 
-### v4 format support
-- New --format v4 flag for gen-fixture command
-- ZSTD compression integration for v4 fixture blobs
-- 6-category v4 format test suite (v4_format_test.cc)
-- WASM build: ZstdCompress + v4 path support
+## [v2.0.5.1] - 2026-07-30
 
-### CI & build improvements
-- zlib URL switched to GitHub releases (zlib.net unreliable)
-- WASM flags cleanup (removed -sASSERTIONS=0, -sNO_EXIT_RUNTIME=1)
-- Test timeout 60s for self_test (prevents Windows CI hang)
-- v4_format_test excluded from default build (WASM-only)
+### 文档与治理
+- README 新增 Future Plans 章节，宣布向开放原子开源基金会捐赠意向
+- 补写 v2.0.3-v2.0.5 缺失更新日志
+- 新增 .gitattributes 统一 CRLF/LF 换行规范
 
-### Documentation
-- DOI badge added to README.md and README-zh.md
-- Version bumped 2.0.0 -> 2.0.2 in CMakeLists.txt
-
-本文件仅记录当前主线的重要变更，不保留已废弃路线的细节。
+### CI 修复
+- 注册 feature/spz-gatekeeper-2.0.5.1 分支到 push 触发器
+- 构建日志 tee + 依赖解析摘要 + wasm-build.log 上传，失败时保留现场
 
 ## [v2.0.5] - 2026-07-29
 
@@ -41,15 +34,6 @@
 - 5 个 workflow 安全修复：pages.yml 权限下放到 job 级、zizmor 过滤 info 级别噪音 (#54)
 - 修复 PR #62 合并残留冲突标记导致 WASM 引擎卡加载 (#56)
 - 移除冲突标记残留，确保 initializeWasm() 正常执行
-
-### spz2glb 前置适配 (Pre-R7)
-- ZSTD 检测 + v4 32B header peek：isZstdData() (0xFD2FB528) + peekSpzHeaderFromZstd() (commit 674f64a)
-- fastgltf 扩展字段：GaussianSplatSpzCompression 新增 spzVersion/compression/coordinateSystem
-- ILV 0xADBE0003 坐标系扩展解析：readHeaderZoneCoordSys()
-- 五层验证扩展：L3 ZSTD + L4 GLB↔SPZ 一致性 + L5 ILV 完整性 (原三层→五层)
-- spz_verify CLI 新增 layer4/layer5 命令
-- CMake: 添加 zstd 依赖 (PkgConfig + Emscripten --use-port=zstd)
-- CI 加固：SHA-pin actions, persist-credentials, zizmor 审计, npm audit, 权限收紧
 
 ## [v2.0.4] - 2026-07-26
 
@@ -107,6 +91,24 @@
 - WASM 工程优化：构建缓存、内存上限 30MB、前端体积检查
 - Pages 自动部署：tag push (v*) 触发 Pages 构建 (#27)
 - 移除 sync-gh-pages.yml（legacy，供应链风险），pages.yml 通过 actions/deploy-pages 替换
+
+## [v2.0.2] - 2026-06-26
+
+### v4 format support
+- New --format v4 flag for gen-fixture command
+- ZSTD compression integration for v4 fixture blobs
+- 6-category v4 format test suite (v4_format_test.cc)
+- WASM build: ZstdCompress + v4 path support
+
+### CI & build improvements
+- zlib URL switched to GitHub releases (zlib.net unreliable)
+- WASM flags cleanup (removed -sASSERTIONS=0, -sNO_EXIT_RUNTIME=1)
+- Test timeout 60s for self_test (prevents Windows CI hang)
+- v4_format_test excluded from default build (WASM-only)
+
+### Documentation
+- DOI badge added to README.md and README-zh.md
+- Version bumped 2.0.0 -> 2.0.2 in CMakeLists.txt
 
 ## [v2.0.0] - 2026-03-26
 

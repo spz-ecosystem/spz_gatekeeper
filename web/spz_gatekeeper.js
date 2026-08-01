@@ -425,7 +425,17 @@ function buildTimestamp() {
 }
 
 function buildSpzHandoff(report, fileName, auditDurationMs) {
-  const verdict = report?.verdict || 'block';
+  // 优先采用 compatSummary 的真实结论（inspectSpz 的 GateReport 本身不产出 verdict，
+  // 过去会 fallback 到 'block'，与内嵌 compatSummary 的 review_required 矛盾）。
+  const compatSummary = report?._spzMeta?.compatSummary || null;
+  const verdict = compatSummary?.artifact_verdict || report?.verdict || 'block';
+  const finalVerdict = compatSummary?.final_verdict || verdict;
+  const issues = compatSummary?.issues?.length
+    ? compatSummary.issues
+    : (report?.issues || []);
+  const summary = compatSummary?.summary
+    ? { issue_count: compatSummary.summary.issue_count ?? issues.length }
+    : (report?.summary || { issue_count: issues.length });
   return {
     schema_version: kBrowserToCliHandoffSchemaVersion.replace('v1', 'v2'),
     tool_version: kAuditToolVersion,
@@ -435,14 +445,14 @@ function buildSpzHandoff(report, fileName, auditDurationMs) {
     bundle_id: fileName,
     bundle_verdict: verdict,
     verdict,
-    final_verdict: verdict,
+    final_verdict: finalVerdict,
     release_ready: verdict === 'pass',
     license: kLicenseStatement,
     timestamp: buildTimestamp(),
     audit_duration_ms: auditDurationMs || 0,
-    summary: report?.summary || { issue_count: 0 },
+    summary,
     budgets: report?.budgets || {},
-    issues: report?.issues || [],
+    issues,
     next_action: verdict === 'pass' ? 'approve_bundle' : 'block_bundle',
     spz_meta: report?._spzMeta || null,
   };

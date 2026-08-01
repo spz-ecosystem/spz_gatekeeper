@@ -487,6 +487,58 @@ emscripten::val inspectCompatSummary(const emscripten::val& spz_buffer) {
       spz_gatekeeper::BuildCompatCheckAuditJson("<wasm>", strict_report, non_strict_report));
 }
 
+// 零拷贝版：直接读取 WASM 堆内已写入的 SPZ 字节，避免 JS→WASM 的 vector 拷贝。
+// 用于浏览器大文件（如 25MB）场景，减少一次完整 buffer 复制。
+emscripten::val inspectCompatSummaryPtr(std::uintptr_t ptr, std::size_t size) {
+  // strict 与 non-strict 的唯一差异是 ILV parse 失败时的 severity（error vs warning）。
+  // 对合法文件，两次解析结果一致；先解析 non-strict，无 ILV parse 失败时复用同一报告，
+  // 避免对 25MB 级别文件做第二次完整解压。
+  spz_gatekeeper::GateReport non_strict_report;
+  std::string non_strict_err;
+  if (!TryInspectPtr(ptr, size, false, &non_strict_report, &non_strict_err)) {
+    emscripten::val out = emscripten::val::object();
+    out.set("audit_profile", std::string(spz_gatekeeper::kAuditProfileSpz));
+    out.set("policy_name", std::string(spz_gatekeeper::kAuditPolicyName));
+    out.set("policy_version", std::string(spz_gatekeeper::kAuditPolicyVersion));
+    out.set("policy_mode", std::string(spz_gatekeeper::kAuditPolicyModeRelease));
+    out.set("audit_mode", std::string(spz_gatekeeper::kAuditModeLocalCliSpzArtifactAudit));
+    out.set("verdict", std::string("block"));
+    out.set("final_verdict", std::string("block"));
+    out.set("release_ready", false);
+    out.set("next_action", std::string("block_artifact"));
+    out.set("error", non_strict_err);
+    return out;
+  }
+
+  bool has_ilv_parse_failure = false;
+  for (const auto& issue : non_strict_report.issues) {
+    if (issue.code == "SPZ_EXT_PARSE") {
+      has_ilv_parse_failure = true;
+      break;
+    }
+  }
+
+  spz_gatekeeper::GateReport strict_report;
+  if (has_ilv_parse_failure) {
+    std::string strict_err;
+    if (!TryInspectPtr(ptr, size, true, &strict_report, &strict_err)) {
+      emscripten::val out = emscripten::val::object();
+      out.set("audit_profile", std::string(spz_gatekeeper::kAuditProfileSpz));
+      out.set("audit_mode", std::string(spz_gatekeeper::kAuditModeLocalCliSpzArtifactAudit));
+      out.set("verdict", std::string("block"));
+      out.set("next_action", std::string("block_artifact"));
+      out.set("error", strict_err);
+      return out;
+    }
+  } else {
+    // 无 ILV parse 失败：strict 报告与 non-strict 报告语义一致，直接复用。
+    strict_report = non_strict_report;
+  }
+
+  return ParseJsonObject(
+      spz_gatekeeper::BuildCompatCheckAuditJson("<wasm>", strict_report, non_strict_report));
+}
+
 emscripten::val buildBrowserAuditReport(const emscripten::val& payload) {
   const emscripten::val summary = payload["summary"];
 
@@ -548,6 +600,7 @@ EMSCRIPTEN_BINDINGS(spz_gatekeeper_module) {
   emscripten::function("dumpTrailer", &dumpTrailer);
   emscripten::function("inspectSpzText", &inspectSpzText);
   emscripten::function("inspectCompatSummary", &inspectCompatSummary);
+  emscripten::function("inspectCompatSummaryPtr", &inspectCompatSummaryPtr, emscripten::allow_raw_pointers());
   emscripten::function("buildBrowserAuditReport", &buildBrowserAuditReport);
 
   emscripten::function("listRegisteredExtensions", &listRegisteredExtensions);

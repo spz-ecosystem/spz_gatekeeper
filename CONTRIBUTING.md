@@ -27,7 +27,7 @@ git checkout -b feature/your-feature-name
 
 - **编译器**：GCC 7+ / Clang 5+ / MSVC 2017+
 - **CMake**：3.16+
-- **依赖**：zlib
+- **依赖**：zlib、zstd（SPZ v4 / ZSTD 支持）
 
 ### 构建项目
 
@@ -100,7 +100,17 @@ Closes #123
 - 确保测试覆盖正常路径和错误路径
 - 运行 `ctest` 验证所有测试通过
 
-### 4. 提交 Pull Request
+### 4. 更新 CHANGELOG
+
+每个合并进主线的 commit 都必须在 `CHANGELOG.md` 中找到对应记录（changelog-check 完整性 gate）：
+
+- 新功能 / 修复 / CI 变更请同步补充到当前版本条目
+- 版本条目按时间倒序排列（最新版本在最上方）
+- **tag 即冻结**：打 tag 前 CHANGELOG 必须覆盖该版本全部 commit，打 tag 后不再补写
+- 记录性文档 commit（如补写 CHANGELOG 本身）使用 `docs(scope):` 前缀，可提前豁免，防止门禁递归
+- 跨仓库协作（如 spz2glb 前置任务）的变更记在各自仓库的 CHANGELOG，不混记
+
+### 5. 提交 Pull Request
 
 1. 推送分支到你的 fork：
    ```bash
@@ -114,7 +124,7 @@ Closes #123
    - 测试情况
    - 相关 Issue
 
-### 5. Code Review
+### 6. Code Review
 
 - 维护者会在 48 小时内 review
 - 根据反馈及时修改
@@ -197,7 +207,7 @@ A: 在 GitHub Issues 创建 issue，选择 "Feature Request" 模板，说明：
 
 ### Q: 代码许可是什么？
 
-A: 项目采用 MIT License，你的贡献也将使用此许可。
+A: 项目采用 MulanPSL v2，你的贡献也将使用此许可。
 
 ## 🎯 当前需求
 
