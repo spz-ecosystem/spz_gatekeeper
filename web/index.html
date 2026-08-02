@@ -863,6 +863,16 @@
           </div>
         </div>
       `;
+      const wasmPerf = report._wasmPerf;
+      const perfLine = wasmPerf
+        ? `<strong>wasm 分段:</strong> inspect=${Number(wasmPerf.wasm_inspect_ms).toFixed(1)}ms · tojson=${Number(wasmPerf.wasm_tojson_ms).toFixed(1)}ms · compat=${Number(wasmPerf.wasm_compat_json_ms).toFixed(1)}ms · js_parse=${Number(wasmPerf.wasm_js_parse_ms).toFixed(1)}ms · wasm_total=${Number(wasmPerf.wasm_total_ms).toFixed(1)}ms`
+        : '';
+      const perfCard = wasmPerf ? `
+        <div class="stack-item">
+          <div class="stack-item-title">WASM Timing (诊断)</div>
+          <div class="stack-item-body">${perfLine}</div>
+        </div>
+      ` : '';
       const copyBreakdown = report.copy_breakdown || { total_passes: 0, stages: [] };
       const copyStages = Array.isArray(copyBreakdown.stages) && copyBreakdown.stages.length
         ? copyBreakdown.stages.map((stage) => `${stage.name}:${stage.count}`).join(', ')
@@ -876,7 +886,7 @@
           </div>
         </div>
       `;
-      setStackList(trailerList, [actionCard, copyBreakdownCard, ...budgetItems]);
+      setStackList(trailerList, [actionCard, copyBreakdownCard, perfCard, ...budgetItems]);
     }
 
 
@@ -953,6 +963,8 @@
           const trailer = l2
             ? { asset_path: report.asset_path, strict, ok: !(report.issues || []).some(i => i.severity === 'error'), issues: report.issues || [], flags: l2.flags || 0, trailer_size: l2.trailer_size || 0, ilv_records: l2.ilv_records || [] }
             : null;
+          // 透出 wasm 分段耗时（诊断用）
+          report._wasmPerf = combined?.perf || null;
           return { report, compatSummary, trailer };
         }
         // fallback: 分别调用
