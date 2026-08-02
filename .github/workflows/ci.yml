@@ -10,7 +10,7 @@ permissions:
 
 on:
   push:
-    branches: [ main, feature/spz-v2-profile-core, feature/spz-gatekeeper-2.0.2-r1, feature/spz-gatekeeper-2.0.2-r2, feature/spz-gatekeeper-2.0.2-r3, feature/spz-gatekeeper-2.0.2-r4, feature/spz-gatekeeper-2.0.2-r5, feature/spz-gatekeeper-2.0.2-r6, feature/spz-gatekeeper-2.0.4-r7, feature/spz-gatekeeper-2.0.5.1, fix/pages-deploy-on-tag ]
+    branches: [ main, feature/spz-v2-profile-core, feature/spz-gatekeeper-2.0.2-r1, feature/spz-gatekeeper-2.0.2-r2, feature/spz-gatekeeper-2.0.2-r3, feature/spz-gatekeeper-2.0.2-r4, feature/spz-gatekeeper-2.0.2-r5, feature/spz-gatekeeper-2.0.2-r6, feature/spz-gatekeeper-2.0.4-r7, feature/spz-gatekeeper-2.0.5.1, fix/pages-deploy-on-tag, feature/spz-gatekeeper-encoding-defense ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -225,6 +225,113 @@ jobs:
 
       - name: Scan GitHub Actions workflows
         run: zizmor --format plain --min-severity medium .github/workflows/
+
+  # 乱码防护（移植自 TDAI 1.0 pr-ci.yml encoding-defense job，L1-L5 五层）
+  # 适配：门卫源码含合法中文注释，L5 从"禁止非 ASCII"改为"乱码特征检测"；
+  # 检测目标 = U+FFFD 替换符、无效 UTF-8、意外 BOM、.sh CRLF、编码绕过模式。
+  encoding-defense:
+    name: Encoding Defense (L1-L5)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: L5 - Detect garbled Unicode (U+FFFD / invalid UTF-8) in source
+        # TDAI L5 扫描非 ASCII 字符；门卫源码含中文注释（合法），故改为检测乱码特征：
+        # U+FFFD (EF BF BD) 替换符 = 编码损坏的直接证据；无效 UTF-8 序列同样拦截。
+        # 排除 .spz 二进制数据文件（压缩内容天然含任意字节）。
+        run: |
+          echo "── Layer 5: mojibake scan in source files ──"
+          violations=0
+          while IFS= read -r -d '' f; do
+            if ! python3 -c "open('$f','rb').read().decode('utf-8')" 2>/dev/null; then
+              echo "  INVALID UTF-8: $f"
+              violations=$((violations + 1))
+              continue
+            fi
+            if grep -q $'\xef\xbf\xbd' "$f" 2>/dev/null; then
+              echo "  U+FFFD (mojibake): $f"
+              violations=$((violations + 1))
+            fi
+          done < <(find . \
+            -path './.git' -prune -o \
+            -path './build' -prune -o \
+            -path './build-*' -prune -o \
+            -type f \( -name '*.cc' -o -name '*.h' -o -name '*.js' -o -name '*.html' \
+                       -o -name '*.sh' -o -name '*.yml' -o -name '*.yaml' -o -name '*.md' \
+                       -o -name '*.cmake' -o -name 'CMakeLists.txt' \) \
+            -print0 2>/dev/null)
+          if [ "$violations" -gt 0 ]; then echo "FAIL: $violations file(s) with encoding errors"; exit 1; fi
+          echo "OK: $violations encoding violations (0 = clean)"
+
+      - name: L4 - Verify .gitattributes encoding config
+        run: |
+          echo "── Layer 4: git pipeline encoding config ──"
+          fails=0
+          if [ -f .gitattributes ]; then
+            if grep -q "eol=lf" .gitattributes 2>/dev/null; then
+              echo "  .gitattributes declares eol=lf rules"
+            else
+              echo "  WARN: .gitattributes exists but no eol=lf"
+              fails=$((fails + 1))
+            fi
+          else
+            echo "  WARN: no .gitattributes found"
+            fails=$((fails + 1))
+          fi
+          ENC=$(git config --local core.autocrlf 2>/dev/null || echo "unset")
+          echo "  core.autocrlf: $ENC"
+          if [ "$fails" -gt 0 ]; then echo "WARN: $fails pipeline encoding issue(s) (non-fatal)"; fi
+          echo "OK: pipeline encoding check"
+
+      - name: L3 - Detect shell encoding bypass patterns
+        run: |
+          echo "── Layer 3: shell encoding bypass scan ──"
+          fails=0
+          while IFS= read -r -d '' f; do
+            if grep -q 'iconv.*UTF-16\|sed.*s/BOM\|dos2unix\|recode' "$f" 2>/dev/null; then
+              echo "  SUSPICIOUS: $f may bypass encoding"
+              fails=$((fails + 1))
+            fi
+          done < <(find . -path './.git' -prune -o -name '*.sh' -print 2>/dev/null | tr '\n' '\0')
+          if [ "$fails" -gt 0 ]; then echo "WARN: $fails shell file(s) with bypass patterns (non-fatal)"; fi
+          echo "OK: shell encoding bypass check"
+
+      - name: L2 - Detect CRLF in shell scripts
+        run: |
+          echo "── Layer 2: CRLF scan in .sh ──"
+          fails=0
+          while IFS= read -r -d '' f; do
+            if grep -lU $'\r' "$f" 2>/dev/null | grep -q .; then
+              echo "  CRLF: $f"
+              fails=$((fails + 1))
+            fi
+          done < <(find . -path './.git' -prune -o -name '*.sh' -print 2>/dev/null | tr '\n' '\0')
+          if [ "$fails" -gt 0 ]; then echo "FAIL: $fails .sh file(s) with CRLF"; exit 1; fi
+          echo "OK: all .sh use LF"
+
+      - name: L1 - Detect unexpected UTF-8 BOM in text sources
+        run: |
+          echo "── Layer 1: UTF-8 BOM scan ──"
+          fails=0
+          while IFS= read -r -d '' f; do
+            header=$(od -A n -t x1 -N 3 "$f" 2>/dev/null | tr -d ' \n')
+            if [ "$header" = "efbbbf" ]; then
+              echo "  UNEXPECTED BOM: $f"
+              fails=$((fails + 1))
+            fi
+          done < <(find . \
+            -path './.git' -prune -o \
+            -path './build' -prune -o \
+            -path './build-*' -prune -o \
+            -type f \( -name '*.cc' -o -name '*.h' -o -name '*.js' -o -name '*.html' \
+                       -o -name '*.sh' -o -name '*.yml' -o -name '*.yaml' -o -name '*.md' \) \
+            -print0 2>/dev/null)
+          if [ "$fails" -gt 0 ]; then echo "FAIL: $fails file(s) with unexpected BOM"; exit 1; fi
+          echo "OK: no unexpected BOM"
 
   wasm:
     runs-on: ubuntu-latest
