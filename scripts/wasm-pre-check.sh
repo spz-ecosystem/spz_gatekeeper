@@ -28,10 +28,15 @@ REQUIRED_SYMBOLS=(
   # Embind exports (wasm_main.cc, in WASM binary)
   "inspectSpz"
   "inspectSpzPtr"
+  "inspectSpzWithCompatPtr"
+  "inspectCompatSummaryPtr"
+  "inspectCompatSummary"
+  "inspectSpzText"
   "dumpTrailer"
   "listRegisteredExtensions"
   "getCompatibilityBoard"
-  "inspectCompatSummary"
+  "describeExtension"
+  "buildBrowserAuditReport"
   # C runtime exports (CMakeLists.txt, in WASM binary)
   "_malloc"
   "_free"
@@ -245,6 +250,30 @@ check_symbols() {
     fail "P2_SYMBOL" 4 "Missing exported symbol(s): ${missing[*]}" "Check wasm_main.cc for Embind exports, CMakeLists.txt for EXPORTED_FUNCTIONS, and spz_gatekeeper.js for JS wrappers"
   fi
 
+  # 产物级 embind 绑定检查：embind 绑定名以 UTF-8 字符串存在 wasm 二进制的数据段中。
+  # 源码里 emscripten::function("name") 存在 ≠ 绑定真的编进了产物（此前组合导出
+  # inspectSpzWithCompatPtr 在 wrapper 缺失时前端 fallback、性能翻倍但 P2 全绿）。
+  # 对实际构建产物逐个绑定名做二进制字符串搜索，缺失即拦截。
+  local missing_bind=()
+  if [ -f "${WASM_BINARY}" ]; then
+    for sym in "${REQUIRED_SYMBOLS[@]}"; do
+      case "$sym" in
+        _malloc|_free|_gk_*)
+          # C 导出不依赖 embind 字符串，跳过（由 EXPORTED_FUNCTIONS 保证）
+          continue
+          ;;
+      esac
+      if ! grep -aFq "${sym}" "${WASM_BINARY}" 2>/dev/null; then
+        missing_bind+=("${sym}")
+      fi
+    done
+    if [ ${#missing_bind[@]} -gt 0 ]; then
+      fail "P2_EMBIND_BINARY" 4 "Embend binding(s) absent from built WASM binary: ${missing_bind[*]}" "Bindings declared in wasm_main.cc were not emitted into the wasm — check linker dead-stripping / EMSCRIPTEN_BINDINGS registration"
+    fi
+  else
+    echo "  WARN: WASM binary ${WASM_BINARY} not found — skipping binary-level embind check (build first)" >&2
+  fi
+
   # Emscripten underscore prefix check: C symbols in EXPORTED_FUNCTIONS must use _ prefix
   # R7 CI lesson: gk_* without underscore caused linker error (undefined exported symbol)
   local emsc_issues=0
@@ -397,15 +426,31 @@ check_smoke() {
 
   # Minimal runtime sanity: instantiate module via ES module dynamic import
   # (WASM is built with EXPORT_ES6=1, split mode — no CJS require)
-  if ! node --input-type=module -e "
-const { default: createModule } = await import('${WASM_JS}');
-const m = await createModule();
-if (typeof m.inspectSpz !== 'function' && typeof m.inspectSpzPtr !== 'function') {
-  process.exit(1);
-}
-process.exit(0);
-" >/dev/null 2>&1; then
-    fail "P5_SMOKE" 7 "WASM module failed to instantiate or missing expected exports"
+  # 运行时级 embind 绑定验证：前端依赖的每个方法必须在实例化模块上真实可用。
+  # 此前 inspectSpzWithCompatPtr 绑定缺失时，前端 typeof 检查 false → fallback
+  # 双重解压、性能翻倍，但 P2 源码 grep 全绿——此检查在真实模块上逐个拦截。
+  local smoke_required=(
+    "inspectSpz"
+    "inspectSpzPtr"
+    "inspectSpzWithCompatPtr"
+    "inspectCompatSummaryPtr"
+    "inspectCompatSummary"
+    "inspectSpzText"
+    "dumpTrailer"
+    "listRegisteredExtensions"
+    "getCompatibilityBoard"
+    "describeExtension"
+    "buildBrowserAuditReport"
+  )
+  local smoke_script
+  smoke_script="$(printf 'const { default: createModule } = await import(%s);\n' "'${WASM_JS}'")"
+  smoke_script+="const m = await createModule();\n"
+  smoke_script+="const required = [$(printf '"%s",' "${smoke_required[@]}")];\n"
+  smoke_script+="const missing = required.filter(fn => typeof m[fn] !== 'function');\n"
+  smoke_script+="if (missing.length) { console.error('MISSING runtime exports:', missing.join(',')); process.exit(1); }\n"
+  smoke_script+="process.exit(0);\n"
+  if ! node --input-type=module -e "${smoke_script}" >/dev/null 2>&1; then
+    fail "P5_SMOKE" 7 "WASM module missing required runtime export(s)" "Run smoke check with debug output; verify EMSCRIPTEN_BINDINGS in wasm_main.cc covers all frontend-required methods"
   fi
 }
 
