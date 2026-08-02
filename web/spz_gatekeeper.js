@@ -460,6 +460,8 @@ function buildSpzHandoff(report, fileName, auditDurationMs) {
     issues,
     next_action: verdict === 'pass' ? 'approve_bundle' : 'block_bundle',
     spz_meta: report?._spzMeta || null,
+    // 诊断：wasm 分段耗时（解压/校验/JSON），用于定位大文件审查热点
+    wasm_perf: report?._wasmPerf || null,
   };
 }
 
