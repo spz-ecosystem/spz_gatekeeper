@@ -1100,6 +1100,9 @@
           }
 
           const t = timeouts[attempt - 1];
+          // wasmLoadStamp 用于在状态栏显示本次实际加载的 wasm 构建时间戳，
+          // 便于确认浏览器没有命中旧 wasm 缓存（对比值变化即已刷新）。
+          window.wasmLoadStamp = Date.now();
           setEngineStatus('loading', attempt === 1
             ? '正在加载浏览器轻审引擎（首次加载可能较慢，请等待）...'
             : `轻审引擎加载重试 (${attempt}/${maxAttempts})...`);
@@ -1122,7 +1125,7 @@
             console.warn('[WASM init] _malloc not available, zero-copy path will fallback to vector path');
           }
 
-          setEngineStatus('ready', 'WASM 引擎就绪 · 浏览器轻审模式已启用');
+          setEngineStatus('ready', `WASM 引擎就绪 · wasm@${wasmLoadStamp} · 浏览器轻审模式已启用`);
           renderRuntimeViewer();
           return;
         } catch (error) {

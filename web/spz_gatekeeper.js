@@ -351,11 +351,16 @@ async function importLoaderModule(sourceText) {
 
 async function maybeLoadRuntime() {
   try {
-    const runtimeModule = await import('./spz_gatekeeper_wasm.js');
+    // 缓存破坏：glue 与 wasm 二进制都带时间戳 query，避免浏览器 HTTP 缓存命中旧 wasm。
+    // index.html 只对 spz_gatekeeper.js 加了 ?v=，若不在此处加，强刷后加载的仍是旧 wasm 二进制。
+    const cacheBust = '?v=' + Date.now();
+    const runtimeModule = await import('./spz_gatekeeper_wasm.js' + cacheBust);
     if (typeof runtimeModule.default !== 'function') {
       return null;
     }
-    return await runtimeModule.default();
+    return await runtimeModule.default({
+      locateFile: (path) => path.endsWith('.wasm') ? path + cacheBust : path,
+    });
   } catch (_error) {
     return null;
   }
