@@ -144,17 +144,27 @@ static bool ParseHeaderV4(const uint8_t* raw, size_t raw_size, SpzHeaderV4* h, s
 
 // R3 ParseHeaderZoneExtensions: see ilv.h for canonical implementation
 
-static bool DecompressGzip(const std::vector<std::uint8_t>& in, std::vector<std::uint8_t>* out,
+// gzip 尾部 ISIZE（最后 4 字节小端）= 未压缩大小 mod 2^32，用于预分配输出缓冲，
+// 避免 31MB 级解压过程中反复 vector 扩容 + memcpy。
+static std::size_t GzipExpectedOutputSize(const uint8_t* data, std::size_t size) {
+  if (size < 4) return 0;
+  std::uint32_t isize = 0;
+  std::memcpy(&isize, data + size - 4, sizeof(isize));
+  return static_cast<std::size_t>(isize);
+}
+
+static bool DecompressGzip(const uint8_t* in, std::size_t in_size,
+                           std::vector<std::uint8_t>* out,
                            std::string* err) {
   out->clear();
-  if (in.empty()) {
+  if (in_size == 0) {
     if (err) *err = "empty input";
     return false;
   }
 
   z_stream strm = {};
-  strm.next_in = const_cast<Bytef*>(reinterpret_cast<const Bytef*>(in.data()));
-  strm.avail_in = static_cast<uInt>(in.size());
+  strm.next_in = const_cast<Bytef*>(reinterpret_cast<const Bytef*>(in));
+  strm.avail_in = static_cast<uInt>(in_size);
 
   // 16+MAX_WBITS enables gzip header detection (matches spz-main).
   int rc = inflateInit2(&strm, 16 | MAX_WBITS);
@@ -163,7 +173,12 @@ static bool DecompressGzip(const std::vector<std::uint8_t>& in, std::vector<std:
     return false;
   }
 
-  std::vector<std::uint8_t> buf(8192);
+  const std::size_t expected = GzipExpectedOutputSize(in, in_size);
+  if (expected > 0) {
+    out->reserve(expected);
+  }
+
+  std::vector<std::uint8_t> buf(1u << 20);  // 1MB 缓冲，减少 inflate 调用次数
   bool ok = false;
   while (true) {
     strm.next_out = reinterpret_cast<Bytef*>(buf.data());
@@ -532,7 +547,7 @@ static GateReport InspectSpzBlobLegacy(const std::uint8_t* raw_spz, std::size_t 
 
   std::vector<std::uint8_t> decomp;
   std::string derr;
-  if (!DecompressGzip(std::vector<std::uint8_t>(raw_spz, raw_spz + raw_spz_size), &decomp, &derr)) {
+  if (!DecompressGzip(raw_spz, raw_spz_size, &decomp, &derr)) {
     AddIssue(&rep, Severity::kError, "SPZ_DECOMPRESS_GZIP", "failed to gunzip SPZ blob", where);
     return rep;
   }
