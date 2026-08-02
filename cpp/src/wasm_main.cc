@@ -18,9 +18,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <chrono>
 #include <zlib.h>
 #include <emscripten/bind.h>
-#include <emscripten/emscripten.h>
 #include <emscripten/val.h>
 
 namespace {
@@ -392,12 +392,16 @@ emscripten::val inspectSpzPtr(std::uintptr_t ptr, std::size_t size, bool strict)
 
 // 组合零拷贝导出：一次非 strict 解析同时产出主 report 和 compatSummary，
 // 避免浏览器端对同一大文件重复解压（原来 inspect + compatSummary 各解压一次）。
-// EMSCRIPTEN-only 分段计时（emscripten_performance_now）用于定位大文件审查热点：
+// 分段计时（std::chrono::steady_clock，wasm 上映射到 performance.now()）：
 //   wasm_inspect_ms  = WASM 侧 InspectSpzBlob 全流程（解压 + 解析 + 扩展校验）
 //   wasm_tojson_ms   = GateReport::ToJson() 序列化耗时
 //   wasm_js_parse_ms = JS 端 JSON.parse 回灌耗时
 emscripten::val inspectSpzWithCompatPtr(std::uintptr_t ptr, std::size_t size) {
-  const double t0 = emscripten_performance_now();
+  const auto clock_now = []() -> double {
+    return std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+  };
+  const double t0 = clock_now();
   spz_gatekeeper::GateReport non_strict_report;
   std::string non_strict_err;
   if (!TryInspectPtr(ptr, size, false, &non_strict_report, &non_strict_err)) {
@@ -407,7 +411,7 @@ emscripten::val inspectSpzWithCompatPtr(std::uintptr_t ptr, std::size_t size) {
     out.set("error", non_strict_err);
     return out;
   }
-  const double t1 = emscripten_performance_now();
+  const double t1 = clock_now();
 
   // strict 与 non-strict 唯一差异是 ILV parse 失败 severity；无失败时复用同一报告。
   bool has_ilv_parse_failure = false;
@@ -433,13 +437,13 @@ emscripten::val inspectSpzWithCompatPtr(std::uintptr_t ptr, std::size_t size) {
   }
 
   const std::string report_json = non_strict_report.ToJson();
-  const double t2 = emscripten_performance_now();
+  const double t2 = clock_now();
   const std::string compat_json =
       spz_gatekeeper::BuildCompatCheckAuditJson("<wasm>", strict_report, non_strict_report);
 
   emscripten::val result = emscripten::val::object();
   emscripten::val report = ParseJsonObject(report_json);
-  const double t3 = emscripten_performance_now();
+  const double t3 = clock_now();
   report.set("ok", !non_strict_report.HasErrors());
   report.set("strict", false);
   result.set("report", report);
@@ -449,9 +453,9 @@ emscripten::val inspectSpzWithCompatPtr(std::uintptr_t ptr, std::size_t size) {
   emscripten::val perf = emscripten::val::object();
   perf.set("wasm_inspect_ms", t1 - t0);
   perf.set("wasm_tojson_ms", t2 - t1);
-  perf.set("wasm_compat_json_ms", emscripten_performance_now() - t2);
+  perf.set("wasm_compat_json_ms", clock_now() - t2);
   perf.set("wasm_js_parse_ms", t3 - t2);
-  perf.set("wasm_total_ms", emscripten_performance_now() - t0);
+  perf.set("wasm_total_ms", clock_now() - t0);
   result.set("perf", perf);
   return result;
 }
