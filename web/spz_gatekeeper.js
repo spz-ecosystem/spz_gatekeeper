@@ -891,6 +891,15 @@ export default async function createSpzGatekeeperModule() {
     inspectSpzPtr: runtime?.inspectSpzPtr
       ? ((ptr, size, strict) => Promise.resolve().then(() => runtime.inspectSpzPtr(ptr, size, strict)))
       : createUnavailableMethod('inspectSpzPtr'),
+    // 组合零拷贝导出：一次解析同时产出 report + compatSummary（避免浏览器对同一
+    // 大文件做两次完整解压——此前 wrapper 未透传此方法，index.html 落到 fallback，
+    // inspectSpzPtr + inspectCompatSummary 各解压一次，25MB v3 审查耗时翻倍）。
+    inspectSpzWithCompatPtr: runtime?.inspectSpzWithCompatPtr
+      ? ((ptr, size) => Promise.resolve().then(() => runtime.inspectSpzWithCompatPtr(ptr, size)))
+      : createUnavailableMethod('inspectSpzWithCompatPtr'),
+    inspectCompatSummaryPtr: runtime?.inspectCompatSummaryPtr
+      ? ((ptr, size) => Promise.resolve().then(() => runtime.inspectCompatSummaryPtr(ptr, size)))
+      : createUnavailableMethod('inspectCompatSummaryPtr'),
     dumpTrailer: runtime?.dumpTrailer
       ? ((...args) => Promise.resolve().then(() => runtime.dumpTrailer(...args)))
       : createUnavailableMethod('dumpTrailer'),
