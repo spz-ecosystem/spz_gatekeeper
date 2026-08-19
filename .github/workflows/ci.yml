@@ -10,7 +10,7 @@ permissions:
 
 on:
   push:
-    branches: [ main, feature/spz-v2-profile-core, feature/spz-gatekeeper-2.0.2-r1, feature/spz-gatekeeper-2.0.2-r2, feature/spz-gatekeeper-2.0.2-r3, feature/spz-gatekeeper-2.0.2-r4, feature/spz-gatekeeper-2.0.2-r5, feature/spz-gatekeeper-2.0.2-r6, feature/spz-gatekeeper-2.0.4-r7, feature/spz-gatekeeper-2.0.5.1, fix/pages-deploy-on-tag, feature/spz-gatekeeper-encoding-defense ]
+    branches: [ main, feature/spz-v2-profile-core, feature/spz-gatekeeper-2.0.2-r1, feature/spz-gatekeeper-2.0.2-r2, feature/spz-gatekeeper-2.0.2-r3, feature/spz-gatekeeper-2.0.2-r4, feature/spz-gatekeeper-2.0.2-r5, feature/spz-gatekeeper-2.0.2-r6, feature/spz-gatekeeper-2.0.4-r7, feature/spz-gatekeeper-2.0.4-r7.1, feature/spz-gatekeeper-2.0.5.1, fix/pages-deploy-on-tag, feature/spz-gatekeeper-encoding-defense ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -300,18 +300,26 @@ jobs:
           if [ "$fails" -gt 0 ]; then echo "WARN: $fails shell file(s) with bypass patterns (non-fatal)"; fi
           echo "OK: shell encoding bypass check"
 
-      - name: L2 - Detect CRLF in shell scripts
+      - name: L2 - Detect CRLF in index blobs (all types) and .sh worktree
+        # (a) index blob CRLF (i/crlf) violates .gitattributes eol=lf — catches
+        #     historical CRLF blobs and any newly committed CRLF, all file types;
+        # (b) worktree .sh CRLF (existing) — WSL shbang requires LF.
         run: |
-          echo "── Layer 2: CRLF scan in .sh ──"
+          echo "── Layer 2: CRLF scan (index blobs + .sh) ──"
           fails=0
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            echo "  INDEX-CRLF: $f"
+            fails=$((fails + 1))
+          done < <(git ls-files --eol | grep 'i/crlf' | awk -F '\t' '{print $NF}')
           while IFS= read -r -d '' f; do
             if grep -lU $'\r' "$f" 2>/dev/null | grep -q .; then
               echo "  CRLF: $f"
               fails=$((fails + 1))
             fi
           done < <(find . -path './.git' -prune -o -name '*.sh' -print 2>/dev/null | tr '\n' '\0')
-          if [ "$fails" -gt 0 ]; then echo "FAIL: $fails .sh file(s) with CRLF"; exit 1; fi
-          echo "OK: all .sh use LF"
+          if [ "$fails" -gt 0 ]; then echo "FAIL: $fails file(s) with CRLF"; exit 1; fi
+          echo "OK: all index blobs and .sh use LF"
 
       - name: L1 - Detect unexpected UTF-8 BOM in text sources
         run: |
