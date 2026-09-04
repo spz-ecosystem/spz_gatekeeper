@@ -396,8 +396,9 @@ jobs:
         # P1/P5 already covered by Build WASM and the Playwright smoke test below.
         # This step adds P2 symbol export check, P3 artifact size check, P4 frontend consistency,
         # and P7 file integrity (UTF-8 validity + C++ syntax).
+        # R7_1c: --auto-fix 使 P1/P2/P5 确定性修复在 CI 生效（无触发时静默通过）。
         continue-on-error: false
-        run: bash scripts/wasm-pre-check.sh --skip-build --skip-smoke --build-dir build-wasm 2>&1 | tee build-wasm/wasm-pre-check.log
+        run: bash scripts/wasm-pre-check.sh --auto-fix --skip-build --skip-smoke --build-dir build-wasm 2>&1 | tee build-wasm/wasm-pre-check.log
 
       - name: Upload WASM pre-check logs on failure
         if: failure()
@@ -445,6 +446,45 @@ jobs:
           test -f build-wasm/site/real_v4.spz
           test -f build-wasm/site/real_v3.spz
 
+      - name: Inject WASM fingerprints into site (CI loopback)
+        # R7_1c (7): 产物指纹闭环。wasm-pre-check 后替换 site/index.html 中的
+        # __WASM_FP__/__FP__ 占位符 → 注入后的 site 随 Upload WASM artifact 发布到 Pages，
+        # 前端运行时 SHA-384 核对（R7_1b D3）形成 构建→预检→发布→运行时核验 闭环。
+        # 注入目标仅限构建产物 site/index.html：web/ 源码保留占位符（单一来源 = web/index.html，
+        # R7.1.2.8）；spz_gatekeeper.js 内的 '__WASM_FP__' 是哨兵字面量（readTrustRootFingerprint
+        # 判空语义），禁止替换。wasm-fingerprint.json 仅审计辅助（D5：信任根内嵌 index.html）。
+        shell: bash
+        run: |
+          set -euo pipefail
+          SITE=build-wasm/site
+          WASM_FP="$(sha384sum "${SITE}/spz_gatekeeper_wasm.wasm" | cut -d' ' -f1)"
+          ENTRY_FP="$(sha384sum "${SITE}/spz_gatekeeper.js" | cut -d' ' -f1)"
+          SMM_FP="$(sha384sum "${SITE}/smart_memory_manager.js" | cut -d' ' -f1)"
+          # 先替换 __WASM_FP__（meta 信任根 + 注释），再替换 __FP__（?v= 内容寻址）。
+          # __WASM_FP__ 不含独立子串 __FP__，两次 sed 无交叉污染。
+          sed -i "s/__WASM_FP__/${WASM_FP}/g" "${SITE}/index.html"
+          sed -i "s/__FP__/${ENTRY_FP}/g" "${SITE}/index.html"
+          # 残留占位符 = 源码形态漂移 → fail-closed
+          if grep -aqE '__WASM_FP__|__FP__' "${SITE}/index.html"; then
+            echo "FAIL: leftover placeholder in ${SITE}/index.html (源码占位符形态漂移?)" >&2
+            exit 1
+          fi
+          # 审计辅助 JSON（非校验依据 — 信任根已内嵌 index.html，D5）
+          printf '{"spz_gatekeeper_wasm.wasm":"%s","spz_gatekeeper.js":"%s","smart_memory_manager.js":"%s","algorithm":"sha384","generated_at":"%s","note":"audit-aid-only: trust root inlined in index.html (R7_1b D5)"}\n' \
+            "${WASM_FP}" "${ENTRY_FP}" "${SMM_FP}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${SITE}/wasm-fingerprint.json"
+          # 发布闭环断言：index.html 内嵌信任根 == wasm 产物 SHA-384
+          META_FP="$(sed -n 's/.*name="spz-wasm-fp" content="\([0-9a-f]\{96\}\)".*/\1/p' "${SITE}/index.html" | head -n1)"
+          if [ -z "${META_FP}" ]; then
+            echo "FAIL: spz-wasm-fp meta 缺失或非 SHA-384 形态" >&2
+            exit 1
+          fi
+          if [ "${META_FP}" != "${WASM_FP}" ]; then
+            echo "FAIL: 信任根 ${META_FP:0:12}... != wasm ${WASM_FP:0:12}..." >&2
+            exit 1
+          fi
+          echo "Fingerprints injected: wasm=${WASM_FP:0:12}... entry=${ENTRY_FP:0:12}... smm=${SMM_FP:0:12}..."
+          cat "${SITE}/wasm-fingerprint.json"
+
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -452,7 +492,10 @@ jobs:
 
       - name: Install browser test dependencies
         run: |
-          npm install --no-save @playwright/test@1.52.0
+          # R7_1c 供应链加固：--ignore-scripts 禁用 npm 生命周期钩子（preinstall/postinstall
+          # 投毒向量 — ChainDrop 2026-08-04 教训）。Playwright 浏览器由显式
+          # `npx playwright install` 下载，不受影响。
+          npm install --no-save --ignore-scripts @playwright/test@1.52.0
           npx playwright install --with-deps chromium
 
       - name: npm audit (supply chain)
