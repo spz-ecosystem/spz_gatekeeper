@@ -388,13 +388,24 @@ async function maybeLoadRuntime() {
       const wasmBytes = new Uint8Array(await wasmProbe.arrayBuffer());
       if (expectedFp) {
         const actualFp = await sha384Hex(wasmBytes);
-        if (actualFp && actualFp !== expectedFp) {
+        // R7_1d 红队收敛 (V10): 信任根存在但 crypto.subtle 不可用 → fail-closed。
+        // 此前以 "SHA-384 unavailable" 名义放行未校验 wasm（http 非安全上下文降级向量）。
+        if (!actualFp) {
+          window.__spzWasmVerdict = { ok: false, reason: 'sha384_unavailable', expected: expectedFp.slice(0, 16), actual: null };
+          throw new Error('WASM 完整性校验不可用（crypto.subtle 缺失）— 站点需在 HTTPS 安全上下文运行，已拒绝加载');
+        }
+        if (actualFp !== expectedFp) {
           window.__spzWasmVerdict = { ok: false, reason: 'fingerprint_mismatch', expected: expectedFp.slice(0, 16), actual: actualFp.slice(0, 16) };
           throw new Error('WASM 完整性校验失败（SHA-384 指纹不匹配），已拒绝加载 — 请强刷页面并确认部署与构建产物一致');
         }
-        integrityNote = actualFp ? ` · SHA-384 verified (${actualFp.slice(0, 8)}…)` : ' · SHA-384 unavailable';
+        integrityNote = ` · SHA-384 verified (${actualFp.slice(0, 8)}…)`;
       }
       verifiedWasmBinary = wasmBytes;
+    } else if (expectedFp) {
+      // R7_1d 红队收敛 (V9): 信任根存在但 no-store 探测失败 → fail-closed。此前会
+      // 静默放行 glue 自带 fetch（默认缓存）→ 可能实例化未校验的缓存 wasm（投毒绕过）。
+      window.__spzWasmVerdict = { ok: false, reason: 'probe_fetch_failed', expected: expectedFp.slice(0, 16), actual: null };
+      throw new Error('WASM 完整性校验：no-store 探测拉取失败，拒绝未经校验的实例化 — 请强刷页面重试');
     }
     // D1/D2: 内容寻址指纹 URL（静态/动态统一 __FP__，构建替换；缺省 Date.now() 兜底）
     const cacheBust = '?v=' + (expectedFp ? 'W' + expectedFp.slice(0, 8) : Date.now());

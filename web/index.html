@@ -1122,6 +1122,8 @@
           // wasmLoadStamp 用于在状态栏显示本次实际加载的 wasm 构建时间戳，
           // 便于确认浏览器没有命中旧 wasm 缓存（对比值变化即已刷新）。
           window.wasmLoadStamp = Date.now();
+          // R7_1d 红队收敛: 每轮尝试清空旧裁决，防跨轮失败 reason 误标到后续成功/降级。
+          window.__spzWasmVerdict = null;
           setEngineStatus('loading', attempt === 1
             ? '正在加载浏览器轻审引擎（首次加载可能较慢，请等待）...'
             : `轻审引擎加载重试 (${attempt}/${maxAttempts})...`);
@@ -1169,6 +1171,14 @@
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           console.warn(`[WASM init] Attempt ${attempt}/${maxAttempts} failed: ${message}`);
+          // R7_1d 红队收敛: 硬性完整性失败（指纹不匹配 / crypto 不可用）重试必再失败 →
+          // 直接终态报错（fail-closed），不进入误导性 retry；probe/超时等瞬时失败仍可重试。
+          const verdict = window.__spzWasmVerdict;
+          if (verdict && !verdict.ok && (verdict.reason === 'fingerprint_mismatch' || verdict.reason === 'sha384_unavailable')) {
+            setEngineStatus('error', `WASM 完整性校验失败（${verdict.reason}），已拒绝加载 — 请确认部署与构建产物一致`);
+            registryEmpty.textContent = `完整性校验失败：${verdict.reason}。请强刷页面重试或确认站点与构建产物同源。`;
+            return;
+          }
           if (attempt === maxAttempts) {
             setEngineStatus('error', `轻审引擎加载失败：${message}`);
             registryEmpty.textContent = `轻审模式未就绪：${message}`;
