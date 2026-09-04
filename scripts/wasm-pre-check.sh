@@ -255,6 +255,13 @@ check_symbols() {
   # inspectSpzWithCompatPtr 在 wrapper 缺失时前端 fallback、性能翻倍但 P2 全绿）。
   # 对实际构建产物逐个绑定名做二进制字符串搜索，缺失即拦截。
   local missing_bind=()
+  # 二进制检索确定性（R7_1a，问题清单 #4）：grep 对含 NUL 字节的 wasm 二进制在部分
+  # locale 下行为不一致 → rg -aFq 优先（ripgrep，ubuntu-latest 镜像自带，字节确定性一致）；
+  # command -v rg 失败时回退 grep -aFq（本地无 rg 环境可运行，设计约束 §R7.1.2.3）。
+  local bin_search="grep -aFq"
+  if command -v rg >/dev/null 2>&1; then
+    bin_search="rg -aFq"
+  fi
   if [ -f "${WASM_BINARY}" ]; then
     for sym in "${REQUIRED_SYMBOLS[@]}"; do
       case "$sym" in
@@ -263,7 +270,7 @@ check_symbols() {
           continue
           ;;
       esac
-      if ! grep -aFq "${sym}" "${WASM_BINARY}" 2>/dev/null; then
+      if ! ${bin_search} "${sym}" "${WASM_BINARY}" 2>/dev/null; then
         missing_bind+=("${sym}")
       fi
     done
@@ -383,6 +390,54 @@ check_frontend() {
   done
   if [ "${conflict_count}" -gt 0 ]; then
     fail "P4_FRONTEND" 6 "Found ${conflict_count} unresolved conflict marker(s) in web/ source files" "Run 'git grep -nE \"<<<<<<< |=======|\>>>>>>> \" web/' to locate and fix them"
+  fi
+
+  # ── R7_1a: cache-busting 链完整性（问题清单 #2，V1/V2 防御）──────────
+  # 加载链: index.html → spz_gatekeeper.js → glue → wasm。glue/wasm 已带
+  # ?v=/cacheBust（PR #73）；缺口 = index.html 静态 import './spz_gatekeeper.js'
+  # 无版本参数 → 浏览器缓存旧 HTML 后全链加载旧 wasm（V2 根因，用户曾实测旧 wasm）。
+  # 动态 import 已带 ?v=；此处检查静态 import 是否也带版本（V1 双模块实例隐患）。
+  # 严格锚定完整引用形态（R7.1.2.1 用户强制）：sed 只锚定完整 import 语句；
+  # 修复前 grep -c 预检匹配数，超出预期（多形态/未知引用）放弃修复只拦截。
+  if grep -qE "from '\./spz_gatekeeper\.js'" "${HTML_FILE}" 2>/dev/null; then
+    local static_import_count
+    static_import_count="$(grep -cE "from '\./spz_gatekeeper\.js'" "${HTML_FILE}" 2>/dev/null || echo 0)"
+    if [ "${AUTO_FIX}" = "true" ] && [ "${static_import_count}" -le 2 ]; then
+      echo "  Auto-fix: adding ?v=__FP__ to index.html static import (cache-busting chain)..." >&2
+      sed -i "s|from '\./spz_gatekeeper\.js'|from './spz_gatekeeper.js?v=__FP__'|g" "${HTML_FILE}"
+      if grep -qE "from '\./spz_gatekeeper\.js'" "${HTML_FILE}" 2>/dev/null; then
+        echo "  WARN: cache-busting auto-fix incomplete — manual review of index.html imports required" >&2
+      else
+        echo "  Auto-fix: cache-busting chain repaired (static import now versioned)" >&2
+      fi
+    fi
+    # 修复后重验：仍有未版本化静态 import → 拦截
+    if grep -qE "from '\./spz_gatekeeper\.js'" "${HTML_FILE}" 2>/dev/null; then
+      fail "P4_FRONTEND" 6 "cache-busting 链断裂: index.html 静态 import './spz_gatekeeper.js' 无版本参数（V2: 旧 HTML 缓存 → 全链旧 wasm）" \
+        "R7_1b D1 统一指纹 URL（?v=__FP__）；本地 --auto-fix 严格锚定补参"
+    fi
+  fi
+
+  # ── R7_1a: wrapper 组合导出透传回归断言（问题清单 #3）──────────────
+  # PR #76 已修组合导出透传，此处静态断言防回归：createSpzGatekeeperModule
+  # 必须存在（组合导出透传入口）+ buildSpzHandoff 必须含 wasm_perf（性能分段透传）。
+  local js_wrapper="${PROJECT_DIR}/web/spz_gatekeeper.js"
+  if [ -f "${js_wrapper}" ]; then
+    if ! grep -qE "createSpzGatekeeperModule" "${js_wrapper}" 2>/dev/null; then
+      fail "P4_FRONTEND" 6 "wrapper 组合导出透传回归: createSpzGatekeeperModule 缺失于 spz_gatekeeper.js" \
+        "PR #76 透传被回退 — 恢复 createSpzGatekeeperModule 组合导出"
+    fi
+    if ! grep -qE "wasm_perf" "${js_wrapper}" 2>/dev/null; then
+      fail "P4_FRONTEND" 6 "wrapper 透传回归: buildSpzHandoff 不含 wasm_perf" \
+        "性能分段信息未透传 handoff — 检查 buildSpzHandoff 内 wasm_perf 字段（report._wasmPerf）"
+    fi
+  fi
+
+  # ── R7_1a: fingerprint 机制存在性（R7_1b 信任根注入点探针）─────────
+  # index.html 应最终含 spz-wasm-fp meta / __WASM_FP__ 占位符（R7_1b D3/D5 注入）。
+  # R7_1a 阶段尚无属预期 → 仅 WARN 提示不 fail；R7_1b 完成后该检查转 PASS（防信任根被意外移除）。
+  if ! grep -qE "spz-wasm-fp|__WASM_FP__" "${HTML_FILE}" 2>/dev/null; then
+    echo "  WARN: index.html 无 spz-wasm-fp 信任根（R7_1b D3/D5 将注入 __WASM_FP__ meta）— R7_1a 阶段预期" >&2
   fi
 }
 
