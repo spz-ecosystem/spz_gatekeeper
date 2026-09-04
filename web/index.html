@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- R7_1b (D3): wasm 完整性信任根。CI/构建流程把 __WASM_FP__ 替换为
+       spz_gatekeeper_wasm.wasm 产物的 SHA-384 摘要；运行时 spz_gatekeeper.js
+       fetch wasm 字节校验一致后才实例化（防缓存投毒）。未替换（开发态）时跳过强制。 -->
+  <meta name="spz-wasm-fp" content="__WASM_FP__">
+  <!-- R7_1b (D6): index.html 为内联模块架构（L571 inline <script type="module">），
+       script-src CSP 在此架构下不可安全启用（'self' 锁死内联脚本、'unsafe-inline' 自废）。
+       待 index.html 外置化后才可启用。D6 登记为阻塞依赖，不做自废式 CSP。 -->
   <title>SPZ Validator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -569,8 +576,8 @@
   </footer>
 
   <script type="module">
-    import { memoryManager } from './smart_memory_manager.js';
-    import { BatchQueue, buildSpzHandoff, buildBrowserToCliHandoff } from './spz_gatekeeper.js';
+    import { memoryManager } from './smart_memory_manager.js?v=__FP__';
+    import { BatchQueue, buildSpzHandoff, buildBrowserToCliHandoff } from './spz_gatekeeper.js?v=__FP__';
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
     const loadingStatus = document.getElementById('loadingStatus');
@@ -1119,7 +1126,10 @@
             ? '正在加载浏览器轻审引擎（首次加载可能较慢，请等待）...'
             : `轻审引擎加载重试 (${attempt}/${maxAttempts})...`);
 
-          const wasmEntry = './spz_gatekeeper.js?v=' + Date.now();
+          // R7_1b (D1/D2): 动态 import 与静态 import（L573）统一内容寻址指纹 URL。
+          // __FP__ 由构建流程替换为 spz_gatekeeper.js 产物 hash；未替换（开发态）时
+          // Date.now() 兜底保证不命中旧缓存。
+          const wasmEntry = './spz_gatekeeper.js?v=__FP__';
           const probe = await fetch('./spz_gatekeeper.js', { cache: 'no-store' });
           if (!probe.ok) {
             throw new Error('未检测到浏览器轻审入口 spz_gatekeeper.js');
@@ -1133,11 +1143,27 @@
           const hasFree = typeof wasmModule._free === 'function';
           const hasPtr = typeof wasmModule.inspectSpzPtr === 'function';
           console.log(`[WASM init] _malloc=${hasMalloc} _free=${hasFree} inspectSpzPtr=${hasPtr}`);
-          if (!hasMalloc) {
-            console.warn('[WASM init] _malloc not available, zero-copy path will fallback to vector path');
-          }
 
-          setEngineStatus('ready', `WASM 引擎就绪 · wasm@${wasmLoadStamp} · 浏览器轻审模式已启用`);
+          // R7_1b (D4): 显式区分 wasm 引擎就绪 vs 纯 JS 降级（browser_only_wrapper）。
+          // 降级不再静默：状态栏 + registry 空态都给出显著标注；完整性校验失败
+          // （D3 fingerprint_mismatch）在标注中点名原因。
+          const runtimeStatus = typeof wasmModule.getRuntimeStatus === 'function' ? wasmModule.getRuntimeStatus() : null;
+          const wasmEngineActive = runtimeStatus
+            ? runtimeStatus.runtime_engine === 'spz_gatekeeper_wasm'
+            : hasMalloc;
+          const integrityVerdict = window.__spzWasmVerdict;
+          const integrityNote = integrityVerdict && !integrityVerdict.ok
+            ? ` · 完整性校验失败(${integrityVerdict.reason})`
+            : '';
+          if (wasmEngineActive) {
+            setEngineStatus('ready', `WASM 引擎就绪 · wasm@${wasmLoadStamp} · 浏览器轻审模式已启用`);
+          } else {
+            const downgradeReason = integrityVerdict && !integrityVerdict.ok
+              ? `WASM 完整性校验失败（${integrityVerdict.reason}），已降级纯 JS 轻审`
+              : 'WASM 引擎不可用';
+            setEngineStatus('ready', `⚠️ ${downgradeReason} — 纯 JS 轻审仅供预览，完整审计需 WASM 引擎${integrityNote}`);
+            registryEmpty.textContent = `纯 JS 轻审模式（WASM 引擎不可用）— 结果仅供参考预览，完整审计能力受限。${integrityVerdict && !integrityVerdict.ok ? `完整性校验：${integrityVerdict.reason}。` : ''}请刷新页面重试或确认部署与构建产物一致。`;
+          }
           renderRuntimeViewer();
           return;
         } catch (error) {
