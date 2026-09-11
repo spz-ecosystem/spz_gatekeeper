@@ -601,9 +601,12 @@
     // R7: Batch queue state
     const queueBar = document.getElementById('queueBar');
     const queueItems = document.getElementById('queueItems');
-    const kQueueMax = 2;
+    // R7_1g: 资源面统一 — 与 spz2glb 同构（MAX_PARALLEL=1 串行）。
+    // 原实现用布尔闩 queueProcessing（任何时刻至多 1 项 → kQueueMax>1 时无法扩展，即"假并发"）；
+    // 现改为计数器 + while 循环，对齐 spz2glb 的 processQueue 语义。
+    const kQueueMax = 1;
     let fileQueue = [];
-    let queueProcessing = false;
+    let queueRunning = 0;
     let queueTimer = null;
 
     function updateQueueBar() {
@@ -631,28 +634,28 @@
       }
     }
 
-    function processQueue() {
-      if (queueProcessing || fileQueue.length === 0) return;
-      if (fileQueue.filter(f => f.status === 'pending').length === 0) {
-        // All done or all errored
-        return;
+    async function processQueue() {
+      const nextItems = fileQueue.filter(f => f.status === 'pending');
+      while (queueRunning < kQueueMax && nextItems.length > 0) {
+        const item = nextItems.shift();
+        runQueueItem(item);
+        // 让出执行权（setTimeout(0) 属宏任务队列），待状态刷新后再启动下一项（对齐 spz2glb processQueue）
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
-      const running = fileQueue.filter(f => f.status === 'processing').length;
-      if (running >= kQueueMax) return;
+    }
 
-      queueProcessing = true;
-      const item = fileQueue.find(f => f.status === 'pending');
-      if (!item) { queueProcessing = false; return; }
-
+    function runQueueItem(item) {
+      queueRunning += 1;
       item.status = 'processing';
       updateQueueBar();
-      handleFile(item.file).catch(() => {}).finally(() => {
-        const idx = fileQueue.indexOf(item);
-        if (idx !== -1) {
-          fileQueue[idx].status = fileQueue[idx].status === 'processing' ? 'done' : fileQueue[idx].status;
-        }
+      // R7_1g 修复 fail-open：handleFile 返回 false（早退/内部 catch 吞错）或 reject → 'error'，
+      // 不再一律置 'done'。'error' 因此成为可达值：队列条 ❌ 分支与 L1226 去重重投路径同时恢复。
+      handleFile(item.file).then(
+        (ok) => { item.status = ok === false ? 'error' : 'done'; },
+        () => { item.status = 'error'; },
+      ).finally(() => {
+        queueRunning -= 1;
         updateQueueBar();
-        queueProcessing = false;
         processQueue();
       });
     }
@@ -989,10 +992,12 @@
       }
     }
 
+    // 返回值 = 是否审查成功（R7_1g 修复 fail-open：失败必须可传播，否则队列条一律显示 ✅）。
+    // 早退分支与 catch 均返回 false；成功路径返回 true。调用方据此置 'error'/'done'。
     async function handleFile(file) {
       if (!wasmModule) {
         setEngineStatus('error', '轻审引擎仍未就绪，无法执行 bundle 审查');
-        return;
+        return false;
       }
 
       // SmartMemoryManager 设备感知文件大小检查
@@ -1000,7 +1005,7 @@
       const recommendation = memoryManager.getRecommendation(fileSizeMB);
       if (!recommendation.canHandle) {
         setEngineStatus('error', `文件超过浏览器安全上限（推荐 ≤${recommendation.recommendedMaxSize}MB，硬上限 ${recommendation.hardMaxSize}MB），请改用 CLI`);
-        return;
+        return false;
       }
 
       // 前端文件大小限制（30MB 硬上限，24MB 告警线）
@@ -1008,7 +1013,7 @@
       const kWarnBytes = 24 * 1024 * 1024;
       if (file.size >= kMaxBytes) {
         setEngineStatus('error', `文件过大（${fileSizeMB.toFixed(1)}MB），超过 30MB 硬上限`);
-        return;
+        return false;
       }
       if (file.size >= kWarnBytes) {
         setEngineStatus('ready', `⚠️ 文件较大（${fileSizeMB.toFixed(1)}MB），处理速度可能较慢`);
@@ -1074,7 +1079,7 @@
           // Auto-export is best-effort; non-critical if it fails
           console.warn('Auto-export handoff failed:', e);
         }
-
+        return true;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         lastAuditReport = null;
@@ -1097,6 +1102,7 @@
         renderIssues(fallback);
         renderManifest(fallback);
         renderBudgets(fallback);
+        return false;
       }
     }
 
