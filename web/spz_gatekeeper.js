@@ -903,10 +903,10 @@ function writeToReservedBuffer(runtime, data, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// R7: Serial batch queue (max 2 concurrent)
+// R7: Serial batch queue (max 1 concurrent — 资源面统一，对齐 spz2glb MAX_PARALLEL=1)
 // ---------------------------------------------------------------------------
 class BatchQueue {
-  constructor(maxConcurrent = 2) {
+  constructor(maxConcurrent = 1) {
     this.max = maxConcurrent;
     this.running = 0;
     this.queue = [];
@@ -983,7 +983,7 @@ export default async function createSpzGatekeeperModule() {
 
     // R7: chunked write + batch queue exports
     writeToReservedBuffer: (data, options) => writeToReservedBuffer(runtime, data, options),
-    createBatchQueue: () => new BatchQueue(2),
+    createBatchQueue: () => new BatchQueue(1),
     BatchQueue,
     buildSpzHandoff,
   };

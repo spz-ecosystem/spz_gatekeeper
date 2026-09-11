@@ -601,9 +601,12 @@
     // R7: Batch queue state
     const queueBar = document.getElementById('queueBar');
     const queueItems = document.getElementById('queueItems');
-    const kQueueMax = 2;
+    // R7_1g: 资源面统一 — 与 spz2glb 同构（MAX_PARALLEL=1 串行）。
+    // 原实现用布尔闩 queueProcessing（任何时刻至多 1 项 → kQueueMax>1 时无法扩展，即"假并发"）；
+    // 现改为计数器 + while 循环，对齐 spz2glb 的 processQueue 语义。
+    const kQueueMax = 1;
     let fileQueue = [];
-    let queueProcessing = false;
+    let queueRunning = 0;
     let queueTimer = null;
 
     function updateQueueBar() {
@@ -631,28 +634,27 @@
       }
     }
 
-    function processQueue() {
-      if (queueProcessing || fileQueue.length === 0) return;
-      if (fileQueue.filter(f => f.status === 'pending').length === 0) {
-        // All done or all errored
-        return;
+    async function processQueue() {
+      const nextItems = fileQueue.filter(f => f.status === 'pending');
+      while (queueRunning < kQueueMax && nextItems.length > 0) {
+        const item = nextItems.shift();
+        runQueueItem(item);
+        // 让出执行权（setTimeout(0) 属宏任务队列），待状态刷新后再启动下一项（对齐 spz2glb processQueue）
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
-      const running = fileQueue.filter(f => f.status === 'processing').length;
-      if (running >= kQueueMax) return;
+    }
 
-      queueProcessing = true;
-      const item = fileQueue.find(f => f.status === 'pending');
-      if (!item) { queueProcessing = false; return; }
-
+    function runQueueItem(item) {
+      queueRunning += 1;
       item.status = 'processing';
       updateQueueBar();
       handleFile(item.file).catch(() => {}).finally(() => {
+        queueRunning -= 1;
         const idx = fileQueue.indexOf(item);
-        if (idx !== -1) {
-          fileQueue[idx].status = fileQueue[idx].status === 'processing' ? 'done' : fileQueue[idx].status;
+        if (idx !== -1 && fileQueue[idx].status === 'processing') {
+          fileQueue[idx].status = 'done';
         }
         updateQueueBar();
-        queueProcessing = false;
         processQueue();
       });
     }
