@@ -983,7 +983,8 @@ export default async function createSpzGatekeeperModule() {
 
     // R7: chunked write + batch queue exports
     writeToReservedBuffer: (data, options) => writeToReservedBuffer(runtime, data, options),
-    createBatchQueue: () => new BatchQueue(1),
+    // 并发上限单一来源 = BatchQueue constructor 默认值（R7_1g：不再重复字面量）
+    createBatchQueue: () => new BatchQueue(),
     BatchQueue,
     buildSpzHandoff,
   };

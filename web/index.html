@@ -648,12 +648,13 @@
       queueRunning += 1;
       item.status = 'processing';
       updateQueueBar();
-      handleFile(item.file).catch(() => {}).finally(() => {
+      // R7_1g 修复 fail-open：handleFile 返回 false（早退/内部 catch 吞错）或 reject → 'error'，
+      // 不再一律置 'done'。'error' 因此成为可达值：队列条 ❌ 分支与 L1226 去重重投路径同时恢复。
+      handleFile(item.file).then(
+        (ok) => { item.status = ok === false ? 'error' : 'done'; },
+        () => { item.status = 'error'; },
+      ).finally(() => {
         queueRunning -= 1;
-        const idx = fileQueue.indexOf(item);
-        if (idx !== -1 && fileQueue[idx].status === 'processing') {
-          fileQueue[idx].status = 'done';
-        }
         updateQueueBar();
         processQueue();
       });
@@ -991,10 +992,12 @@
       }
     }
 
+    // 返回值 = 是否审查成功（R7_1g 修复 fail-open：失败必须可传播，否则队列条一律显示 ✅）。
+    // 早退分支与 catch 均返回 false；成功路径返回 true。调用方据此置 'error'/'done'。
     async function handleFile(file) {
       if (!wasmModule) {
         setEngineStatus('error', '轻审引擎仍未就绪，无法执行 bundle 审查');
-        return;
+        return false;
       }
 
       // SmartMemoryManager 设备感知文件大小检查
@@ -1002,7 +1005,7 @@
       const recommendation = memoryManager.getRecommendation(fileSizeMB);
       if (!recommendation.canHandle) {
         setEngineStatus('error', `文件超过浏览器安全上限（推荐 ≤${recommendation.recommendedMaxSize}MB，硬上限 ${recommendation.hardMaxSize}MB），请改用 CLI`);
-        return;
+        return false;
       }
 
       // 前端文件大小限制（30MB 硬上限，24MB 告警线）
@@ -1010,7 +1013,7 @@
       const kWarnBytes = 24 * 1024 * 1024;
       if (file.size >= kMaxBytes) {
         setEngineStatus('error', `文件过大（${fileSizeMB.toFixed(1)}MB），超过 30MB 硬上限`);
-        return;
+        return false;
       }
       if (file.size >= kWarnBytes) {
         setEngineStatus('ready', `⚠️ 文件较大（${fileSizeMB.toFixed(1)}MB），处理速度可能较慢`);
@@ -1076,7 +1079,7 @@
           // Auto-export is best-effort; non-critical if it fails
           console.warn('Auto-export handoff failed:', e);
         }
-
+        return true;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         lastAuditReport = null;
@@ -1099,6 +1102,7 @@
         renderIssues(fallback);
         renderManifest(fallback);
         renderBudgets(fallback);
+        return false;
       }
     }
 
