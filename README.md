@@ -78,6 +78,10 @@ Features:
 - Drag-and-drop `.spz` file validation
 - SPZ v4 format integrity checking
 - No file upload to servers — zero privacy risk
+- Batch queue: serial processing (max 1 concurrent), auto-advance to the next file; queued items wait without polluting per-file audit timing
+- Device-aware `SmartMemoryManager` (adapts to UA / `deviceMemory` / `hardwareConcurrency`)
+- Queue UI: slide-out animation on completion, per-file audit duration, automatic `*.browser_audit.json` handoff export
+- WASM runtime integrity: SHA-384 fingerprint verified against an in-page trust root; fail-closed on mismatch
 
 ### Build Web Version Locally
 
@@ -114,10 +118,16 @@ node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-pages/site/synthetic_
 
 Policy: CI/Web smoke uses synthetic fixtures by default; real local assets remain optional and are not required for release gating.
 
-### v2.0.2 WASM audit mode status
+### v2.0.5.2 WASM audit mode status
 - Browser gate `browser_lightweight_wasm_audit` is enabled in Web UI.
 - Browser report can export `browser_to_cli_handoff` and merge into CLI `compat-check --handoff ... --json`.
 - Final release verdict still comes from local CLI artifact audit (`local_cli_spz_artifact_audit`).
+
+### v2.0.4 WASM engineering optimizations
+- Zero-copy inspect path (`inspectSpzPtr`) — audits pointer-backed buffers without duplicating file bytes.
+- Emscripten toolchain upgraded to 6.0.3.
+- JS/WASM separation: the WASM module is loaded dynamically, so the glue layer stays cacheable and independently versioned.
+- Source-level pre-check system: validates the WASM build inputs (cache-busting chain, missing `.wasm` artifacts, symbol prefixes) before the browser ever runs.
 
 ## Quick Start
 
@@ -396,7 +406,7 @@ ext type=2914910210 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
     "decompressed_size": 28000024,
     "base_payload_size": 28000000,
     "trailer_size": 24,
-    "tlv_records": [
+    "ilv_records": [
       {"type": 2914910210, "length": 12, "offset": 28000000}
     ]
   }

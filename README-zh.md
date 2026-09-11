@@ -63,6 +63,9 @@ Registered extension: `0xADBE0003` (`Adobe Coordinate System`) — status: draft
   - `version < 1` => error
   - `version 1..4` => 正常校验
   - `version > 4` => warning，但继续校验
+- 压缩格式：
+  - v3（默认）：gzip 压缩
+  - v4：ZSTD 压缩（需要 libzstd）
 
 ## Web 界面
 
@@ -77,6 +80,10 @@ SPZ Validator 提供在线 Web 界面，无需安装即可使用：
 - 拖拽上传 `.spz` 文件即时验证
 - 支持 SPZ v4 格式完整性检查
 - 文件不上传服务器，零隐私泄露风险
+- 批处理队列：串行处理（最大并发 1）并自动推进下一文件；排队等待不计入单文件审查计时
+- 设备感知 `SmartMemoryManager`（依据 UA / `deviceMemory` / `hardwareConcurrency` 自适应）
+- 队列动画：完成项滑出移除、单文件审查耗时、自动导出 `*.browser_audit.json` handoff 报告
+- WASM 运行时完整性：SHA-384 指纹与页内信任根比对，不符即拒绝加载（fail-closed）
 
 ### 本地构建 Web 版本
 
@@ -113,10 +120,16 @@ node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-pages/site/synthetic_
 
 策略说明：CI/Web smoke 默认只依赖合成 fixture；真实本地样例仅可选，不作为发布门禁必需输入。
 
-### v2.0.0 WASM 审查模式状态
+### v2.0.5.2 WASM 审查模式状态
 - Web UI 已启用浏览器门禁 `browser_lightweight_wasm_audit`。
 - 浏览器报告可导出 `browser_to_cli_handoff`，并在 CLI `compat-check --handoff ... --json` 中并入证据链。
 - 最终发布结论仍以本地 CLI 成品审查（`local_cli_spz_artifact_audit`）为准。
+
+### v2.0.4 WASM 工程优化
+- 零拷贝检查路径（`inspectSpzPtr`）：直接审查指针持有的缓冲区，不复制文件字节。
+- Emscripten 工具链升级至 6.0.3。
+- JS/WASM 分离：WASM 模块改为动态加载，胶水层可独立缓存与版本化。
+- 源文件级预检系统：在浏览器运行前校验 WASM 构建输入（cache-busting 链、缺失 `.wasm` 产物、符号前缀）。
 
 ## 快速开始
 
@@ -193,7 +206,7 @@ spz_gatekeeper --self-test
 
 ### 命令分工速览
 - `check-spz`：主入口的 L2 合法性校验，适合 CI、发布前检查和人工审计。
-- `dump-trailer`：查看 base payload 之后的原始 TLV 记录、offset 与 length。
+- `dump-trailer`：查看 base payload 之后的原始 ILV 记录、offset 与 length。
 - `registry`：浏览内置扩展规范；需要单条契约细节时用 `registry show <type>`。
 - `gen-fixture`：为扩展验证器开发生成最小合法/非法 `.spz` 样例。
 - `compat-check`：对单个资产执行 strict / non-strict 的快速兼容性摘要。
@@ -403,7 +416,7 @@ ext type=2914910210 vendor="Adobe" name="Adobe Safe Orbit Camera" valid=true
     "decompressed_size": 28000024,
     "base_payload_size": 28000000,
     "trailer_size": 24,
-    "tlv_records": [
+    "ilv_records": [
       {"type": 2914910210, "length": 12, "offset": 28000000}
     ]
   }
@@ -442,8 +455,6 @@ spz_gatekeeper/
 ├── CHANGELOG.md
 └── RELEASE_CHECKLIST.md
 ```
-
-## 规划中的扩展
 
 ## 相关项目
 - [nianticlabs/spz](https://github.com/nianticlabs/spz) - 上游 SPZ 库

@@ -2,6 +2,26 @@
 
 本文件仅记录当前主线的重要变更，不保留已废弃路线的细节。版本按时间倒序排列（最新在上）。
 
+## [v2.0.5.2] - 2026-09-11
+
+### WASM 运行时完整性 (R7.1, #78)
+- 前端 wasm 指纹运行时校验（**SHA-384**）：信任根内嵌 `web/index.html`（CI 构建时注入 `spz-wasm-fp` meta），加载字节哈希不符即拒绝加载（fail-closed）；`wasm-fingerprint.json` 仅作审计辅助，不作校验依据
+- 校验与加载复用同一份 fetch 字节（`wasmBinary` 直传），消除"先算哈希再二次下载"的替换窗口
+- 静态 import 与动态 import 统一为同一 `?v=<fp>` URL，加载链唯一化
+- 降级显式化（fail-loud）：wasm 加载/校验失败在 UI 标注原因，不再静默回退纯 JS 路径
+- 预检增强：cache-busting 链检查（P4）+ `rg` 确定性检测（回退 `grep -aFq`）+ 严格锚定的 sed 自动修复
+- CI 回环：`--auto-fix` 生效 + 指纹注入 step（sha384 → `__WASM_FP__`/`__FP__` 替换）；`npm install --ignore-scripts` 供应链加固（防 preinstall 钩子投毒）
+
+### Web UI 批处理队列 (R7_1g, #79)
+- 前端队列与 spz2glb `MAX_PARALLEL=1` 对齐：并发常量 `2 → 1`（WASM 单实例串行，排队等待不计入处理计时）
+- 并发控制由布尔闩改为**计数器 + while 循环**：原布尔闩在任何时刻至多 1 项，`kQueueMax > 1` 时无法扩展（"假并发"）
+- 修复队列 fail-open：`handleFile` 失败（超推荐上限 / 超 30MB 硬顶 / 引擎未就绪 / 解压失败）不再被吞成完成态 —— 队列条正确显示失败并可重投（此前失败项恒显示 ✅，且同名文件重投被永久跳过）
+
+### 文档与治理
+- README/README-zh 版本标签更新至 v2.0.5.2；补 v2.0.4 WASM 工程优化段与 v2.0.5 Web UI 段
+- 术语更正：`TLV` → `ILV`；JSON 示例字段 `tlv_records` → `ilv_records`
+- 删除 README-zh 空 section；补齐中文压缩格式说明
+
 ## [v2.0.5.1] - 2026-07-30
 
 ### 文档与治理
