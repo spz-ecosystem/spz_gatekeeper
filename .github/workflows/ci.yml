@@ -615,7 +615,10 @@ jobs:
             passed=false
             for attempt in 1 2 3; do
               echo "Smoke test attempt $attempt ($engine)"
-              if SPZ_WASM_SMOKE_BROWSER="$engine" node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-wasm/site/synthetic_valid.spz build-native/spz_gatekeeper | tee "wasm-smoke-$engine.log"; then
+              # `2>&1` 必须置于管道前：脚本的失败原因经 `console.error` 写 **stderr**（末行
+              # `WASM smoke FAIL: …` + `process.exit(1)`），只 `| tee` 会丢掉 stderr ⇒ 日志
+              # 里只剩 stdout 的 `[smoke] browser engine: …`，失败原因不可考（PRE.19 A 同源教训）。
+              if SPZ_WASM_SMOKE_BROWSER="$engine" node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-wasm/site/synthetic_valid.spz build-native/spz_gatekeeper 2>&1 | tee "wasm-smoke-$engine.log"; then
                 echo "Smoke test passed on attempt $attempt ($engine)"
                 passed=true
                 break
