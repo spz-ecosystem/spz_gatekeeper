@@ -2,11 +2,8 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 
 import { chromium, firefox, webkit } from '@playwright/test';
-
-const execFileAsync = promisify(execFile);
 
 // PRE.13（R7.2）：三引擎覆盖 —— 由 SPZ_WASM_SMOKE_BROWSER 选择（默认 chromium）。
 // 与 spz2glb 一致，避免"只在单一引擎上绿"的假安心。
@@ -252,14 +249,25 @@ async function runCliRoundTrip(cliBinaryPath, artifactPath, handoff) {
   const handoffPath = join(tempDir, 'browser_handoff.json');
   try {
     await writeFile(handoffPath, JSON.stringify(handoff, null, 2), 'utf8');
-    const { stdout } = await execFileAsync(cliBinaryPath, [
-      'compat-check',
-      artifactPath,
-      '--handoff',
-      handoffPath,
-      '--json',
-    ]);
-    return stdout;
+    // 退出码契约（cpp/src/main.cc `return all_pass ? 0 : 1`）：**verdict 非 pass 即 1**；且
+    // BuildCompatCheckAuditWithHandoffJson 把 final_verdict 覆写为该 CLI 本地 verdict
+    // ⇒ 非零退出是**合法结果**而非致命失败。原先用 promisify(execFile) 会在非零时 reject，
+    // 连 stdout 一起丢掉（报错只剩 "Command failed: …"）：既误判，又不可诊断。
+    // 故此处显式区分「spawn 级失败（ENOENT/EACCES，error.code 非数字）」与「子进程退出码」。
+    return await new Promise((resolve, reject) => {
+      execFile(
+        cliBinaryPath,
+        ['compat-check', artifactPath, '--handoff', handoffPath, '--json'],
+        { encoding: 'utf8' },
+        (error, stdout, stderr) => {
+          if (error && typeof error.code !== 'number') {
+            reject(error);
+            return;
+          }
+          resolve({ code: error ? error.code : 0, stdout: stdout || '', stderr: stderr || '' });
+        },
+      );
+    });
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -465,18 +473,42 @@ async function runSmoke() {
       throw new Error('handoff next_action 不正确');
     }
 
-    const cliRoundTripJson = await runCliRoundTrip(cliBinaryPath, artifactPath, validAudit.handoff);
-    if (!cliRoundTripJson.includes('"audit_mode":"local_cli_spz_artifact_audit"')) {
-      throw new Error('CLI roundtrip 缺少 local_cli_spz_artifact_audit');
+    const cliRoundTrip = await runCliRoundTrip(cliBinaryPath, artifactPath, validAudit.handoff);
+    let cliJson = null;
+    try {
+      // PRE.19 B.3：全量 JSON.parse 路径（字符串包含式断言会漏掉"JSON 非法"类缺陷）。
+      cliJson = JSON.parse(cliRoundTrip.stdout);
+    } catch (error) {
+      throw new Error(
+        `CLI roundtrip stdout 非合法 JSON（exit=${cliRoundTrip.code}）: ${cliRoundTrip.stdout.slice(0, 400)} | stderr: ${cliRoundTrip.stderr.slice(0, 400)}`,
+      );
     }
-    if (!cliRoundTripJson.includes('"upstream_audit":{')) {
-      throw new Error('CLI roundtrip 缺少 upstream_audit');
+    if (cliJson.audit_mode !== 'local_cli_spz_artifact_audit') {
+      throw new Error(`CLI roundtrip audit_mode 不正确: ${cliJson.audit_mode}`);
     }
-    if (!cliRoundTripJson.includes('"evidence_chain":["browser_lightweight_wasm_audit","local_cli_spz_artifact_audit"]')) {
-      throw new Error('CLI roundtrip evidence_chain 不正确');
+    // 退出码契约：cpp/src/main.cc `return all_pass ? 0 : 1` ⇒ verdict 非 pass 即 1。
+    const expectedCliCode = cliJson.final_verdict === 'pass' ? 0 : 1;
+    if (cliRoundTrip.code !== expectedCliCode) {
+      throw new Error(
+        `CLI roundtrip 退出码与 final_verdict 不符: code=${cliRoundTrip.code} final_verdict=${cliJson.final_verdict} | stderr: ${cliRoundTrip.stderr.slice(0, 300)}`,
+      );
     }
-    if (!cliRoundTripJson.includes('"final_verdict":"pass"')) {
-      throw new Error('CLI roundtrip final_verdict 不正确');
+    // handoff 合并契约：final_verdict 被覆写为 CLI 本地 artifact_verdict，release_ready 由之派生。
+    if (cliJson.final_verdict !== cliJson.artifact_verdict) {
+      throw new Error(`CLI roundtrip final_verdict 应等于 artifact_verdict: ${cliJson.final_verdict} vs ${cliJson.artifact_verdict}`);
+    }
+    if (cliJson.release_ready !== (cliJson.final_verdict === 'pass')) {
+      throw new Error(`CLI roundtrip release_ready 应仅由 final_verdict 决定: ${cliJson.release_ready} / ${cliJson.final_verdict}`);
+    }
+    // 上游证据链合并契约。
+    if (!cliJson.upstream_audit || cliJson.upstream_audit.bundle_id !== validAudit.handoff.bundle_id) {
+      throw new Error('CLI roundtrip 缺少 upstream_audit 或 bundle_id 未与浏览器 handoff 对齐');
+    }
+    if (cliJson.upstream_audit.audit_mode !== 'browser_lightweight_wasm_audit') {
+      throw new Error(`CLI roundtrip upstream_audit.audit_mode 不正确: ${cliJson.upstream_audit.audit_mode}`);
+    }
+    if (JSON.stringify(cliJson.evidence_chain) !== JSON.stringify(['browser_lightweight_wasm_audit', 'local_cli_spz_artifact_audit'])) {
+      throw new Error(`CLI roundtrip evidence_chain 不正确: ${JSON.stringify(cliJson.evidence_chain)}`);
     }
 
     const missingManifestBundle = createBundleBuffer({ includeManifest: false });
