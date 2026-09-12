@@ -256,7 +256,10 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq g++-mingw-w64-x86-64
+          # g++-mingw-w64-x86-64：交叉编译器
+          # libz-mingw-w64-dev：MinGW 版 zlib 头（cpp/tests/test_fixtures.h 依赖 <zlib.h>，
+          #   装到 mingw 默认 sysroot include 目录，无需额外 -I）
+          sudo apt-get install -y -qq g++-mingw-w64-x86-64 libz-mingw-w64-dev
 
       - name: Syntax-check Windows-conditional translation units
         shell: bash
