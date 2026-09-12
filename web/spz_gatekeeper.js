@@ -531,7 +531,11 @@ function buildBrowserToCliHandoff(report, auditDurationMs) {
   const bundleVerdict = resolveBundleVerdict(report);
   const finalVerdict = resolveFinalVerdict(report);
   return {
-    schema_version: kBrowserToCliHandoffSchemaVersion.replace('v1', 'v2'),
+    // 必须原样发出 C++ 单一真值（audit_summary.h kBrowserToCliHandoffSchemaVersion = v1）：
+    // CLI 侧 ParseBrowserHandoffJson 对 schema_version 做**严格等值**校验，非 v1 直接判
+    // "unsupported handoff schema_version"。PR #62 曾在此处 .replace('v1','v2')，导致浏览器
+    // 导出的 handoff 无法被 `compat-check --handoff` 接受（契约断裂，载荷无任何变化）。
+    schema_version: kBrowserToCliHandoffSchemaVersion,
     audit_profile: report.audit_profile,
     audit_mode: report.audit_mode,
     policy_mode: resolvePolicyMode(report.policy_mode),
