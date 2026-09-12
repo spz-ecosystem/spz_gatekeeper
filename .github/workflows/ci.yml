@@ -58,7 +58,7 @@ jobs:
           echo "SPZ_BENCH_DIR=${{ github.workspace }}/bench-data" >> "$GITHUB_ENV"
 
       - name: Install dependencies (macOS)
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos')
         run: |
           brew install zlib zstd cmake
 
@@ -78,27 +78,37 @@ jobs:
 
       - name: Configure CMake (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
+        # PRE.14 对照（R7.2）：显式 shell: bash → GitHub 展开为 `bash -eo pipefail`
+        # （不写 shell 时默认仅 `bash -e`，**无 pipefail** → `| tee` 会掩盖退出码）
+        shell: bash
         run: |
+          set -euo pipefail
           cmake -S cpp -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=ON \
             -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF 2>&1 | tee cmake-config.log
           echo "=== Dependency Resolution ==="
-          grep -E "zlib|zstd|FetchContent|found" cmake-config.log | head -20
+          grep -E "zlib|zstd|FetchContent|found" cmake-config.log | head -20 || true
 
       - name: Configure CMake (macOS)
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos')
+        shell: bash
         run: |
+          set -euo pipefail
           cmake -S cpp -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=ON \
             -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF \
             -DCMAKE_PREFIX_PATH="$(brew --prefix zlib);$(brew --prefix zstd)" 2>&1 | tee cmake-config.log
           echo "=== Dependency Resolution ==="
-          grep -E "zlib|zstd|FetchContent|found" cmake-config.log | head -20
+          grep -E "zlib|zstd|FetchContent|found" cmake-config.log | head -20 || true
 
       - name: Build (with verbose output)
+        # PRE.14 对照（R7.2）：本 step 三平台共用 —— 不写 shell 时 Windows runner 走 pwsh，
+        # 管道 `$LASTEXITCODE` 取末端 `tee`(=0) ⇒ **编译失败被掩盖**。显式 bash 三平台一致。
+        shell: bash
         run: |
+          set -euo pipefail
           cmake --build build --config Release --parallel 2>&1 | tee build.log
 
       - name: Check build warnings
@@ -117,7 +127,9 @@ jobs:
 
       - name: Release gate (Ubuntu, real compat-check)
         if: matrix.os == 'ubuntu-latest'
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p build/ci-gates
           ./build/spz_gatekeeper gen-fixture \
             --type 0xADBE0002 \
@@ -225,6 +237,67 @@ jobs:
 
       - name: Scan GitHub Actions workflows
         run: zizmor --format plain --min-severity medium .github/workflows/
+
+  # PRE.10（R7.2 落实）：`#ifdef _WIN32` 守卫漂移的「穷人的跨平台验证」——
+  # 无需完整 Windows 构建环境，MinGW 的 -fsyntax-only 即可拦截（spz2glb 教训：
+  # MappedFile 的 HANDLE/fd_ 平台分叉漏加 guard，Linux 编译通过、Windows 报错）。
+  mingw-syntax:
+    name: MinGW Syntax Guard (Windows #ifdef drift)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install MinGW cross compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-mingw-w64-x86-64
+
+      - name: Syntax-check Windows-conditional translation units
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 动态发现含 `_WIN32` 的翻译单元 ⇒ 今后新增的条件编译文件自动纳入，无需改本 job。
+          mapfile -t files < <(grep -rl --include='*.cc' --include='*.cpp' --include='*.h' '_WIN32' cpp || true)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "no _WIN32-conditional sources found; nothing to check"
+            exit 0
+          fi
+          echo "checking ${#files[@]} file(s) with MinGW:"
+          printf '  %s\n' "${files[@]}"
+          for f in "${files[@]}"; do
+            echo "--- $f"
+            x86_64-w64-mingw32-g++ -fsyntax-only -std=c++17 \
+              -Icpp/include -Icpp/src -Icpp/tests "$f"
+          done
+          echo "MinGW syntax guard passed"
+
+  # PRE.10 P3（R7.2 落实）：把 WASM 侧的 P6/P7 拦截复制到 native，且 **不 needs: build**
+  # ⇒ build 矩阵失败也不会隐藏这些结果（WASM/native 双覆盖，防"只有 WASM 构建才拦得到的问题"
+  # 逃逸到 native 发布构建）。复用 scripts/wasm-pre-check.sh 的同一实现（禁第二份判断）。
+  verify-native:
+    name: Native Dual-Coverage (decoupled from build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Native dual-coverage (P7 integrity; P6 lint when workflows touched)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # P7 恒执行：UTF-8 编码校验 + CMake `set(::)` 语法守卫。
+          # P6 沿用脚本既有语义（仅 .github/workflows/ 有改动时 lint）；CI 侧的 workflow
+          # lint 由上面的 security-audit job（zizmor）独立承担。
+          bash scripts/wasm-pre-check.sh --native-only
 
   # 乱码防护（移植自 TDAI 1.0 pr-ci.yml encoding-defense job，L1-L5 五层）
   # 适配：门卫源码含合法中文注释，L5 从"禁止非 ASCII"改为"乱码特征检测"；
@@ -385,6 +458,7 @@ jobs:
       - name: Build WASM
         shell: bash
         run: |
+          set -euo pipefail
           emmake cmake --build build-wasm --parallel 2>&1 | tee build-wasm/wasm-build.log
 
       - name: Install WASM pre-check dependencies
@@ -398,7 +472,12 @@ jobs:
         # and P7 file integrity (UTF-8 validity + C++ syntax).
         # R7_1c: --auto-fix 使 P1/P2/P5 确定性修复在 CI 生效（无触发时静默通过）。
         continue-on-error: false
-        run: bash scripts/wasm-pre-check.sh --auto-fix --skip-build --skip-smoke --build-dir build-wasm 2>&1 | tee build-wasm/wasm-pre-check.log
+        # PRE.14 对照（R7.2）：补显式 shell: bash —— 不写时默认 `bash -e`（无 pipefail），
+        # `| tee` 会让 P2/P3/P4/P7 的失败被 tee(0) 掩盖。
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/wasm-pre-check.sh --auto-fix --skip-build --skip-smoke --build-dir build-wasm 2>&1 | tee build-wasm/wasm-pre-check.log
 
       - name: Upload WASM pre-check logs on failure
         if: failure()
@@ -491,46 +570,60 @@ jobs:
           node-version: '22'
 
       - name: Install browser test dependencies
+        shell: bash
         run: |
+          set -euo pipefail
           # R7_1c 供应链加固：--ignore-scripts 禁用 npm 生命周期钩子（preinstall/postinstall
           # 投毒向量 — ChainDrop 2026-08-04 教训）。Playwright 浏览器由显式
           # `npx playwright install` 下载，不受影响。
-          npm install --no-save --ignore-scripts @playwright/test@1.52.0
-          npx playwright install --with-deps chromium
+          # PRE.13（R7.2）：1.52.0 → 1.62.0（对齐 spz2glb），并装三引擎。
+          npm install --no-save --ignore-scripts @playwright/test@1.62.0
+          npx playwright install --with-deps chromium firefox webkit
 
-      - name: npm audit (supply chain)
-        shell: bash
-        continue-on-error: true
-        run: |
-          npm audit --audit-level=high
-
+      # PRE.19 A（R7.2 落实）：原 `npm audit (supply chain)` step 已移除 ——
+      # 本仓无 package.json/lockfile，`npm audit` 恒 ENOLOCK 失败；而 `continue-on-error: true`
+      # 又把任何结果吞掉（PRE.19 A.2 点名的"假绿"反模式），实际强制力为零。
+      # 供应链面改由：① security-audit job 的 zizmor（action SHA-pin 校验）；
+      # ② 上方 `npm install --ignore-scripts`（ChainDrop preinstall/postinstall 投毒防护）承担。
       - name: Run WASM browser smoke test
         # T54: 边界测试 — kMaxSpzBytes=30MB + 前端 24MB/30MB 检查
         # 30MB+ 大文件 smoketest 不在 CI 执行（生成 24-31MB 文件耗时）
         # 验证方式: frontend index.html 硬上限拒绝 + WASM kMaxSpzBytes 双重防线
         # Retry up to 3 times to mitigate transient failures (network timeouts, port conflicts)
+        # PRE.14 对照（R7.2，本项为**真实缺陷**）：原 step 无 shell: bash ⇒ 默认 `bash -e`
+        # **无 pipefail** ⇒ 下方 `if node … | tee wasm-smoke.log; then` 的管道退出码取 tee(=0)，
+        # 条件**恒真** ⇒ 冒烟测试永远"通过"（重试逻辑与失败分支均为死代码）。补 pipefail 后
+        # node 失败可被正确捕获，重试与 3 次后 exit 1 才真正生效。
+        shell: bash
         run: |
+          set -euo pipefail
           python3 -m http.server 4173 --directory build-wasm/site > wasm-http.log 2>&1 &
           SERVER_PID=$!
-          trap 'kill ${SERVER_PID}' EXIT
+          trap 'kill ${SERVER_PID} 2>/dev/null || true' EXIT
           for i in {1..20}; do
             if curl -fsS http://127.0.0.1:4173/index.html > /dev/null; then
               break
             fi
             sleep 1
           done
-          for attempt in 1 2 3; do
-            echo "Smoke test attempt $attempt"
-            if node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-wasm/site/synthetic_valid.spz build-native/spz_gatekeeper | tee wasm-smoke.log; then
-              echo "Smoke test passed on attempt $attempt"
-              break
-            fi
-            if [ $attempt -eq 3 ]; then
-              echo "Smoke test failed after 3 attempts"
+          # PRE.13（R7.2）：三引擎逐一轮跑（原仅 chromium）。逐引擎独立日志 + 独立重试。
+          for engine in chromium firefox webkit; do
+            echo "=== smoke engine: $engine ==="
+            passed=false
+            for attempt in 1 2 3; do
+              echo "Smoke test attempt $attempt ($engine)"
+              if SPZ_WASM_SMOKE_BROWSER="$engine" node tests/wasm_smoke_test.mjs http://127.0.0.1:4173 build-wasm/site/synthetic_valid.spz build-native/spz_gatekeeper | tee "wasm-smoke-$engine.log"; then
+                echo "Smoke test passed on attempt $attempt ($engine)"
+                passed=true
+                break
+              fi
+              echo "Smoke test attempt $attempt failed ($engine), retrying..."
+              sleep 2
+            done
+            if [ "$passed" != "true" ]; then
+              echo "Smoke test failed after 3 attempts ($engine)"
               exit 1
             fi
-            echo "Smoke test attempt $attempt failed, retrying..."
-            sleep 2
           done
 
       - name: Upload WASM smoke logs on failure
@@ -540,7 +633,7 @@ jobs:
           name: wasm-smoke-logs
           path: |
             wasm-http.log
-            wasm-smoke.log
+            wasm-smoke-*.log
             wasm-smoke-failure.png
             build-wasm/wasm-build.log
             build-wasm/wasm-pre-check.log
@@ -563,6 +656,8 @@ jobs:
         with:
           name: wasm-build
           path: build-wasm/site
+          # PRE.14 对照（R7.2）：关键产物缺失必须显式报错（默认 warn 会静默）
+          if-no-files-found: error
 
   deploy_pages:
     name: Deploy Pages

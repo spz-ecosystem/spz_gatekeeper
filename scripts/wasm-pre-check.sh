@@ -61,6 +61,7 @@ STRICT=false
 SKIP_BUILD=false
 SKIP_SMOKE=false
 AUTO_FIX=false
+NATIVE_ONLY=false   # PRE.10（R7.2）：native 双覆盖模式（只跑 P6 workflow lint + P7 文件完整性）
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -69,6 +70,7 @@ while [ $# -gt 0 ]; do
     --skip-smoke) SKIP_SMOKE=true; shift ;;
     --build-dir) BUILD_DIR="$2"; shift 2 ;;
     --auto-fix) AUTO_FIX=true; shift ;;
+    --native-only) NATIVE_ONLY=true; shift ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -84,7 +86,8 @@ fail() {
 }
 
 pass() {
-  python3 -c "import json; print(json.dumps({'ok':True,'stage':'P6_WORKFLOW','exit_code':0,'message':'WASM pre-check passed','logs':[]}, ensure_ascii=False))"
+  local msg="${1:-WASM pre-check passed}"
+  python3 -c "import json,sys; print(json.dumps({'ok':True,'stage':'P6_WORKFLOW','exit_code':0,'message':sys.argv[1],'logs':[]}, ensure_ascii=False))" "$msg"
   exit 0
 }
 
@@ -566,6 +569,22 @@ check_file_integrity() {
   if [ "${failures}" -gt 0 ]; then
     fail "P7_INTEGRITY" 9 "${failures} file(s) with UTF-8 encoding errors"
   fi
+
+  # CMake 语法检查（PRE.10）：`set(XXX::YYY ...)` 非法 —— `::` 是 CMake ALIAS/IMPORTED
+  # 目标的保留符号，不能作变量名（CMake 3.15+ 直接报语法错误）。spz2glb 曾因此踩坑。
+  local cmake_bad=0
+  local cmake_re='^[[:space:]]*set[[:space:]]*\([[:space:]]*[A-Za-z_][A-Za-z0-9_]*::'
+  while IFS= read -r -d '' f; do
+    if grep -nE "${cmake_re}" "$f" >/dev/null 2>&1; then
+      echo "  INVALID CMake set(::) usage: $f" >&2
+      grep -nE "${cmake_re}" "$f" >&2 || true
+      cmake_bad=$((cmake_bad + 1))
+    fi
+  done < <(find "${PROJECT_DIR}" \( -name 'CMakeLists.txt' -o -name '*.cmake' \) 2>/dev/null | tr '\n' '\0')
+
+  if [ "${cmake_bad}" -gt 0 ]; then
+    fail "P7_INTEGRITY" 9 "${cmake_bad} file(s) with invalid CMake set(::) usage"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -573,6 +592,14 @@ check_file_integrity() {
 # ---------------------------------------------------------------------------
 main() {
   cd "${PROJECT_DIR}"
+  # PRE.10（R7.2）：native 双覆盖 —— 只跑与平台无关的 P6 workflow lint + P7 文件完整性。
+  # 复用同一实现（禁第二份判断），供 native CI job 复制 WASM 侧的编码/语法拦截，
+  # 避免"只有 WASM 构建才能拦到的问题"逃逸到 native 发布构建。
+  if [ "${NATIVE_ONLY}" = "true" ]; then
+    check_workflow
+    check_file_integrity
+    pass "native pre-check passed (P6 workflow lint + P7 file integrity)"
+  fi
   check_environment
   if [ "${SKIP_BUILD}" != "true" ]; then
     check_build

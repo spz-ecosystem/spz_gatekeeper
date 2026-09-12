@@ -2,6 +2,26 @@
 
 本文件仅记录当前主线的重要变更，不保留已废弃路线的细节。版本按时间倒序排列（最新在上）。
 
+## [v2.0.5.3] - 2026-09-11
+
+### CI 安全网加固 (R7.2, #81)
+
+落实 R7 计划 PRE 系列**剩余未落地项**（spz2glb 经验吸收，PRE.20 索引标注的 📌 待落地条目）：
+
+- **CI 管道掩盖修复（PRE.14）**：`| tee` 步骤补显式 `shell: bash` + `set -euo pipefail` —— 此前不写 `shell` 时 GitHub 默认仅 `bash -e`（**无 pipefail**），管道退出码取 `tee`(=0)，编译/校验失败被掩盖
+- **修真实缺陷**：WASM 浏览器冒烟测试的 `if node … | tee …; then` 条件**恒真**（管道无 pipefail）⇒ 冒烟测试永远"通过"、重试与失败分支均为死代码；补 pipefail 后恢复真实判定
+- **关键产物缺失禁止静默（PRE.14）**：3 处 `upload-artifact` 补 `if-no-files-found: error`（native 二进制 / WASM 站点 ×2）
+- **移除假绿 step（PRE.19 A）**：删除恒 ENOLOCK 且 `continue-on-error: true` 吞结果的 `npm audit` step；供应链面由 security-audit job（zizmor）+ `npm install --ignore-scripts` 承担
+- **macOS 双架构（PRE.12）**：`macos-latest` 实为 ARM64 却产出 `-macos-x64` 名实错配 ⇒ 拆为 `-macos-arm64`（macos-latest）+ `-macos-x64`（macos-15-intel）；相关条件改 `startsWith(matrix.os,'macos')`
+- **MinGW 语法守卫（PRE.10）**：新增 `mingw-syntax` job —— `x86_64-w64-mingw32-g++ -fsyntax-only` 动态校验全部含 `_WIN32` 的翻译单元，拦截条件编译守卫漂移
+- **native 双覆盖（PRE.10）**：新增 `verify-native` job（**不 needs build**）复用 `wasm-pre-check.sh --native-only`，并补 CMake `set(::)` 语法守卫（`::` 为 ALIAS/IMPORTED 保留符号）
+- **三引擎冒烟（PRE.13）**：Playwright `1.52.0 → 1.62.0`；`wasm_smoke_test.mjs` 支持 `SPZ_WASM_SMOKE_BROWSER`（chromium/firefox/webkit，未知值 fail-loud），CI 逐引擎轮跑并逐引擎独立日志
+- **CHANGELOG 发布门禁（PRE.16 + PRE.18）**：新增 `scripts/changelog-check.sh` + release.yml `changelog-check` job（`release` 依赖之）—— tag 区间内每个 commit 必须已在 CHANGELOG 有记录，否则**阻断发布**；含 `docs(scope):` **自指豁免**（前置，防"记录者自身无法被记录"的无限回归）
+- **Release 正文来源修正（PRE.19 E.3）**：`generate_release_notes` 改为从权威 CHANGELOG 提取该版本段落（`body_path`），并给 release job 补 `fetch-depth: 0`
+
+### 文档与治理
+- README/README-zh 版本标签更新至 v2.0.5.3
+
 ## [v2.0.5.2] - 2026-09-11
 
 ### WASM 运行时完整性 (R7.1, #78)

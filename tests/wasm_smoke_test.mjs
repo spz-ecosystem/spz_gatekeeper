@@ -4,9 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import { chromium } from '@playwright/test';
+import { chromium, firefox, webkit } from '@playwright/test';
 
 const execFileAsync = promisify(execFile);
+
+// PRE.13（R7.2）：三引擎覆盖 —— 由 SPZ_WASM_SMOKE_BROWSER 选择（默认 chromium）。
+// 与 spz2glb 一致，避免"只在单一引擎上绿"的假安心。
+const BROWSER_LAUNCHERS = { chromium, firefox, webkit };
 
 
 
@@ -22,6 +26,17 @@ function getArtifactPath() {
 
 function getCliBinaryPath() {
   return process.argv[4] || process.env.SPZ_WASM_SMOKE_CLI || 'build-native/spz_gatekeeper';
+}
+
+// PRE.13（R7.2）：引擎选择（chromium/firefox/webkit），未知取值 fail-loud（禁静默回退）
+function getBrowserEngine() {
+  const engine = (process.env.SPZ_WASM_SMOKE_BROWSER || 'chromium').toLowerCase();
+  if (!BROWSER_LAUNCHERS[engine]) {
+    throw new Error(
+      `未知浏览器引擎: ${engine}（可选 ${Object.keys(BROWSER_LAUNCHERS).join('/')}）`,
+    );
+  }
+  return engine;
 }
 
 function createRuntimeWasmBytes() {
@@ -257,7 +272,9 @@ async function runSmoke() {
   const wrapperUrl = new URL('spz_gatekeeper.js', baseUrl).toString();
 
 
-  const browser = await chromium.launch({ headless: true });
+  const engine = getBrowserEngine();
+  console.log(`[smoke] browser engine: ${engine}`);
+  const browser = await BROWSER_LAUNCHERS[engine].launch({ headless: true });
   const page = await browser.newPage();
 
   try {
