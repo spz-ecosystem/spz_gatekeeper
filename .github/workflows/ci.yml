@@ -625,6 +625,12 @@ jobs:
             done
             if [ "$passed" != "true" ]; then
               echo "Smoke test failed after 3 attempts ($engine)"
+              # PRE.19 A（R7.2 fail-loud 诊断）：逐引擎日志已落盘并随 artifact 上传，但 Actions
+              # 日志正文对未登录访问者不可见（公开仓亦显示 "Sign in to view logs"）。此处把失败
+              # 尾部转成 workflow command **注解**（匿名可见），使冒烟失败无需登录即可定位。
+              # 按 GitHub 规则转义 % / CR / LF（LF 用 %0A 连接，保持单行）。
+              SMOKE_TAIL="$(tail -n 15 "wasm-smoke-$engine.log" 2>/dev/null | tr -d '\r' | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}' || true)"
+              echo "::error title=WASM smoke failure ($engine)::${SMOKE_TAIL}"
               exit 1
             fi
           done
