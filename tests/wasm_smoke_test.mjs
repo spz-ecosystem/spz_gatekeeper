@@ -357,6 +357,10 @@ async function runSmoke() {
         },
         manifest_summary: {},
         budgets: {},
+        // 共享 C++ builder 强制读取 copy_breakdown（audit_summary.cc 序列化为公共 schema 字段）；
+        // 缺此键 → payload["copy_breakdown"] 为 undefined → `.as<std::string>()` 抛
+        // BindingError: Cannot pass non-string to std::string。
+        copy_breakdown: { total_passes: 0, stages: [] },
         issues: [{ severity: 'warning', code: 'BUNDLE_REVIEW', message: 'review required' }],
         bundle_entries: [],
         wasm_export_summary: [],
