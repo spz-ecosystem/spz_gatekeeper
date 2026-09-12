@@ -24,7 +24,14 @@ jobs:
             artifact: spz-gatekeeper-windows-x64.exe
           - os: ubuntu-latest
             artifact: spz-gatekeeper-linux-x64
+          # PRE.12（R7.2 落实）：`macos-latest` 现为 **ARM64** —— 原产物名 `-macos-x64`
+          # 与实际架构名实不符。按计划双架构拆分：
+          #   macos-latest   = ARM64  → -macos-arm64
+          #   macos-15-intel = x86_64 → -macos-x64（最后一个 Intel macOS 镜像，可用至 2027-08）
+          # 下游所有 macOS 条件同步改用 startsWith(matrix.os, 'macos')（勿用 == 精确匹配）。
           - os: macos-latest
+            artifact: spz-gatekeeper-macos-arm64
+          - os: macos-15-intel
             artifact: spz-gatekeeper-macos-x64
 
     runs-on: ${{ matrix.os }}
@@ -42,7 +49,7 @@ jobs:
           sudo apt-get install -y zlib1g-dev
 
       - name: Install dependencies (macOS)
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos')
         run: |
           brew install zlib
 
@@ -66,7 +73,7 @@ jobs:
             -DSPZ_GATEKEEPER_BUILD_BENCHMARK_TESTS=OFF
 
       - name: Configure CMake (macOS)
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos')
         run: |
           cmake -S cpp -B build \
             -DCMAKE_BUILD_TYPE=Release \
@@ -93,7 +100,7 @@ jobs:
           cp build/spz_gatekeeper ${{ matrix.artifact }}
 
       - name: Rename artifacts (macOS)
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos')
         run: |
           cp build/spz_gatekeeper ${{ matrix.artifact }}
 
@@ -102,6 +109,9 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
+          # PRE.14 对照（R7.2）：关键产物缺失必须显式报错，不得沿用默认 warn
+          # （spz2glb 教训：upload 默认 warn + `| tee` 掩盖链 → 缺产物仍静默发布 Release）
+          if-no-files-found: error
 
   build_wasm:
     runs-on: ubuntu-latest
@@ -144,24 +154,74 @@ jobs:
         with:
           name: spz-gatekeeper-web-site
           path: spz-gatekeeper-web-site.tar.gz
+          # PRE.14 对照（R7.2）：WASM 站点为发布关键产物，缺失即报错
+          if-no-files-found: error
+
+  # PRE.16 + PRE.18（R7.2 落实）：发布门禁 —— tag 区间内每个 commit 都必须已在
+  # CHANGELOG.md 有记录，否则**阻断发布**（spz2glb v2.0.4 因 tag 后合入 PR 漏记录而重打 tag）。
+  changelog-check:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # 门禁需遍历 tag 区间全部 commit + 读到全部 tag（浅克隆会导致 prev tag 推断失败）
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Verify CHANGELOG completeness for this tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/changelog-check.sh "${GITHUB_REF_NAME}"
 
   release:
-    needs: [build, build_wasm]
+    needs: [build, build_wasm, changelog-check]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # PRE.19 E.1：取版本号/正文都依赖 tag，浅克隆会 fallback 到错误版本
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
 
+      - name: Extract release body from CHANGELOG
+        shell: bash
+        run: |
+          set -euo pipefail
+          # PRE.19 E.3（R7.2 落实）：正文改为从本仓权威 CHANGELOG 提取该版本段落，
+          # 替代 `generate_release_notes`（自动生成内容过简，且与 CHANGELOG 口径可能分叉）。
+          # 注：计划原文写的是独立 RELEASE-NOTES.md；本仓无该文件，且 CHANGELOG 已是
+          # 唯一权威来源（D8 规矩：每阶段结束同步更新），故同机制改指 CHANGELOG，不新增第二事实源。
+          awk -v ver="${GITHUB_REF_NAME}" '
+            index($0, "## [" ver "]") == 1 { found = 1; next }
+            found && index($0, "## [") == 1 { exit }
+            found { print }
+          ' CHANGELOG.md > release-body.md
+          if [ ! -s release-body.md ]; then
+            echo "release body 提取为空：CHANGELOG 缺少 '## [${GITHUB_REF_NAME}]' 段落" >&2
+            exit 1
+          fi
+          echo "--- release-body.md (${GITHUB_REF_NAME}) ---"
+          cat release-body.md
+
       - name: Create Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           files: artifacts/**/*
-          generate_release_notes: true
+          body_path: release-body.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
