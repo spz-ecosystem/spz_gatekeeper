@@ -2,7 +2,7 @@
 
 本文件仅记录当前主线的重要变更，不保留已废弃路线的细节。版本按时间倒序排列（最新在上）。
 
-## [v2.0.5.3] - 2026-09-11
+## [v2.0.5.3] - 2026-09-13
 
 ### CI 安全网加固 (R7.2, #81)
 
@@ -18,21 +18,40 @@
 - **三引擎冒烟（PRE.13）**：Playwright `1.52.0 → 1.62.0`；`wasm_smoke_test.mjs` 支持 `SPZ_WASM_SMOKE_BROWSER`（chromium/firefox/webkit，未知值 fail-loud），CI 逐引擎轮跑并逐引擎独立日志
 - **CHANGELOG 发布门禁（PRE.16 + PRE.18）**：新增 `scripts/changelog-check.sh` + release.yml `changelog-check` job（`release` 依赖之）—— tag 区间内每个 commit 必须已在 CHANGELOG 有记录，否则**阻断发布**；含 `docs(scope):` **自指豁免**（前置，防"记录者自身无法被记录"的无限回归）
 - **Release 正文来源修正（PRE.19 E.3）**：`generate_release_notes` 改为从权威 CHANGELOG 提取该版本段落（`body_path`），并给 release job 补 `fetch-depth: 0`
-- **冒烟失败原因可匿名定位（PRE.19 A / fail-loud 诊断）**：冒烟 step 失败时输出 `::error::` 注解（该引擎日志尾部）——Actions 日志正文对未登录访问者不可见（公开仓亦显示 "Sign in to view logs"），注解可读；同时补 `2>&1`（失败原因经 `console.error` 走 **stderr**，只 `| tee` 会丢失，日志里只剩 stdout 的一行）
+- **冒烟失败原因转 `::error::` 注解（PRE.19 A / fail-loud 诊断，可匿名定位）**：冒烟 step 失败时输出该引擎日志尾部的注解——Actions 日志正文对未登录访问者不可见（公开仓亦显示 "Sign in to view logs"），注解可读；同时补 `2>&1`（失败原因经 `console.error` 走 **stderr**，只 `| tee` 会丢失，日志里只剩 stdout 的一行）
 - **冒烟恢复真实判定后揭穿的既有缺陷（PRE.14 连带）**：① `wasm_smoke_test.mjs` 合成载荷自 `52f7549` 起漏 `copy_breakdown`（共享 C++ builder 必填项）⇒ `BindingError: Cannot pass non-string to std::string`；② **浏览器→CLI handoff 链路断裂**——`buildBrowserToCliHandoff` 的 `schema_version` 自 PR #62 被 `.replace('v1','v2')` 改成 **v2**，与 CLI `ParseBrowserHandoffJson` 的**严格等值**校验（仅接受 v1）冲突，导致 Web UI 导出的 handoff 无法被 `compat-check --handoff` 接受（自 2026-07-29 起，随 v2.0.5.x 流出）；现恢复为 C++ 单一真值 v1；③ **CLI 退出码契约被测试误判**——`wasm_smoke_test.mjs` 用 `promisify(execFile)` 调 `compat-check`，把 `main.cc` 的 `return all_pass ? 0 : 1`（verdict 非 pass 即 1，**属合法结果**）当致命错误，并连 stdout 一起丢弃（报错只剩 `Command failed: …`，不可诊断）；现改为捕获 `code/stdout/stderr`（显式区分 spawn 级失败与子进程退出码），断言按退出码契约 + 上游证据链合并契约重写，并改为**全量 `JSON.parse`**（落实 PRE.19 B.3）
 
 ### 文档与治理
 - README/README-zh 版本标签更新至 v2.0.5.3
+- CMake `PROJECT_VERSION` 由 `2.0.2` 对齐至 `2.0.5.3`（消除与 CHANGELOG 里程碑的版本漂移；纯构建元数据，无运行时影响 —— 审计 JSON 的版本仍由 `kAuditPolicyVersion`/`kAuditToolVersion` 独立承担）
+- **发布前置回填**：`v2.0.5.1..v2.0.5.3` 区间经新门禁 `scripts/changelog-check.sh` 校验并补记（详见 v2.0.5.2 段「WASM 工程优化批次」）
 
 ## [v2.0.5.2] - 2026-09-11
 
+### WASM 工程优化批次（#66–#77，7–8 月合入，2026-09-13 回填）
+
+> 补记原因：本批 11 个 PR **当时均未写入 CHANGELOG**（v2.0.5.2 从未打 tag），
+> 由 R7.2 新增的 `changelog-check` 发布门禁在 `v2.0.5.1..v2.0.5.3` 区间检出并回填。
+
+- 大文件审查性能 + handoff JSON 结论对齐 (#66)
+- 组合导出 `inspectSpzWithCompatPtr`：单次解析产出 report + compatSummary (#68)
+- 默认优化档 `-Oz` 改 `-O3` (#69)
+- 默认档改为 perf-lite(-O3) + 编译期 -O3 (#70)
+- gzip ISIZE 校验 + 1MB 缓冲（该 commit 标题自身因编码损坏呈乱码，直接催生 #72 乱码防护）(#71)
+- 新增 **Encoding Defense（L1-L5）** 乱码守卫 (#72)
+- wasm glue 与 wasm 二进制 cache-bust (#73)
+- 组合导出增加分段耗时（segmented timing），用于性能诊断 (#74)
+- handoff JSON 暴露 wasm 分段耗时 (#75)
+- wrapper 模块暴露组合导出方法 (#76)
+- embind 绑定在二进制 + 运行时两级纳入门禁 (#77)
+
 ### WASM 运行时完整性 (R7.1, #78)
-- 前端 wasm 指纹运行时校验（**SHA-384**）：信任根内嵌 `web/index.html`（CI 构建时注入 `spz-wasm-fp` meta），加载字节哈希不符即拒绝加载（fail-closed）；`wasm-fingerprint.json` 仅作审计辅助，不作校验依据
+- 前端 wasm **runtime** 指纹校验（**SHA-384**）：信任根内嵌 `web/index.html`（CI 构建时注入 `spz-wasm-fp` meta），加载字节哈希不符即拒绝加载（fail-closed）；`wasm-fingerprint.json` 仅作审计辅助，不作校验依据
 - 校验与加载复用同一份 fetch 字节（`wasmBinary` 直传），消除"先算哈希再二次下载"的替换窗口
 - 静态 import 与动态 import 统一为同一 `?v=<fp>` URL，加载链唯一化
 - 降级显式化（fail-loud）：wasm 加载/校验失败在 UI 标注原因，不再静默回退纯 JS 路径
 - 预检增强：cache-busting 链检查（P4）+ `rg` 确定性检测（回退 `grep -aFq`）+ 严格锚定的 sed 自动修复
-- CI 回环：`--auto-fix` 生效 + 指纹注入 step（sha384 → `__WASM_FP__`/`__FP__` 替换）；`npm install --ignore-scripts` 供应链加固（防 preinstall 钩子投毒）
+- CI 回环（**ci loopback**）：`--auto-fix` 生效 + 指纹注入 step（sha384 → `__WASM_FP__`/`__FP__` 替换）；`npm install --ignore-scripts` 供应链加固（防 preinstall 钩子投毒）
 
 ### Web UI 批处理队列 (R7_1g, #79)
 - 前端队列与 spz2glb `MAX_PARALLEL=1` 对齐：并发常量 `2 → 1`（WASM 单实例串行，排队等待不计入处理计时）
@@ -43,6 +62,7 @@
 - README/README-zh 版本标签更新至 v2.0.5.2；补 v2.0.4 WASM 工程优化段与 v2.0.5 Web UI 段
 - 术语更正：`TLV` → `ILV`；JSON 示例字段 `tlv_records` → `ilv_records`
 - 删除 README-zh 空 section；补齐中文压缩格式说明
+- 行尾统一 **renormalize** 为 LF（按 `.gitattributes`）
 
 ## [v2.0.5.1] - 2026-07-30
 
